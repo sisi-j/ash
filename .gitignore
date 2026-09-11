@@ -1,0 +1,39 @@
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+
+# --- Rust / Tauri ---
+target/
+**/src-tauri/target/
+**/src-tauri/gen/
+
+# --- Java / Gradle (client) ---
+.gradle/
+build/
+out/
+*.class
+
+# --- Secrets & local config ---
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# --- Game data fetched at runtime, never committed ---
+/instances/
+/runtimes/
+/game-assets/
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.iml
