@@ -220,4 +220,4 @@ Phase 1 is not done until, with a real Microsoft account on a real Windows machi
 
 ## Tracker
 
-This spec would carry the `ready-for-agent` label. It is filed as a repo document rather than a GitHub issue because no `gh` CLI or git remote exists yet — move it to the issue tracker once one does, per `docs/agents/issue-tracker.md`.
+Filed as [#1](https://github.com/sisi-j/ash/issues/1), labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`. This file is the source of truth; the issue is the tracker entry. Keep them in step if either changes.
