@@ -1,0 +1,117 @@
+/* Pure grayscale, no accent colour. Contrast and weight carry hierarchy.
+   Sora / Inter / JetBrains Mono get bundled as local woff2 during the UI
+   work; the app's CSP blocks remote font hosts, so a system stack stands in
+   until then rather than silently failing to load. */
+
+:root {
+  --bg: #0e0e0f;
+  --text: #fafafa;
+  --muted: #8b8c90;
+  --emphasis: #3a3a3c;
+
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Cascadia Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.wrap {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 4rem 1.75rem;
+}
+
+.masthead {
+  margin-bottom: 3rem;
+}
+
+.wordmark {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.tagline {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+.panel {
+  border: 1px solid var(--emphasis);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.panel-title {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.readout {
+  margin: 0;
+  display: grid;
+  gap: 0.875rem;
+}
+
+.readout div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.readout dt {
+  color: var(--muted);
+}
+
+.readout dd {
+  margin: 0;
+}
+
+/* Numeric readouts read as instrument panel, per the brand notes. */
+.numeric {
+  font-family: var(--mono);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+}
+
+.error {
+  margin: 0;
+  color: var(--text);
+}
+
+.note {
+  margin-top: 2rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}

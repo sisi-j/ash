@@ -1,0 +1,44 @@
+{
+  "latest": {
+    "release": "1.21.4",
+    "snapshot": "25w03a"
+  },
+  "versions": [
+    {
+      "id": "25w03a",
+      "type": "snapshot",
+      "url": "https://piston-meta.mojang.com/v1/packages/aaaa/25w03a.json",
+      "time": "2026-01-15T12:00:00+00:00",
+      "releaseTime": "2026-01-15T11:30:00+00:00",
+      "sha1": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "complianceLevel": 1
+    },
+    {
+      "id": "1.21.4",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/bbbb/1.21.4.json",
+      "time": "2025-12-03T10:00:00+00:00",
+      "releaseTime": "2025-12-03T09:00:00+00:00",
+      "sha1": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "complianceLevel": 1
+    },
+    {
+      "id": "1.20.4",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/cccc/1.20.4.json",
+      "time": "2023-12-07T12:00:00+00:00",
+      "releaseTime": "2023-12-07T11:00:00+00:00",
+      "sha1": "cccccccccccccccccccccccccccccccccccccccc",
+      "complianceLevel": 1
+    },
+    {
+      "id": "1.8.9",
+      "type": "release",
+      "url": "https://piston-meta.mojang.com/v1/packages/dddd/1.8.9.json",
+      "time": "2015-12-09T12:00:00+00:00",
+      "releaseTime": "2015-12-09T11:00:00+00:00",
+      "sha1": "dddddddddddddddddddddddddddddddddddddddd",
+      "complianceLevel": 0
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[package]
+name = "ash-launcher"
+description = "Thin Tauri adapter over ash-core. Holds no logic of its own."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "ash_launcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+ash-core.workspace = true
+serde.workspace = true
+tauri = { version = "2", features = [] }
+tokio.workspace = true
