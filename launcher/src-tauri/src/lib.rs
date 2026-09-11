@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use ash_core::http::ReqwestHttp;
-use ash_core::{Ash, Config, ManifestProbe};
+use ash_core::{Ash, Catalogue, Config};
 use serde::Serialize;
 
 /// What the UI receives when an operation fails.
@@ -26,8 +26,13 @@ impl From<ash_core::AshError> for UiError {
 }
 
 #[tauri::command]
-async fn probe_manifest(ash: tauri::State<'_, Ash>) -> Result<ManifestProbe, UiError> {
-    ash.probe_manifest().await.map_err(UiError::from)
+async fn catalogue(ash: tauri::State<'_, Ash>) -> Result<Catalogue, UiError> {
+    ash.catalogue().await.map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn refresh_catalogue(ash: tauri::State<'_, Ash>) -> Result<Catalogue, UiError> {
+    ash.refresh_catalogue().await.map_err(UiError::from)
 }
 
 fn ash_state() -> Ash {
@@ -48,7 +53,7 @@ fn dirs_next_data_dir() -> std::path::PathBuf {
 pub fn run() {
     tauri::Builder::default()
         .manage(ash_state())
-        .invoke_handler(tauri::generate_handler![probe_manifest])
+        .invoke_handler(tauri::generate_handler![catalogue, refresh_catalogue])
         .run(tauri::generate_context!())
         .expect("error while running ash");
 }

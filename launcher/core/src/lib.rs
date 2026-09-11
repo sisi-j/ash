@@ -15,7 +15,9 @@ mod error;
 
 pub mod http;
 
-pub use catalogue::{ManifestProbe, VERSION_MANIFEST_URL};
+pub use catalogue::{
+    Catalogue, CatalogueEntry, CatalogueSource, VersionKind, VERSION_MANIFEST_URL,
+};
 pub use config::Config;
 pub use error::AshError;
 
@@ -41,8 +43,19 @@ impl Ash {
         &self.config
     }
 
-    /// Read the headline numbers from Mojang's version manifest.
-    pub async fn probe_manifest(&self) -> Result<ManifestProbe, AshError> {
-        catalogue::probe(self.http.as_ref()).await
+    /// The version catalogue, served from cache when one exists.
+    ///
+    /// Cheap and offline-safe: this is what the UI calls on open.
+    pub async fn catalogue(&self) -> Result<Catalogue, AshError> {
+        catalogue::load(self.http.as_ref(), &self.config.depot_root).await
+    }
+
+    /// Fetch the catalogue from Mojang and update the cache.
+    ///
+    /// Falls back to the cache if Mojang cannot be reached, flagging the
+    /// result as [`CatalogueSource::Cache`] so the UI can say so rather than
+    /// pretending the refresh worked.
+    pub async fn refresh_catalogue(&self) -> Result<Catalogue, AshError> {
+        catalogue::refresh(self.http.as_ref(), &self.config.depot_root).await
     }
 }

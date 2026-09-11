@@ -35,13 +35,13 @@ body {
 }
 
 .wrap {
-  max-width: 32rem;
+  max-width: 34rem;
   margin: 0 auto;
-  padding: 4rem 1.75rem;
+  padding: 3rem 1.75rem 2rem;
 }
 
 .masthead {
-  margin-bottom: 3rem;
+  margin-bottom: 2.5rem;
 }
 
 .wordmark {
@@ -57,40 +57,63 @@ body {
   color: var(--muted);
 }
 
+/* ---- panels ---- */
+
 .panel {
   border: 1px solid var(--emphasis);
   border-radius: 6px;
-  padding: 1.25rem 1.5rem 1.5rem;
+  padding: 1.125rem 1.25rem 1.25rem;
+  margin-bottom: 1rem;
 }
 
-.panel-title {
-  margin: 0 0 1rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.readout {
-  margin: 0;
-  display: grid;
-  gap: 0.875rem;
-}
-
-.readout div {
+.panel-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.readout dt {
+.panel-title {
+  margin: 0 0 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
-.readout dd {
+.panel-head .panel-title {
+  margin-bottom: 0.875rem;
+}
+
+/* ---- version rows ---- */
+
+.versions {
+  list-style: none;
   margin: 0;
+  padding: 0;
+}
+
+.versions-scroll {
+  max-height: 15rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.version {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3125rem 0;
+}
+
+.version + .version {
+  border-top: 1px solid rgba(58, 58, 60, 0.4);
+}
+
+.version-pinned .numeric {
+  font-size: 1rem;
 }
 
 /* Numeric readouts read as instrument panel, per the brand notes. */
@@ -98,6 +121,59 @@ body {
   font-family: var(--mono);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- controls ---- */
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4375rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: var(--text);
+  cursor: pointer;
+}
+
+.button {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--emphasis);
+  border-radius: 4px;
+  padding: 0.3125rem 0.75rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--text);
+}
+
+.button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* ---- status ---- */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.25rem;
+  font-size: 0.8125rem;
 }
 
 .muted {
@@ -110,8 +186,17 @@ body {
   color: var(--text);
 }
 
-.note {
-  margin-top: 2rem;
-  color: var(--muted);
-  font-size: 0.8125rem;
+/* ---- scrollbar, kept in palette ---- */
+
+.versions-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.versions-scroll::-webkit-scrollbar-thumb {
+  background: var(--emphasis);
+  border-radius: 4px;
+}
+
+.versions-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }

@@ -15,6 +15,9 @@ pub enum AshError {
 
     #[error("could not parse the response from {url}: {detail}")]
     Malformed { url: String, detail: String },
+
+    #[error("cache problem: {detail}")]
+    Cache { detail: String },
 }
 
 impl AshError {
@@ -25,6 +28,7 @@ impl AshError {
             AshError::Transport { .. } => "transport",
             AshError::UnexpectedStatus { .. } => "unexpected_status",
             AshError::Malformed { .. } => "malformed",
+            AshError::Cache { .. } => "cache",
         }
     }
 
@@ -40,6 +44,9 @@ impl AshError {
             }
             AshError::Malformed { .. } => {
                 "Mojang's response could not be understood. This is likely a bug in ash.".into()
+            }
+            AshError::Cache { .. } => {
+                "ash could not write to its own data folder. Check disk space and permissions.".into()
             }
         }
     }
