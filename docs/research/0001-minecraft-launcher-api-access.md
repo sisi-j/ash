@@ -18,7 +18,7 @@ Since 2023-05-30, Mojang has run a manual allow-list for third-party application
 
 Enforcement is live and current. A fresh, correctly configured Azure app registration completes Microsoft OAuth, Xbox Live authentication and XSTS authorization successfully, then receives `HTTP 403 Invalid app registration, see https://aka.ms/AppRegInfo` from `api.minecraftservices.com` — reported by independent developers in [February 2026](https://learn.microsoft.com/en-gb/answers/questions/5768276/how-to-get-xboxlive-signin-permission-for-azure-ap) and [August 2026](https://learn.microsoft.com/en-us/answers/questions/5989335/minecraft-services-returns-http-403-invalid-app-re) **[PRACTICE]**. `aka.ms/AppRegInfo` — the link inside the error itself — resolves to that same help article (verified by following the redirect chain, 2026-09-09), which closes the loop: the API tells you you are not allow-listed, and points at the form.
 
-**There is no published lead time, no published eligibility criteria, no SLA, and no public record of any applicant's outcome.** ADR-0007's line about "real lead time" is directionally right about the risk but is not supported by any primary source — nobody publishes a number. Treat the wait as unbounded and unknowable.
+**Updated 2026-09-11 — the form itself publishes what the help article does not.** See §11. Submissions are "reviewed weekly", multiple submissions do not speed it up, and applications that bypass security, auth or licence checks are stated outright as not approvable. There is still no SLA, no acknowledgement, no status page and no public record of any applicant's outcome — but "reviewed weekly" is a real cadence and supersedes the earlier reading of the wait as wholly unknowable.
 
 **What this means for Phase 1.** The gate does not block writing code, and it does not block most of the spec. It blocks exactly one thing, and it is the thing the spec calls the definition of done:
 
@@ -38,9 +38,9 @@ Read this section before acting on anything below.
 
 ### Could not verify from any source
 
-1. **The contents of the application form.** `aka.ms/mce-reviewappid` resolves to a Microsoft Forms response page in Microsoft's corporate Entra tenant (`72f988bf-86f1-41af-91ab-2d7cd011db47`, decoded from the form id). The page is JavaScript-rendered and the Forms API returns `404 CDB TableNotFound` to anonymous requests, so **what the form asks for is unknown**. Someone will have to open it in a browser and read it. Also unverified: whether it currently accepts responses, and whether it requires a Microsoft account sign-in.
-2. **Lead time / turnaround.** Nothing published, anywhere. The help article gives no SLA. The Minecraft help centre contains exactly **one** article matching the search term "API" — this one (verified against the help centre's own article search endpoint, 2026-09-09). There is no developer portal, no status page, no queue.
-3. **Eligibility criteria.** The article states only that requests are "reviewed and manually added" to an allow list, and gives the anti-phishing rationale. It states no criteria — not commercial vs non-commercial, not open vs closed source, not company vs individual.
+1. ~~**The contents of the application form.**~~ **CLOSED 2026-09-11.** Captured verbatim in §11 from the live form. It accepts responses, does not require sign-in, and does not auto-collect the submitter's identity. Nine questions; both "request approval" and "report a bad app" run through it, confirming the earlier inference that it is a general app-id intake rather than developer onboarding.
+2. **Lead time / turnaround.** **Partially closed 2026-09-11.** The form states "Submissions are reviewed weekly, multiple submissions will not make the process go faster." So there is a review *cadence*, published on the form and nowhere else. Still unknown: how many weekly cycles a submission may sit through, whether a decision is communicated at all, and what happens on rejection. There remains no developer portal, status page or queue.
+3. **Eligibility criteria.** **Partially closed 2026-09-11.** The form states three: the applicant must confirm having read the EULA and Usage Guidelines; the application name must not contain Mojang, Minecraft, Microsoft, Live, Xbox, Discord or Hypixel; and "any applications that bypass security/auth/license checks or disable safety features will not be approved." A justification is mandatory — "submissions that do not have a valid justification will not be reviewed." Still unstated: commercial vs non-commercial, open vs closed source, company vs individual.
 4. **Any public record of an approval or rejection.** No GitHub issue, changelog, release note or repo doc found in any established launcher describes going through this form. Searched Prism Launcher, MultiMC, ATLauncher, HMCL, PolyMC. This is consistent with all of them predating the policy (see §6) and having had no reason to apply.
 5. **Whether grandfathering still holds in 2026.** The article's wording ("Existing applications, such as launchers and websites, will continue to have access without interruption") is unchanged as of the 2026-03-11 edit, but no primary source confirms the promise is still being honoured, and no primary source describes what would revoke it.
 6. **Whether Lunar Client or Badlion hold any bespoke agreement with Mojang or Microsoft.** No public evidence either way. Their own terms explicitly disclaim affiliation (§10). Their practice is not evidence of permission.
@@ -618,6 +618,51 @@ From the [Lunar Client Terms of Service](https://www.lunarclient.com/terms) (las
 2. **It is useful evidence of the compliance surface.** Named LLC, prominent non-affiliation disclaimer, licensed-not-owned cosmetics, no-cash-value currency, no cash-out. If ash proceeds, that is the shape of the paperwork, and it is worth copying deliberately rather than inventing.
 3. **It says nothing about API access.** Whether Lunar or Badlion hold allow-listed client ids, and by what route, is not public. They also long predate the 2023 policy.
 4. **Scale is a defence and a liability.** A large, established client is expensive to enforce against and has a relationship to protect. A new entrant has neither. Do not assume the risk is symmetric.
+
+---
+
+## 11. The application form, verbatim
+
+Captured 2026-09-11 from <https://aka.ms/mce-reviewappid>. Submitted **2026-09-10** for application `ash`. **[DOC — the form's own text, read off the live page]**
+
+The form does not require sign-in and states it "will not automatically collect your details like name and email address unless you provide it yourself."
+
+### Preamble
+
+> Welcome to our AppID review form. This platform serves as a tool for both requesting the approval of a new AppID or reporting an existing AppID that may pose a security threat.
+>
+> As you may already know, access to certain APIs is managed through AppIDs. If you are currently developing a new application or website and require access to these APIs, you will need to be formally added to our system through this form. On the other hand, if you are aware of a known bad app or website, such as those involved in phishing activities, please do not hesitate to report it along with any relevant details.
+>
+> Prior to commencing the development of your application, it is recommended that you carefully review our End User License Agreement (EULA) and Usage Guidelines to ensure compliance with our policies and standards. **Any applications that bypass security/auth/license checks or disable safety features will not be approved.**
+>
+> Note for new apps - **Your application name cannot include Mojang, Minecraft, Microsoft, Live, Xbox, Discord, or Hypixel.**
+>
+> **Submissions are reviewed weekly, multiple submissions will not make the process go faster.** Thanks!
+
+### The nine questions
+
+1. **I verify that I have read and understood the EULA and all Usage Guidelines** (links to `aka.ms/mcusageguidelines`) — Yes / No. *Required.*
+2. **Contact Information (Valid email address).** "In order to validate and approve this request we will need to cross reference your contact information in the Azure Portal."
+3. **What type of request is this?** — New AppID for Approval / Existing AppID for Review/Report.
+4. **Application Name.** "Use the official display name, or enter something that will help define the app." Subject to the naming restriction above.
+5. **Application ID.** The Application (Client) ID as a GUID. One AppID per submission.
+6. **Tenant ID.** The Directory (Tenant) ID as a GUID. Required for new app approval, optional when reporting.
+7. **Associated website or domain.** "Provide a url to where we can find more information about your application, website, or your brand."
+8. **Justification.** "Provide a brief overview of the application and why you need access to any apis, or why you believe it should be reviewed. Submissions that do not have a valid justification will not be reviewed."
+9. **Any other information that we should be aware of?** Aimed mainly at reports — redirect traces for suspect apps.
+
+### What the form publishes that the help article does not
+
+- **A review cadence: weekly.** The only turnaround information Mojang publishes anywhere.
+- **Do not resubmit.** "Multiple submissions will not make the process go faster." A duplicate in what is also the phishing-report queue is actively counterproductive.
+- **A broader naming blocklist than the Usage Guidelines imply** — not just Minecraft and Microsoft, but also Live, Xbox, Discord and Hypixel. `ash` is clean on all seven.
+- **An explicit disqualifier:** bypassing security, auth or licence checks, or disabling safety features. ADR-0007's refusal to implement an offline path is therefore not only an EULA position and an ethical one, it is a stated condition of approval.
+- **Justification is mandatory**, and an inadequate one means the submission is not reviewed at all rather than rejected.
+- **Tenant ID is required**, which the help article never mentions.
+
+### One risk this surfaces
+
+Question 2 says contact information is **cross-referenced against the Azure Portal**. If the email given on the form is not associated with the Azure account that owns the app registration, validation may fail with no notification — the form sends no acknowledgement. Worth confirming the submitted address matches the Azure account, and adding it to the app registration's owner or contact fields if not.
 
 ---
 
