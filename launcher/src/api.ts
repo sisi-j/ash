@@ -45,8 +45,36 @@ export type DeletionPreview = {
   total_bytes: number;
 };
 
-/** `kind` is the stable discriminant; `message` is what to show a player. */
-export type UiError = { kind: string; message: string };
+export type Account = {
+  profile_id: string;
+  username: string;
+  skin_url: string | null;
+  added_at_ms: number;
+};
+
+export type Accounts = {
+  accounts: Account[];
+  active: string | null;
+};
+
+export type PendingSignIn = {
+  user_code: string;
+  verification_uri: string;
+  expires_at_ms: number;
+  interval_secs: number;
+};
+
+/** Mirrors `ash_core::SignInStatus`, an internally tagged enum. */
+export type SignInStatus =
+  | { status: "waiting"; interval_secs: number }
+  | { status: "complete"; account: Account };
+
+/**
+ * `kind` is the stable discriminant; `message` is what to show a player.
+ * `retryable` says whether offering a retry makes sense at all - a banned
+ * Xbox account will never succeed on a second attempt.
+ */
+export type UiError = { kind: string; message: string; retryable: boolean };
 
 export function isUiError(value: unknown): value is UiError {
   return (
@@ -62,6 +90,15 @@ export function isUiError(value: unknown): value is UiError {
 export const api = {
   catalogue: () => invoke<Catalogue>("catalogue"),
   refreshCatalogue: () => invoke<Catalogue>("refresh_catalogue"),
+
+  beginSignIn: () => invoke<PendingSignIn>("begin_sign_in"),
+  pollSignIn: () => invoke<SignInStatus>("poll_sign_in"),
+  cancelSignIn: () => invoke<void>("cancel_sign_in"),
+  accounts: () => invoke<Accounts>("accounts"),
+  selectAccount: (profileId: string) =>
+    invoke<Accounts>("select_account", { profileId }),
+  removeAccount: (profileId: string) =>
+    invoke<Accounts>("remove_account", { profileId }),
 
   instances: () => invoke<Instance[]>("instances"),
   createInstance: (name: string, versionId: string) =>

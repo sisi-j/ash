@@ -11,11 +11,24 @@ pub struct Config {
     pub depot_root: PathBuf,
     /// The parent of every instance's isolated game directory.
     pub instances_root: PathBuf,
+    /// ash's own non-secret state: the account list, settings.
+    ///
+    /// Secrets never live here - refresh tokens go to the OS credential
+    /// store through [`crate::credentials::CredentialStore`].
+    pub data_root: PathBuf,
 }
 
 impl Config {
-    pub fn new(depot_root: impl Into<PathBuf>, instances_root: impl Into<PathBuf>) -> Self {
-        Self { depot_root: depot_root.into(), instances_root: instances_root.into() }
+    pub fn new(
+        depot_root: impl Into<PathBuf>,
+        instances_root: impl Into<PathBuf>,
+        data_root: impl Into<PathBuf>,
+    ) -> Self {
+        Self {
+            depot_root: depot_root.into(),
+            instances_root: instances_root.into(),
+            data_root: data_root.into(),
+        }
     }
 
     /// The layout ash uses on a real machine, given a base directory.
@@ -24,6 +37,6 @@ impl Config {
     /// directory, and under test it is a `tempfile::TempDir`.
     pub fn rooted_at(base: impl AsRef<Path>) -> Self {
         let base = base.as_ref();
-        Self::new(base.join("depot"), base.join("instances"))
+        Self::new(base.join("depot"), base.join("instances"), base.join("data"))
     }
 }

@@ -4,12 +4,14 @@ import {
   describeAge,
   describeBytes,
   isUiError,
+  type Accounts,
   type Catalogue,
   type DeletionPreview,
   type Instance,
   type InstanceId,
   type UiError,
 } from "./api";
+import { SignIn } from "./SignIn";
 
 export default function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -18,9 +20,15 @@ export default function App() {
   const [error, setError] = useState<UiError | null>(null);
   const [creating, setCreating] = useState(false);
   const [pendingDeletion, setPendingDeletion] = useState<DeletionPreview | null>(null);
+  const [accounts, setAccounts] = useState<Accounts | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
 
   const fail = useCallback((e: unknown) => {
-    setError(isUiError(e) ? e : { kind: "unknown", message: "Something went wrong." });
+    setError(
+      isUiError(e)
+        ? e
+        : { kind: "unknown", message: "Something went wrong.", retryable: true },
+    );
   }, []);
 
   const reloadInstances = useCallback(
@@ -39,7 +47,11 @@ export default function App() {
   useEffect(() => {
     void reloadInstances();
     api.catalogue().then(setCatalogue).catch(fail);
+    api.accounts().then(setAccounts).catch(fail);
   }, [reloadInstances, fail]);
+
+  const signedIn = (accounts?.accounts.length ?? 0) > 0;
+  const active = accounts?.accounts.find((a) => a.profile_id === accounts.active) ?? null;
 
   const selected = useMemo(
     () => instances.find((i) => i.id === selectedId) ?? null,
@@ -98,6 +110,23 @@ export default function App() {
       <nav className="rail">
         <h1 className="wordmark">ash</h1>
 
+        <button
+          className="account"
+          onClick={() => setSigningIn(true)}
+          title={active ? "Manage accounts" : "Sign in"}
+        >
+          {active?.skin_url ? (
+            <span
+              className="face"
+              style={{ backgroundImage: `url(${active.skin_url})` }}
+              aria-hidden="true"
+            />
+          ) : (
+            <span className="face face-empty" aria-hidden="true" />
+          )}
+          <span className="account-name">{active ? active.username : "Sign in"}</span>
+        </button>
+
         <ul className="rail-list">
           {instances.map((instance) => (
             <li key={instance.id}>
@@ -124,7 +153,21 @@ export default function App() {
           </p>
         )}
 
-        {creating ? (
+        {signingIn ? (
+          <SignIn
+            onSignedIn={() => {
+              setSigningIn(false);
+              api.accounts().then(setAccounts).catch(fail);
+            }}
+            onCancel={signedIn ? () => setSigningIn(false) : undefined}
+          />
+        ) : !signedIn && accounts !== null ? (
+          <SignIn
+            onSignedIn={() => {
+              api.accounts().then(setAccounts).catch(fail);
+            }}
+          />
+        ) : creating ? (
           <NewInstance
             catalogue={catalogue}
             onCancel={() => setCreating(false)}

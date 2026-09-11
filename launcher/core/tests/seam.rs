@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpResponse};
 use ash_core::{Ash, AshError, Config, VERSION_MANIFEST_URL};
 
@@ -12,7 +13,7 @@ const MANIFEST: &str = include_str!("fixtures/version_manifest_v2.json");
 
 fn ash_with(http: Arc<FakeHttp>) -> (Ash, tempfile::TempDir) {
     let tmp = tempfile::tempdir().expect("temp dir");
-    let ash = Ash::new(Config::rooted_at(tmp.path()), http);
+    let ash = Ash::new(Config::rooted_at(tmp.path()), http, InMemoryCredentialStore::new(), "test-client");
     (ash, tmp)
 }
 
