@@ -16,8 +16,14 @@ pub enum AshError {
     #[error("could not parse the response from {url}: {detail}")]
     Malformed { url: String, detail: String },
 
-    #[error("cache problem: {detail}")]
-    Cache { detail: String },
+    #[error("storage problem: {detail}")]
+    Storage { detail: String },
+
+    #[error("no instance with id {id}")]
+    InstanceNotFound { id: String },
+
+    #[error("invalid instance name: {detail}")]
+    InvalidInstanceName { detail: String },
 }
 
 impl AshError {
@@ -28,7 +34,9 @@ impl AshError {
             AshError::Transport { .. } => "transport",
             AshError::UnexpectedStatus { .. } => "unexpected_status",
             AshError::Malformed { .. } => "malformed",
-            AshError::Cache { .. } => "cache",
+            AshError::Storage { .. } => "storage",
+            AshError::InstanceNotFound { .. } => "instance_not_found",
+            AshError::InvalidInstanceName { .. } => "invalid_instance_name",
         }
     }
 
@@ -45,8 +53,14 @@ impl AshError {
             AshError::Malformed { .. } => {
                 "Mojang's response could not be understood. This is likely a bug in ash.".into()
             }
-            AshError::Cache { .. } => {
+            AshError::Storage { .. } => {
                 "ash could not write to its own data folder. Check disk space and permissions.".into()
+            }
+            AshError::InstanceNotFound { .. } => {
+                "That instance no longer exists. It may have been deleted outside ash.".into()
+            }
+            AshError::InvalidInstanceName { .. } => {
+                "That name can't be used. Give the instance a name with at least one character.".into()
             }
         }
     }

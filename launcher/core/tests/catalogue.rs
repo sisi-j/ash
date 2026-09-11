@@ -121,17 +121,17 @@ async fn refresh_with_no_cache_propagates_the_failure() {
 #[tokio::test]
 async fn the_fetch_time_is_recorded_and_not_reset_by_reading_the_cache() {
     let tmp = tempfile::tempdir().unwrap();
-    let before = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let before = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
 
     let fresh = ash_with(serving_manifest(), &tmp).catalogue().await.unwrap();
-    let after = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let after = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
 
-    assert!((before..=after).contains(&fresh.fetched_at_unix));
+    assert!((before..=after).contains(&fresh.fetched_at_ms));
 
     // Reading the cache must report when the data was *fetched*, not when it
     // was read - otherwise the UI would always claim it was just refreshed.
     let cached = ash_with(offline(), &tmp).catalogue().await.unwrap();
-    assert_eq!(cached.fetched_at_unix, fresh.fetched_at_unix);
+    assert_eq!(cached.fetched_at_ms, fresh.fetched_at_ms);
 }
 
 #[tokio::test]

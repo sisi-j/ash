@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use ash_core::http::ReqwestHttp;
-use ash_core::{Ash, Catalogue, Config};
+use ash_core::{Ash, Catalogue, Config, DeletionPreview, Instance, InstanceId};
 use serde::Serialize;
 
 /// What the UI receives when an operation fails.
@@ -35,6 +35,58 @@ async fn refresh_catalogue(ash: tauri::State<'_, Ash>) -> Result<Catalogue, UiEr
     ash.refresh_catalogue().await.map_err(UiError::from)
 }
 
+// Instance commands are `async` so Tauri runs them off the main thread. The
+// work itself is synchronous filesystem access; a large directory walk during
+// a deletion preview should not stall the window.
+
+#[tauri::command]
+async fn create_instance(
+    ash: tauri::State<'_, Ash>,
+    name: String,
+    version_id: String,
+) -> Result<Instance, UiError> {
+    ash.create_instance(&name, &version_id).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn instances(ash: tauri::State<'_, Ash>) -> Result<Vec<Instance>, UiError> {
+    ash.instances().map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn rename_instance(
+    ash: tauri::State<'_, Ash>,
+    id: InstanceId,
+    name: String,
+) -> Result<Instance, UiError> {
+    ash.rename_instance(&id, &name).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn preview_deletion(
+    ash: tauri::State<'_, Ash>,
+    id: InstanceId,
+) -> Result<DeletionPreview, UiError> {
+    ash.preview_deletion(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn delete_instance(ash: tauri::State<'_, Ash>, id: InstanceId) -> Result<(), UiError> {
+    ash.delete_instance(&id).map_err(UiError::from)
+}
+
+/// Opening a file manager is an OS concern, so it lives here rather than in
+/// ash-core, which only says *which* directory.
+#[tauri::command]
+async fn reveal_game_directory(ash: tauri::State<'_, Ash>, id: InstanceId) -> Result<(), UiError> {
+    let path = ash.game_directory(&id);
+    tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|_| UiError {
+        kind: "reveal_failed",
+        // No path in the message: user-facing text never carries one.
+        message: "Could not open the instance folder.".into(),
+    })
+}
+
 fn ash_state() -> Ash {
     let base = dirs_next_data_dir().join("ash");
     Ash::new(Config::rooted_at(base), Arc::new(ReqwestHttp::new()))
@@ -52,8 +104,18 @@ fn dirs_next_data_dir() -> std::path::PathBuf {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(ash_state())
-        .invoke_handler(tauri::generate_handler![catalogue, refresh_catalogue])
+        .invoke_handler(tauri::generate_handler![
+            catalogue,
+            refresh_catalogue,
+            create_instance,
+            instances,
+            rename_instance,
+            preview_deletion,
+            delete_instance,
+            reveal_game_directory
+        ])
         .run(tauri::generate_context!())
         .expect("error while running ash");
 }

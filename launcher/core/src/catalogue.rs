@@ -62,10 +62,11 @@ pub struct CatalogueEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Catalogue {
     pub source: CatalogueSource,
-    /// Seconds since the Unix epoch, recorded when the data was fetched from
-    /// Mojang - not when it was read off disk. Formatting "3 hours ago" is
-    /// the UI's job.
-    pub fetched_at_unix: u64,
+    /// Milliseconds since the Unix epoch, recorded when the data was fetched
+    /// from Mojang - not when it was read off disk. Milliseconds throughout
+    /// ash so the UI never has to ask which unit a timestamp is in.
+    /// Formatting "3 hours ago" is the UI's job.
+    pub fetched_at_ms: u64,
     pub latest_release: String,
     pub latest_snapshot: String,
     pub versions: Vec<CatalogueEntry>,
@@ -121,11 +122,11 @@ fn write_cache(depot_root: &Path, catalogue: &Catalogue) -> Result<(), AshError>
     let path = cache_path(depot_root);
     let parent = path.parent().expect("cache path always has a parent");
     fs::create_dir_all(parent)
-        .map_err(|e| AshError::Cache { detail: format!("creating {}: {e}", parent.display()) })?;
+        .map_err(|e| AshError::Storage { detail: format!("creating {}: {e}", parent.display()) })?;
     let encoded = serde_json::to_vec(catalogue)
-        .map_err(|e| AshError::Cache { detail: format!("encoding the catalogue: {e}") })?;
+        .map_err(|e| AshError::Storage { detail: format!("encoding the catalogue: {e}") })?;
     fs::write(&path, encoded)
-        .map_err(|e| AshError::Cache { detail: format!("writing {}: {e}", path.display()) })
+        .map_err(|e| AshError::Storage { detail: format!("writing {}: {e}", path.display()) })
 }
 
 // ---- behaviour ------------------------------------------------------------
@@ -147,8 +148,11 @@ fn mark_first_class(versions: &mut [CatalogueEntry]) {
     }
 }
 
-fn now_unix() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or_default()
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or_default()
 }
 
 fn parse(body: &[u8]) -> Result<Catalogue, AshError> {
@@ -171,7 +175,7 @@ fn parse(body: &[u8]) -> Result<Catalogue, AshError> {
 
     Ok(Catalogue {
         source: CatalogueSource::Network,
-        fetched_at_unix: now_unix(),
+        fetched_at_ms: now_ms(),
         latest_release: raw.latest.release,
         latest_snapshot: raw.latest.snapshot,
         versions,
