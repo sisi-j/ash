@@ -28,12 +28,21 @@ pub enum AshError {
     #[error("credential store problem: {detail}")]
     Credential { detail: String },
 
+    #[error("{path} did not match its published hash")]
+    VerificationFailed { path: String },
+
+    #[error("cancelled")]
+    Cancelled,
+
     // ---- instances ----
     #[error("no instance with id {id}")]
     InstanceNotFound { id: String },
 
     #[error("invalid instance name: {detail}")]
     InvalidInstanceName { detail: String },
+
+    #[error("the catalogue has no version {version_id}")]
+    UnknownVersion { version_id: String },
 
     // ---- sign-in ----
     #[error("no sign-in is in progress")]
@@ -91,8 +100,11 @@ impl AshError {
             AshError::Malformed { .. } => "malformed",
             AshError::Storage { .. } => "storage",
             AshError::Credential { .. } => "credential",
+            AshError::VerificationFailed { .. } => "verification_failed",
+            AshError::Cancelled => "cancelled",
             AshError::InstanceNotFound { .. } => "instance_not_found",
             AshError::InvalidInstanceName { .. } => "invalid_instance_name",
+            AshError::UnknownVersion { .. } => "unknown_version",
             AshError::NoSignInPending => "no_sign_in_pending",
             AshError::SignInExpired => "sign_in_expired",
             AshError::SignInDeclined => "sign_in_declined",
@@ -130,12 +142,20 @@ impl AshError {
             AshError::Credential { .. } => {
                 "ash could not use the Windows credential store. Your sign-in was not saved.".into()
             }
+            AshError::VerificationFailed { .. } => {
+                "A downloaded file kept arriving corrupted. Check your connection, and any antivirus or proxy that might be altering downloads."
+                    .into()
+            }
+            AshError::Cancelled => "Cancelled.".into(),
             AshError::InstanceNotFound { .. } => {
                 "That instance no longer exists. It may have been deleted outside ash.".into()
             }
             AshError::InvalidInstanceName { .. } => {
                 "That name can't be used. Give the instance a name with at least one character."
                     .into()
+            }
+            AshError::UnknownVersion { .. } => {
+                "Mojang no longer publishes that version, so ash can't prepare it.".into()
             }
             AshError::NoSignInPending => "There is no sign-in to complete. Start again.".into(),
             AshError::SignInExpired => {
@@ -201,6 +221,8 @@ impl AshError {
                 | AshError::SignInDeclined
                 | AshError::SignInFailed { .. }
                 | AshError::SessionExpired
+                | AshError::VerificationFailed { .. }
+                | AshError::Cancelled
         )
     }
 }

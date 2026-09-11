@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 // ---- mirrors of ash-core types --------------------------------------------
 
@@ -15,6 +16,7 @@ export type CatalogueEntry = {
   id: string;
   kind: VersionKind;
   released_at: string;
+  url: string;
   first_class: boolean;
 };
 
@@ -43,6 +45,41 @@ export type DeletionPreview = {
   resource_packs: number;
   screenshots: number;
   total_bytes: number;
+};
+
+export type Plan = {
+  version_id: string;
+  total_files: number;
+  missing_files: number;
+  missing_bytes: number;
+};
+
+/** Mirrors `ash_core::PrepareEvent`, an internally tagged enum. */
+export type PrepareEvent =
+  | { event: "resolving"; version_id: string }
+  | {
+      event: "planned";
+      total_files: number;
+      missing_files: number;
+      missing_bytes: number;
+      already_present: number;
+    }
+  | {
+      event: "downloaded";
+      path: string;
+      bytes: number;
+      done_files: number;
+      done_bytes: number;
+    }
+  | { event: "resuming"; path: string; from_bytes: number }
+  | { event: "reverifying"; path: string }
+  | { event: "cancelled" }
+  | { event: "done"; version_id: string };
+
+export type PrepareOutcome = {
+  ok: boolean;
+  plan: Plan | null;
+  error: UiError | null;
 };
 
 export type Account = {
@@ -100,6 +137,11 @@ export const api = {
   removeAccount: (profileId: string) =>
     invoke<Accounts>("remove_account", { profileId }),
 
+  planInstance: (id: InstanceId) => invoke<Plan>("plan_instance", { id }),
+  /** Returns as soon as the work is scheduled; watch the events for outcome. */
+  prepareInstance: (id: InstanceId) => invoke<void>("prepare_instance", { id }),
+  cancelPreparation: () => invoke<void>("cancel_preparation"),
+
   instances: () => invoke<Instance[]>("instances"),
   createInstance: (name: string, versionId: string) =>
     invoke<Instance>("create_instance", { name, versionId }),
@@ -111,6 +153,18 @@ export const api = {
   revealGameDirectory: (id: InstanceId) =>
     invoke<void>("reveal_game_directory", { id }),
 };
+
+/**
+ * Preparation runs for minutes over thousands of files, so it is not an
+ * awaited call - progress and the final outcome both arrive as events.
+ */
+export function onPrepareProgress(handler: (event: PrepareEvent) => void) {
+  return listen<PrepareEvent>("prepare-progress", (e) => handler(e.payload));
+}
+
+export function onPrepareFinished(handler: (outcome: PrepareOutcome) => void) {
+  return listen<PrepareOutcome>("prepare-finished", (e) => handler(e.payload));
+}
 
 // ---- formatting ------------------------------------------------------------
 

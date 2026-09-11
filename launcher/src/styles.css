@@ -480,3 +480,25 @@ body {
     opacity: 0.6;
   }
 }
+
+/* ---- progress ---- */
+
+.bar {
+  height: 3px;
+  margin: 0 0 0.875rem;
+  background: var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: var(--text);
+  transition: width 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill {
+    transition: none;
+  }
+}

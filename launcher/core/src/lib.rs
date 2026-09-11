@@ -15,8 +15,10 @@ mod account;
 mod auth;
 mod catalogue;
 mod config;
+mod depot;
 mod error;
 mod instance;
+mod version;
 
 pub mod credentials;
 pub mod http;
@@ -26,8 +28,10 @@ pub use catalogue::{
     Catalogue, CatalogueEntry, CatalogueSource, VersionKind, VERSION_MANIFEST_URL,
 };
 pub use config::Config;
+pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
+pub use version::Os;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -247,5 +251,54 @@ impl Ash {
     /// The instance's game directory, for revealing in the file manager.
     pub fn game_directory(&self, id: &InstanceId) -> PathBuf {
         instance::game_dir(&self.config.instances_root, id)
+    }
+
+    // ---- preparation ------------------------------------------------------
+
+    /// Work out what an instance still needs, without downloading anything.
+    pub async fn plan_instance(&self, id: &InstanceId) -> Result<Plan, AshError> {
+        let source = self.version_source(id).await?;
+        depot::plan(self.http.as_ref(), &self.config.depot_root, &source, Os::current()).await
+    }
+
+    /// Download everything the instance needs into the depot, verified.
+    ///
+    /// Progress arrives on `sink` as typed events. `cancel` is checked
+    /// between files, so cancelling is prompt without abandoning a file
+    /// half-written.
+    pub async fn prepare_instance<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<Plan, AshError> {
+        let source = self.version_source(id).await?;
+        depot::prepare(
+            self.http.as_ref(),
+            &self.config.depot_root,
+            &source,
+            Os::current(),
+            sink,
+            cancel,
+        )
+        .await
+    }
+
+    /// The version id an instance runs, where its metadata lives, and that
+    /// metadata's published hash.
+    ///
+    /// Served from the cached catalogue, so preparing an already-known
+    /// version does not require Mojang to be reachable to get started.
+    async fn version_source(&self, id: &InstanceId) -> Result<depot::VersionSource, AshError> {
+        let instance = self.instance(id)?;
+        let catalogue = self.catalogue().await?;
+        let entry = catalogue.entry(&instance.version_id).ok_or_else(|| {
+            AshError::UnknownVersion { version_id: instance.version_id.clone() }
+        })?;
+        Ok(depot::VersionSource {
+            id: entry.id.clone(),
+            url: entry.url.clone(),
+            sha1: entry.sha1.clone(),
+        })
     }
 }

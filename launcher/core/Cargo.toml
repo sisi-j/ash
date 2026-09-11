@@ -14,6 +14,11 @@ thiserror.workspace = true
 # The OS credential store. Refresh tokens never touch a file ash writes.
 keyring = "4"
 uuid = { version = "1", features = ["v4"] }
+# Mojang publishes a SHA-1 and a size for every artifact; both get checked.
+sha1 = "0.11"
+# Runtime-agnostic combinators. `buffer_unordered` gives bounded parallelism
+# without ash-core taking a dependency on a particular async runtime.
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
 # rustls-native-certs (not webpki-roots) so a corporate MITM proxy with a
 # locally trusted CA works; system-proxy so we honour the OS proxy settings.
 reqwest = { version = "0.13", default-features = false, features = [
@@ -26,3 +31,6 @@ reqwest = { version = "0.13", default-features = false, features = [
 [dev-dependencies]
 tokio.workspace = true
 tempfile = "3"
+# Tests build their own fixtures, so they need to state the hashes ash will
+# check them against.
+sha1 = "0.11"

@@ -53,6 +53,10 @@ pub struct CatalogueEntry {
     /// Mojang's `releaseTime`, kept verbatim as RFC 3339. ash does no date
     /// arithmetic on it, so parsing here would buy nothing and could fail.
     pub released_at: String,
+    /// Where this version's own metadata lives. Preparation starts here.
+    pub url: String,
+    /// Published hash of that metadata. Verified like any other artifact.
+    pub sha1: String,
     /// A version target ash treats as first-class, per ADR-0005: 1.8.9 and
     /// the newest 1.21.x release. The UI surfaces these rather than burying
     /// them in nine hundred entries.
@@ -73,6 +77,10 @@ pub struct Catalogue {
 }
 
 impl Catalogue {
+    pub fn entry(&self, version_id: &str) -> Option<&CatalogueEntry> {
+        self.versions.iter().find(|v| v.id == version_id)
+    }
+
     pub fn releases(&self) -> impl Iterator<Item = &CatalogueEntry> {
         self.versions.iter().filter(|v| v.kind == VersionKind::Release)
     }
@@ -103,6 +111,9 @@ struct RawVersion {
     kind: String,
     #[serde(rename = "releaseTime")]
     release_time: String,
+    url: String,
+    #[serde(default)]
+    sha1: String,
 }
 
 // ---- cache ----------------------------------------------------------------
@@ -168,6 +179,8 @@ fn parse(body: &[u8]) -> Result<Catalogue, AshError> {
             id: v.id,
             kind: VersionKind::parse(&v.kind),
             released_at: v.release_time,
+            url: v.url,
+            sha1: v.sha1,
             first_class: false,
         })
         .collect();

@@ -58,6 +58,13 @@ impl HttpRequest {
         }
     }
 
+    /// Resume from a byte offset. Answered with 206 and the remaining bytes,
+    /// or 200 and the whole file if the server ignores it.
+    pub fn range_from(mut self, offset: u64) -> Self {
+        self.headers.push(("Range".into(), format!("bytes={offset}-")));
+        self
+    }
+
     pub fn bearer(mut self, token: &str) -> Self {
         self.headers.push(("Authorization".into(), format!("Bearer {token}")));
         self

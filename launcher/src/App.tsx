@@ -11,6 +11,7 @@ import {
   type InstanceId,
   type UiError,
 } from "./api";
+import { Prepare } from "./Prepare";
 import { SignIn } from "./SignIn";
 
 export default function App() {
@@ -253,11 +254,8 @@ function InstanceDetail(props: {
         </button>
       </div>
 
-      <p className="note muted">
-        Launching arrives with the depot and the launch pipeline. This instance
-        has its own game directory already — drop a resource pack in and it
-        stays out of every other instance.
-      </p>
+      <h3 className="panel-title">Files</h3>
+      <Prepare id={instance.id} />
     </section>
   );
 }
