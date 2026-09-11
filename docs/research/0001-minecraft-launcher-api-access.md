@@ -660,6 +660,18 @@ The form does not require sign-in and states it "will not automatically collect 
 - **Justification is mandatory**, and an inadequate one means the submission is not reviewed at all rather than rejected.
 - **Tenant ID is required**, which the help article never mentions.
 
+### Publisher domain verification closes the cross-reference gap
+
+Question 2's "cross reference your contact information in the Azure Portal" is hard to satisfy when the public contact address is a forwarding alias rather than a Microsoft account. Verifying the **publisher domain** on the app registration is the stronger answer: Entra ID itself then asserts that the domain owns the app.
+
+Host at `https://<domain>/.well-known/microsoft-identity-association.json`, served as `application/json`:
+
+```json
+{ "associatedApplications": [ { "applicationId": "<client-id>" } ] }
+```
+
+Then App registration → Branding & properties → Publisher domain → Verify. Done for ash on 2026-09-11 against `ashlauncher.com`.
+
 ### One risk this surfaces
 
 Question 2 says contact information is **cross-referenced against the Azure Portal**. If the email given on the form is not associated with the Azure account that owns the app registration, validation may fail with no notification — the form sends no acknowledgement. Worth confirming the submitted address matches the Azure account, and adding it to the app registration's owner or contact fields if not.
