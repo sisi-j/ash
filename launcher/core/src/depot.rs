@@ -64,6 +64,9 @@ pub struct Artifact {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Plan {
     pub version_id: String,
+    /// Which Java runtime this version asks for. `None` on versions whose
+    /// metadata predates the field.
+    pub java_component: Option<String>,
     pub total_files: usize,
     pub missing_files: usize,
     pub missing_bytes: u64,
@@ -86,6 +89,9 @@ pub enum PrepareEvent {
     Downloaded { path: String, bytes: u64, done_files: usize, done_bytes: u64 },
     /// Picking a partly-downloaded file back up rather than restarting it.
     Resuming { path: String, from_bytes: u64 },
+    /// Moving on to the Java runtime. A second `Planned` follows for it, so
+    /// the UI knows the counters it is about to see belong to a new phase.
+    Runtime { component: String },
     /// A file failed its hash and is being fetched again.
     Reverifying { path: String },
     Cancelled,
@@ -279,7 +285,7 @@ fn promote(part_path: &Path, final_path: &Path) -> Result<(), AshError> {
 /// Verified exactly like any other artifact when a hash is published. The
 /// version metadata and the asset index decide what everything else is, so
 /// trusting them unchecked would undermine every hash below them.
-async fn fetch_metadata(
+pub(crate) async fn fetch_metadata(
     http: &dyn HttpPort,
     url: &str,
     expected_sha1: Option<&str>,
@@ -392,6 +398,7 @@ pub(crate) async fn plan(
 
     Ok(Plan {
         version_id: version_id.to_owned(),
+        java_component: metadata.java_version.as_ref().map(|j| j.component.clone()),
         total_files,
         missing_files: missing.len(),
         missing_bytes: missing.iter().map(|a| a.size).sum(),
@@ -399,26 +406,19 @@ pub(crate) async fn plan(
     })
 }
 
-// ---- preparing -------------------------------------------------------------
+// ---- downloading -----------------------------------------------------------
 
-pub(crate) async fn prepare<S: ProgressSink + ?Sized>(
+/// Fetch a set of artifacts with bounded parallelism, verifying each.
+///
+/// Shared by version preparation and Java runtime provisioning: a runtime is
+/// several hundred files with published hashes, which is the same problem.
+pub(crate) async fn download_all<S: ProgressSink + ?Sized>(
     http: &dyn HttpPort,
     depot_root: &Path,
-    source: &VersionSource,
-    os: Os,
+    artifacts: &[Artifact],
     sink: &S,
     cancel: &Cancel,
-) -> Result<Plan, AshError> {
-    sink.emit(PrepareEvent::Resolving { version_id: source.id.clone() });
-
-    let plan = plan(http, depot_root, source, os).await?;
-    sink.emit(PrepareEvent::Planned {
-        total_files: plan.total_files,
-        missing_files: plan.missing_files,
-        missing_bytes: plan.missing_bytes,
-        already_present: plan.total_files - plan.missing_files,
-    });
-
+) -> Result<(), AshError> {
     if cancel.is_cancelled() {
         sink.emit(PrepareEvent::Cancelled);
         return Err(AshError::Cancelled);
@@ -431,7 +431,7 @@ pub(crate) async fn prepare<S: ProgressSink + ?Sized>(
     // argument pins it to one lifetime, and `buffer_unordered` needs the
     // closure to be higher-ranked over any of them. An Artifact is three
     // strings, so this costs nothing worth the contortion of avoiding it.
-    let results: Vec<Result<(), AshError>> = stream::iter(plan.missing.iter().cloned())
+    let results: Vec<Result<(), AshError>> = stream::iter(artifacts.iter().cloned())
         .map(|artifact| {
             let done_files = &done_files;
             let done_bytes = &done_bytes;
@@ -468,7 +468,40 @@ pub(crate) async fn prepare<S: ProgressSink + ?Sized>(
             Err(e) => return Err(e),
         }
     }
+    Ok(())
+}
 
-    sink.emit(PrepareEvent::Done { version_id: source.id.clone() });
+/// Already in the depot and intact? Public within the crate so runtime
+/// provisioning can skip work the same way preparation does.
+pub(crate) fn present(depot_root: &Path, artifact: &Artifact) -> bool {
+    is_present(depot_root, artifact)
+}
+
+// ---- preparing -------------------------------------------------------------
+
+pub(crate) async fn prepare<S: ProgressSink + ?Sized>(
+    http: &dyn HttpPort,
+    depot_root: &Path,
+    source: &VersionSource,
+    os: Os,
+    sink: &S,
+    cancel: &Cancel,
+) -> Result<Plan, AshError> {
+    sink.emit(PrepareEvent::Resolving { version_id: source.id.clone() });
+
+    let plan = plan(http, depot_root, source, os).await?;
+    sink.emit(PrepareEvent::Planned {
+        total_files: plan.total_files,
+        missing_files: plan.missing_files,
+        missing_bytes: plan.missing_bytes,
+        already_present: plan.total_files - plan.missing_files,
+    });
+
+    if cancel.is_cancelled() {
+        sink.emit(PrepareEvent::Cancelled);
+        return Err(AshError::Cancelled);
+    }
+
+    download_all(http, depot_root, &plan.missing, sink, cancel).await?;
     Ok(plan)
 }

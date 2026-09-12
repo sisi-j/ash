@@ -12,6 +12,8 @@ use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::{Ash, Cancel, Config, PrepareEvent, ProgressSink, VERSION_MANIFEST_URL};
 use sha1::{Digest, Sha1};
 
+mod common;
+
 const VERSION_URL: &str = "https://piston-meta.mojang.com/v1/packages/aa/1.21.4.json";
 const CLIENT_URL: &str = "https://piston-data.mojang.com/v1/objects/bb/client.jar";
 const ASSET_INDEX_URL: &str = "https://piston-meta.mojang.com/v1/packages/cc/24.json";
@@ -90,7 +92,10 @@ fn manifest_json() -> String {
 
 fn serving() -> Arc<FakeHttp> {
     let index = asset_index_json();
-    FakeHttp::new()
+    // Preparation provisions the Java runtime too, so those routes are part
+    // of a working fixture now.
+    common::with_runtime_routes(
+        FakeHttp::new()
         .route(VERSION_MANIFEST_URL, HttpResponse::ok(manifest_json()))
         .route(VERSION_URL, HttpResponse::ok(version_json()))
         .route(ASSET_INDEX_URL, HttpResponse::ok(index))
@@ -98,7 +103,8 @@ fn serving() -> Arc<FakeHttp> {
         .route(WIN_LIB_URL, HttpResponse::ok(WIN_LIB))
         .route(MAC_LIB_URL, HttpResponse::ok(MAC_LIB))
         .route(asset_url(ASSET_A), HttpResponse::ok(ASSET_A))
-        .route(asset_url(ASSET_B), HttpResponse::ok(ASSET_B))
+        .route(asset_url(ASSET_B), HttpResponse::ok(ASSET_B)),
+    )
 }
 
 /// Records every event, so a test can assert on the shape of progress rather
@@ -340,20 +346,37 @@ async fn progress_is_typed_events_not_a_percentage() {
     let events = sink.events();
 
     assert!(matches!(events.first(), Some(PrepareEvent::Resolving { .. })));
-    assert!(matches!(events.last(), Some(PrepareEvent::Done { .. })));
     assert!(events.iter().any(|e| matches!(e, PrepareEvent::Planned { .. })));
 
-    let downloaded: Vec<&PrepareEvent> =
-        events.iter().filter(|e| matches!(e, PrepareEvent::Downloaded { .. })).collect();
-    assert_eq!(downloaded.len(), 4, "one event per file");
+    // `Done` means the instance is ready to launch, not that the game files
+    // arrived. It has to come after the runtime, or the UI would say
+    // "finished" and keep downloading.
+    assert!(matches!(events.last(), Some(PrepareEvent::Done { .. })));
 
-    // The running totals have to reach the plan, or a progress bar built from
-    // them would never finish.
-    let final_files = events.iter().rev().find_map(|e| match e {
+    let runtime_at = events
+        .iter()
+        .position(|e| matches!(e, PrepareEvent::Runtime { .. }))
+        .expect("a runtime phase is announced");
+
+    let game_files = events[..runtime_at]
+        .iter()
+        .filter(|e| matches!(e, PrepareEvent::Downloaded { .. }))
+        .count();
+    assert_eq!(game_files, 4, "one event per game file");
+
+    let runtime_files = events[runtime_at..]
+        .iter()
+        .filter(|e| matches!(e, PrepareEvent::Downloaded { .. }))
+        .count();
+    assert_eq!(runtime_files, 2, "one event per runtime file");
+
+    // Each phase's running total has to reach its own plan, or a progress bar
+    // built from them would never finish.
+    let last_game = events[..runtime_at].iter().rev().find_map(|e| match e {
         PrepareEvent::Downloaded { done_files, .. } => Some(*done_files),
         _ => None,
     });
-    assert_eq!(final_files, Some(4));
+    assert_eq!(last_game, Some(4));
 }
 
 #[tokio::test]

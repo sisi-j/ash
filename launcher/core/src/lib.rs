@@ -18,6 +18,7 @@ mod config;
 mod depot;
 mod error;
 mod instance;
+mod runtime;
 mod version;
 
 pub mod credentials;
@@ -31,6 +32,7 @@ pub use config::Config;
 pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
+pub use runtime::Runtime;
 pub use version::Os;
 
 use std::path::PathBuf;
@@ -273,10 +275,51 @@ impl Ash {
         cancel: &Cancel,
     ) -> Result<Plan, AshError> {
         let source = self.version_source(id).await?;
-        depot::prepare(
+        let plan = depot::prepare(
             self.http.as_ref(),
             &self.config.depot_root,
             &source,
+            Os::current(),
+            sink,
+            cancel,
+        )
+        .await?;
+
+        // An instance with every game file and no JRE is not prepared. The
+        // runtime is part of what it takes to launch, so it is part of this -
+        // and `Done` only fires once both are in place.
+        self.provision_runtime(plan.java_component.as_deref(), sink, cancel).await?;
+
+        sink.emit(PrepareEvent::Done { version_id: plan.version_id.clone() });
+        Ok(plan)
+    }
+
+    /// Download and lay out the Java runtime a version target needs.
+    ///
+    /// Nothing here consults `JAVA_HOME` or `PATH`. The runtime a version
+    /// wants is named in its own metadata, and the one on the player's
+    /// machine is almost certainly a different major version.
+    pub async fn ensure_runtime<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<Runtime, AshError> {
+        let plan = self.plan_instance(id).await?;
+        self.provision_runtime(plan.java_component.as_deref(), sink, cancel).await
+    }
+
+    async fn provision_runtime<S: ProgressSink + ?Sized>(
+        &self,
+        java_component: Option<&str>,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<Runtime, AshError> {
+        let component = runtime::component_for(java_component);
+        runtime::provision(
+            self.http.as_ref(),
+            &self.config.depot_root,
+            &component,
             Os::current(),
             sink,
             cancel,

@@ -46,9 +46,8 @@ impl Os {
 
 // ---- wire format -----------------------------------------------------------
 
-/// `main_class` and `java_version` are read by launching (#8) and runtime
-/// provisioning (#7). They are part of the wire shape and parsed here so the
-/// format lives in one place.
+/// `main_class` is read by launching (#8). It is part of the wire shape and
+/// parsed here so the format lives in one place.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionMetadata {
@@ -88,10 +87,11 @@ pub struct AssetIndexRef {
     pub url: String,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct JavaVersion {
     pub component: String,
+    /// Read by launching (#8) to sanity-check the runtime it was handed.
+    #[allow(dead_code)]
     #[serde(rename = "majorVersion")]
     pub major_version: u32,
 }

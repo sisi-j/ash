@@ -47,8 +47,15 @@ export type DeletionPreview = {
   total_bytes: number;
 };
 
+export type Runtime = {
+  component: string;
+  version_name: string;
+  java_executable: string;
+};
+
 export type Plan = {
   version_id: string;
+  java_component: string | null;
   total_files: number;
   missing_files: number;
   missing_bytes: number;
@@ -72,6 +79,7 @@ export type PrepareEvent =
       done_bytes: number;
     }
   | { event: "resuming"; path: string; from_bytes: number }
+  | { event: "runtime"; component: string }
   | { event: "reverifying"; path: string }
   | { event: "cancelled" }
   | { event: "done"; version_id: string };
@@ -140,6 +148,7 @@ export const api = {
   planInstance: (id: InstanceId) => invoke<Plan>("plan_instance", { id }),
   /** Returns as soon as the work is scheduled; watch the events for outcome. */
   prepareInstance: (id: InstanceId) => invoke<void>("prepare_instance", { id }),
+  ensureRuntime: (id: InstanceId) => invoke<Runtime>("ensure_runtime", { id }),
   cancelPreparation: () => invoke<void>("cancel_preparation"),
 
   instances: () => invoke<Instance[]>("instances"),

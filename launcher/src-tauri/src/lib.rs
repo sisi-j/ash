@@ -9,7 +9,7 @@ use ash_core::credentials::OsCredentialStore;
 use ash_core::http::ReqwestHttp;
 use ash_core::{
     Account, Accounts, Ash, Cancel, Catalogue, Config, DeletionPreview, Instance, InstanceId,
-    PendingSignIn, Plan, PrepareEvent, ProgressSink, SignInStatus,
+    PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -221,6 +221,21 @@ struct PrepareOutcome {
     error: Option<UiError>,
 }
 
+/// Which Java runtime an instance will use, provisioning it if needed.
+///
+/// Deliberately not "which Java is installed": ash never consults the
+/// machine's Java, so the only answer is one ash downloaded itself.
+#[tauri::command]
+async fn ensure_runtime(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Runtime, UiError> {
+    let ash = Arc::clone(&state.ash);
+    let sink = WindowSink(app);
+    ash.ensure_runtime(&id, &sink, &Cancel::new()).await.map_err(UiError::from)
+}
+
 #[tauri::command]
 async fn cancel_preparation(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
     if let Some(cancel) = state.preparing.lock().unwrap().as_ref() {
@@ -284,6 +299,7 @@ pub fn run() {
             reveal_game_directory,
             plan_instance,
             prepare_instance,
+            ensure_runtime,
             cancel_preparation
         ])
         .run(tauri::generate_context!())

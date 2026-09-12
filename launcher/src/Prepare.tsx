@@ -88,6 +88,13 @@ export function Prepare(props: { id: InstanceId }) {
                 note: null,
               },
             };
+          case "runtime":
+            // A second `planned` follows with the runtime's own counts, so
+            // reset rather than carrying the game-file totals forward.
+            return {
+              at: "running",
+              progress: { ...START, note: `Fetching the Java runtime (${event.component})…` },
+            };
           case "resuming":
             return { at: "running", progress: { ...p, note: "Resuming an interrupted file…" } };
           case "reverifying":
@@ -143,7 +150,8 @@ export function Prepare(props: { id: InstanceId }) {
   if (phase.at === "ready") {
     return (
       <p className="muted">
-        Everything this version needs is in the depot. Launching arrives with #8.
+        Game files and a Java runtime are both in the depot. Launching arrives
+        with #8.
       </p>
     );
   }

@@ -44,6 +44,9 @@ pub enum AshError {
     #[error("the catalogue has no version {version_id}")]
     UnknownVersion { version_id: String },
 
+    #[error("Mojang publishes no {component} runtime for {platform}")]
+    RuntimeUnavailable { component: String, platform: String },
+
     // ---- sign-in ----
     #[error("no sign-in is in progress")]
     NoSignInPending,
@@ -105,6 +108,7 @@ impl AshError {
             AshError::InstanceNotFound { .. } => "instance_not_found",
             AshError::InvalidInstanceName { .. } => "invalid_instance_name",
             AshError::UnknownVersion { .. } => "unknown_version",
+            AshError::RuntimeUnavailable { .. } => "runtime_unavailable",
             AshError::NoSignInPending => "no_sign_in_pending",
             AshError::SignInExpired => "sign_in_expired",
             AshError::SignInDeclined => "sign_in_declined",
@@ -156,6 +160,9 @@ impl AshError {
             }
             AshError::UnknownVersion { .. } => {
                 "Mojang no longer publishes that version, so ash can't prepare it.".into()
+            }
+            AshError::RuntimeUnavailable { .. } => {
+                "Mojang doesn't publish a Java runtime this version can use on your platform.".into()
             }
             AshError::NoSignInPending => "There is no sign-in to complete. Start again.".into(),
             AshError::SignInExpired => {
