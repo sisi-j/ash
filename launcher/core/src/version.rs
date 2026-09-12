@@ -99,6 +99,35 @@ pub struct VersionMetadata {
     /// `release`, `snapshot`, ... Passed through as `${version_type}`.
     #[serde(rename = "type")]
     pub version_type: Option<String>,
+    /// The log4j configuration Mojang wants this version run with.
+    #[serde(default)]
+    pub logging: Option<Logging>,
+}
+
+/// Mojang's own log4j configuration for a version.
+///
+/// For 1.7 to 1.11 this *is* the published Log4Shell mitigation: the config
+/// carries a filter that denies any message containing a `${...}` lookup.
+/// Those versions ship a log4j too old for `formatMsgNoLookups`, so applying
+/// the config is the only fix, and skipping it leaves the hole open.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Logging {
+    pub client: Option<LoggingClient>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoggingClient {
+    /// e.g. `-Dlog4j.configurationFile=${path}`.
+    pub argument: String,
+    pub file: LoggingFile,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoggingFile {
+    pub id: String,
+    pub sha1: String,
+    pub size: u64,
+    pub url: String,
 }
 
 /// The 1.13-and-later argument lists.
@@ -170,8 +199,22 @@ pub struct Library {
     #[serde(default)]
     pub rules: Vec<Rule>,
     /// 1.8.9-era: maps an OS to a key in `downloads.classifiers`.
+    ///
+    /// Its presence is what says "this jar has to be unpacked". LWJGL 2
+    /// loads real files off `java.library.path`; LWJGL 3 reads them straight
+    /// out of the classpath, and modern metadata has no `natives` map at
+    /// all - so this one field decides, with no version check anywhere.
     #[serde(default)]
     pub natives: std::collections::HashMap<String, String>,
+    /// What not to unpack. Always `META-INF/` in practice.
+    #[serde(default)]
+    pub extract: Option<Extract>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Extract {
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -393,6 +436,7 @@ mod tests {
             downloads: Default::default(),
             rules,
             natives: Default::default(),
+            extract: None,
         }
     }
 

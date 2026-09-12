@@ -27,6 +27,10 @@ reqwest = { version = "0.13", default-features = false, features = [
     "system-proxy",
     "http2",
 ] }
+# Extracting native libraries out of the jars Mojang ships them in. Only the
+# decompressing half of deflate: ash reads jars and never writes one, so the
+# compressor the default feature set pulls in would be dead weight.
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
 tokio.workspace = true
@@ -34,3 +38,6 @@ tempfile = "3"
 # Tests build their own fixtures, so they need to state the hashes ash will
 # check them against.
 sha1 = "0.11"
+# Native-library fixtures are real jars, built here for the same reason: a
+# checked-in archive and the hash ash checks it against would drift apart.
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }

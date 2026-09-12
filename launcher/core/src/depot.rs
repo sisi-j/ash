@@ -8,9 +8,12 @@
 //! ├── meta/version_manifest_v2.json
 //! ├── versions/<id>/<id>.json
 //! ├── versions/<id>/<id>.jar
+//! ├── versions/<id>/natives/          unpacked, for versions that need it
 //! ├── libraries/<maven path>.jar
+//! ├── runtimes/<platform>/<component> the JRE ash downloaded
 //! └── assets/indexes/<id>.json
 //!     assets/objects/<ab>/<sha1>
+//!     assets/log_configs/<id>         Mojang's log4j configuration
 //! ```
 //!
 //! The depot is a cache, never a redistribution point: every byte comes from
@@ -28,6 +31,7 @@ use sha1::{Digest, Sha1};
 
 use crate::error::AshError;
 use crate::http::{HttpPort, HttpRequest, HttpResponse};
+use crate::natives;
 use crate::version::{self, Os};
 
 /// How many downloads run at once.
@@ -144,6 +148,12 @@ fn asset_index_path(id: &str) -> String {
 
 fn library_path(relative: &str) -> String {
     format!("libraries/{relative}")
+}
+
+/// Where Mojang's own launcher keeps log4j configurations, so a depot stays
+/// legible to anyone who has seen a `.minecraft` folder.
+pub(crate) fn log_config_path(id: &str) -> String {
+    format!("assets/log_configs/{id}")
 }
 
 // ---- verification ----------------------------------------------------------
@@ -373,6 +383,18 @@ pub(crate) async fn plan(
         }
     }
 
+    // Mojang publishes a log4j configuration per version, and for 1.7 to
+    // 1.11 that file *is* the Log4Shell mitigation. It is an artifact like
+    // any other, so it is planned, hashed and verified like any other.
+    if let Some(logging) = metadata.logging.as_ref().and_then(|l| l.client.as_ref()) {
+        artifacts.push(Artifact {
+            url: logging.file.url.clone(),
+            sha1: logging.file.sha1.clone(),
+            size: logging.file.size,
+            path: log_config_path(&logging.file.id),
+        });
+    }
+
     if let Some(index) = &metadata.asset_index {
         let index_bytes =
             fetch_metadata(http, &index.url, Some(&index.sha1), Some(index.size)).await?;
@@ -520,5 +542,11 @@ pub(crate) async fn prepare<S: ProgressSink + ?Sized>(
     }
 
     download_all(http, depot_root, &plan.missing, sink, cancel).await?;
+
+    // Unpacking is part of being prepared. A version whose natives are still
+    // inside their jars has every file it needs and cannot start.
+    let metadata = read_metadata(depot_root, &plan.version_id)?;
+    natives::extract(depot_root, &metadata, os)?;
+
     Ok(plan)
 }

@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::depot;
 use crate::error::AshError;
+use crate::natives;
 use crate::process::Invocation;
 use crate::runtime::Runtime;
 use crate::version::{self, Os, VersionMetadata};
@@ -32,15 +34,6 @@ pub(crate) struct LaunchContext<'a> {
     pub os: Os,
 }
 
-/// Where a version's native libraries are unpacked.
-///
-/// Under the depot, not the instance: natives belong to a version, so two
-/// instances on 1.21.11 share one copy. Modern LWJGL extracts into this
-/// directory itself, which is why the jars only have to be on the classpath.
-pub(crate) fn natives_dir(depot_root: &Path, version_id: &str) -> PathBuf {
-    depot_root.join(format!("versions/{version_id}/natives"))
-}
-
 /// Build the command that starts the game.
 pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> {
     let metadata = context.metadata;
@@ -50,7 +43,10 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
         detail: "its metadata names no main class".into(),
     })?;
 
-    let natives = natives_dir(context.depot_root, &metadata.id);
+    // Modern LWJGL extracts into this directory itself; older versions had
+    // it unpacked during preparation. Either way the path is the same, and
+    // assembly does not need to know which happened.
+    let natives = natives::directory(context.depot_root, &metadata.id);
     fs::create_dir_all(&natives)
         .map_err(|e| AshError::Storage { detail: format!("creating the natives directory: {e}") })?;
 
@@ -60,8 +56,14 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
     let assets_index = metadata.asset_index.as_ref().map(|index| index.id.clone());
     let variables = variables(context, &natives, &classpath, separator, assets_index.as_deref());
 
-    let jvm = resolve(&jvm_entries(metadata, context.os), &variables);
+    let mut jvm = resolve(&jvm_entries(metadata, context.os), &variables);
     let game = resolve(&game_entries(metadata, context.os), &variables);
+
+    // First, so it is in force before anything else the JVM is told. For
+    // 1.7 to 1.11 this argument is the Log4Shell mitigation.
+    if let Some(argument) = logging_argument(context) {
+        jvm.insert(0, argument);
+    }
 
     let mut args = jvm;
     args.push(main_class);
@@ -107,6 +109,18 @@ fn classpath(context: &LaunchContext) -> Result<Vec<PathBuf>, AshError> {
     )));
 
     Ok(entries)
+}
+
+/// Mojang's `-Dlog4j.configurationFile=${path}`, pointed at the file the
+/// plan downloaded.
+///
+/// `${path}` is substituted here rather than in the shared variable table:
+/// it is the most generic name in the whole format, and a table entry for it
+/// would silently rewrite any other argument that happened to contain one.
+fn logging_argument(context: &LaunchContext) -> Option<String> {
+    let client = context.metadata.logging.as_ref()?.client.as_ref()?;
+    let path = context.depot_root.join(depot::log_config_path(&client.file.id));
+    Some(client.argument.replace("${path}", &path.display().to_string()))
 }
 
 fn variables(
@@ -158,8 +172,9 @@ fn variables(
 /// The JVM arguments, with a fallback for metadata that predates the list.
 fn jvm_entries(metadata: &VersionMetadata, os: Os) -> Vec<String> {
     if metadata.arguments.jvm.is_empty() {
-        // What every pre-1.13 version needs and none of them state. Making
-        // 1.8.9 actually run is #9; this is only so assembly has one shape.
+        // What every pre-1.13 version needs and none of them state. The
+        // structured list replaced exactly these two facts in 1.13, so the
+        // rest of assembly never learns which era it is in.
         return vec![
             "-Djava.library.path=${natives_directory}".to_owned(),
             "-cp".to_owned(),

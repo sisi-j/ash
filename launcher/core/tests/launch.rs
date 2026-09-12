@@ -1,14 +1,16 @@
-//! Launching 1.21.x.
+//! Launching, on both version targets.
 //!
 //! The assertion is the **recorded invocation**: the exact command ash would
 //! run, captured by the process port's fake. No JVM starts here, and none
 //! should - a test that opened a game window would be a test nobody could
 //! run twice.
 //!
-//! The metadata fixture is modelled on a real 1.21.x manifest, including the
-//! two things that shape are easy to get wrong: every conditional game
+//! Both fixtures are modelled on real manifests, including the things about
+//! their shape that are easy to get wrong. 1.21.x: every conditional game
 //! argument is feature-gated, and the three Windows native jars carry one
-//! identical rule.
+//! identical rule. 1.8.9: the arguments are a single string, the natives are
+//! inside jars that have to be unpacked, and one classifier is templated
+//! with `${arch}`.
 
 use std::sync::Arc;
 
@@ -24,6 +26,28 @@ const VERSION_URL: &str = "https://piston-meta.mojang.com/v1/packages/aa/1.21.11
 const CLIENT_URL: &str = "https://piston-data.mojang.com/v1/objects/cc/client.jar";
 const ASSET_INDEX_URL: &str = "https://piston-meta.mojang.com/v1/packages/dd/29.json";
 const LIB_BASE: &str = "https://libraries.minecraft.net";
+
+const LEGACY: &str = "1.8.9";
+const LEGACY_URL: &str = "https://piston-meta.mojang.com/v1/packages/ee/1.8.9.json";
+const LEGACY_CLIENT_URL: &str = "https://piston-data.mojang.com/v1/objects/ff/client-1.8.9.jar";
+const LEGACY_INDEX_URL: &str = "https://launchermeta.mojang.com/v1/packages/gg/1.8.json";
+const LOG_CONFIG_URL: &str = "https://launcher.mojang.com/v1/objects/hh/client-1.7.xml";
+
+/// Mojang's patched log4j configuration. The `RegexFilter` denying any
+/// message containing a `${...}` lookup *is* the Log4Shell mitigation for
+/// this era - these versions ship a log4j too old for
+/// `formatMsgNoLookups`, so the config is the whole fix.
+const LOG_CONFIG: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN"><Appenders><Console name="SysOut" target="SYSTEM_OUT">
+<XMLLayout /></Console></Appenders><Loggers><Root level="info"><filters>
+<RegexFilter regex="(?s).*\$\{[^}]*\}.*" onMatch="DENY" onMismatch="NEUTRAL"/>
+</filters><AppenderRef ref="SysOut"/></Root></Loggers></Configuration>"#;
+
+/// The library inside a native jar, and the manifest entry that must not be
+/// unpacked beside it.
+const NATIVE_FILE: &str = "lwjgl64.dll";
+const NATIVE_BODY: &[u8] = b"pretend this is a native library";
+const MANIFEST_ENTRY: &str = "META-INF/MANIFEST.MF";
 
 const CLIENT_JAR: &[u8] = b"pretend this is the client jar";
 const ANY_JAR: &[u8] = b"pretend this is a library jar";
@@ -136,6 +160,98 @@ fn version_json() -> String {
     )
 }
 
+// ---- 1.8.9 -----------------------------------------------------------------
+
+/// A native jar: the library, plus the manifest `extract.exclude` says to
+/// leave behind.
+fn native_jar() -> Vec<u8> {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    // Stored, not deflated: ash only ever reads jars, so its zip support is
+    // decompress-only and a fixture it cannot read would prove nothing.
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    writer.start_file(MANIFEST_ENTRY, options).expect("manifest entry");
+    writer.write_all(b"Manifest-Version: 1.0
+").expect("manifest body");
+    writer.start_file(NATIVE_FILE, options).expect("library entry");
+    writer.write_all(NATIVE_BODY).expect("library body");
+
+    writer.finish().expect("finish").into_inner()
+}
+
+/// Native libraries as 1.8.9 declares them: a `natives` map pointing into
+/// `downloads.classifiers`, not a classifier on the Maven coordinate.
+fn legacy_libraries() -> String {
+    let jar = native_jar();
+    let classifier = |name: &str| {
+        format!(
+            r#""{name}":{{"path":"legacy/{name}.jar","sha1":"{}","size":{},
+               "url":"{LIB_BASE}/legacy/{name}.jar"}}"#,
+            common::sha1(&jar),
+            jar.len()
+        )
+    };
+
+    format!(
+        r#"{{"name":"org.lwjgl.lwjgl:lwjgl-platform:2.9.4",
+            "downloads":{{"artifact":{{"path":"legacy/lwjgl-platform.jar","sha1":"{stub_sha}",
+              "size":{stub_size},"url":"{LIB_BASE}/legacy/lwjgl-platform.jar"}},
+              "classifiers":{{{windows},{osx}}}}},
+            "natives":{{"windows":"natives-windows","osx":"natives-osx"}},
+            "extract":{{"exclude":["META-INF/"]}}}},
+          {{"name":"tv.twitch:twitch-platform:6.5",
+            "downloads":{{"classifiers":{{{arch_windows},{osx}}}}},
+            "natives":{{"windows":"natives-windows-${{arch}}","osx":"natives-osx"}},
+            "extract":{{"exclude":["META-INF/"]}}}},
+          {{"name":"net.java.jinput:jinput:2.0.5",
+            "downloads":{{"artifact":{{"path":"legacy/jinput.jar","sha1":"{stub_sha}",
+              "size":{stub_size},"url":"{LIB_BASE}/legacy/jinput.jar"}}}}}}"#,
+        stub_sha = common::sha1(ANY_JAR),
+        stub_size = ANY_JAR.len(),
+        windows = classifier("natives-windows"),
+        osx = classifier("natives-osx"),
+        // `${arch}` is templated by the launcher, never by Mojang.
+        arch_windows = classifier("natives-windows-64"),
+    )
+}
+
+fn legacy_index_json() -> String {
+    format!(
+        r#"{{"objects":{{"legacy.png":{{"hash":"{}","size":{}}}}}}}"#,
+        common::sha1(ASSET),
+        ASSET.len()
+    )
+}
+
+/// 1.8.9: one argument string, a `jre-legacy` runtime, and the log4j
+/// configuration that carries the Log4Shell mitigation.
+fn legacy_json() -> String {
+    format!(
+        r#"{{"id":"{LEGACY}","type":"release",
+        "mainClass":"net.minecraft.client.main.Main",
+        "javaVersion":{{"component":"jre-legacy","majorVersion":8}},
+        "assetIndex":{{"id":"1.8","sha1":"{index_sha}","size":{index_size},
+                      "url":"{LEGACY_INDEX_URL}"}},
+        "downloads":{{"client":{{"sha1":"{client_sha}","size":{client_size},
+                      "url":"{LEGACY_CLIENT_URL}"}}}},
+        "libraries":[{libraries}],
+        "logging":{{"client":{{"argument":"-Dlog4j.configurationFile=${{path}}",
+          "file":{{"id":"client-1.7.xml","sha1":"{log_sha}","size":{log_size},
+                  "url":"{LOG_CONFIG_URL}"}},"type":"log4j2-xml"}}}},
+        "minecraftArguments":"--username ${{auth_player_name}} --version ${{version_name}} --gameDir ${{game_directory}} --assetsDir ${{assets_root}} --assetIndex ${{assets_index_name}} --uuid ${{auth_uuid}} --accessToken ${{auth_access_token}} --userProperties ${{user_properties}} --userType ${{user_type}}"}}"#,
+        index_sha = common::sha1(legacy_index_json().as_bytes()),
+        index_size = legacy_index_json().len(),
+        client_sha = common::sha1(CLIENT_JAR),
+        client_size = CLIENT_JAR.len(),
+        log_sha = common::sha1(LOG_CONFIG.as_bytes()),
+        log_size = LOG_CONFIG.len(),
+        libraries = legacy_libraries(),
+    )
+}
+
 fn asset_index_json() -> String {
     format!(
         r#"{{"objects":{{"icons/icon_16x16.png":{{"hash":"{}","size":{}}}}}}}"#,
@@ -148,9 +264,12 @@ fn manifest_json() -> String {
     format!(
         r#"{{"latest":{{"release":"{VERSION}","snapshot":"{VERSION}"}},"versions":[
             {{"id":"{VERSION}","type":"release","releaseTime":"2026-01-05T09:00:00+00:00",
-              "url":"{VERSION_URL}","sha1":"{}"}}
+              "url":"{VERSION_URL}","sha1":"{modern}"}},
+            {{"id":"{LEGACY}","type":"release","releaseTime":"2015-12-09T11:00:00+00:00",
+              "url":"{LEGACY_URL}","sha1":"{legacy}"}}
         ]}}"#,
-        common::sha1(version_json().as_bytes())
+        modern = common::sha1(version_json().as_bytes()),
+        legacy = common::sha1(legacy_json().as_bytes()),
     )
 }
 
@@ -170,6 +289,18 @@ fn serving() -> Arc<FakeHttp> {
     ));
     for (_, path, _) in LIBRARIES {
         http = http.route(format!("{LIB_BASE}/{path}"), HttpResponse::ok(ANY_JAR));
+    }
+
+    http = http
+        .route(LEGACY_URL, HttpResponse::ok(legacy_json()))
+        .route(LEGACY_CLIENT_URL, HttpResponse::ok(CLIENT_JAR))
+        .route(LEGACY_INDEX_URL, HttpResponse::ok(legacy_index_json()))
+        .route(LOG_CONFIG_URL, HttpResponse::ok(LOG_CONFIG))
+        .route(format!("{LIB_BASE}/legacy/lwjgl-platform.jar"), HttpResponse::ok(ANY_JAR))
+        .route(format!("{LIB_BASE}/legacy/jinput.jar"), HttpResponse::ok(ANY_JAR));
+    for name in ["natives-windows", "natives-windows-64", "natives-osx"] {
+        http =
+            http.route(format!("{LIB_BASE}/legacy/{name}.jar"), HttpResponse::ok(native_jar()));
     }
     http
 }
@@ -201,9 +332,19 @@ fn fixture() -> Fixture {
 impl Fixture {
     /// An instance with a signed-in player behind it.
     async fn ready(&self) -> InstanceId {
-        self.ash.begin_sign_in().await.expect("device code");
-        self.ash.poll_sign_in().await.expect("sign-in");
-        self.ash.create_instance("modern", VERSION).expect("instance").id
+        self.instance_on(VERSION).await
+    }
+
+    async fn ready_legacy(&self) -> InstanceId {
+        self.instance_on(LEGACY).await
+    }
+
+    async fn instance_on(&self, version: &str) -> InstanceId {
+        if self.ash.accounts().active_account().is_none() {
+            self.ash.begin_sign_in().await.expect("device code");
+            self.ash.poll_sign_in().await.expect("sign-in");
+        }
+        self.ash.create_instance(version, version).expect("instance").id
     }
 
     async fn launch(&self, id: &InstanceId) -> ash_core::InvocationView {
@@ -626,4 +767,255 @@ async fn launching_records_that_the_instance_was_played() {
     // Recorded on launch, not on exit: a session that ends in a crash still
     // happened.
     assert!(f.ash.instance(&id).expect("instance").last_played_ms.is_some());
+}
+
+// ---- 1.8.9 ------------------------------------------------------------------
+//
+// One abstraction, not two. Every test above runs against the structured
+// argument format; these run the same seam against the single string, and the
+// only thing that changes is the metadata.
+
+#[tokio::test]
+async fn the_legacy_argument_string_is_templated() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+
+    let view = f.launch(&id).await;
+
+    assert_eq!(value_of(&view.args, "--username"), Some(common::PLAYER_NAME));
+    assert_eq!(value_of(&view.args, "--version"), Some(LEGACY));
+    assert_eq!(value_of(&view.args, "--uuid"), Some(common::PLAYER_UUID));
+    assert_eq!(value_of(&view.args, "--assetIndex"), Some("1.8"));
+    // Pre-1.13 asks for two things modern versions never mention.
+    assert_eq!(value_of(&view.args, "--userType"), Some("msa"));
+    assert_eq!(value_of(&view.args, "--userProperties"), Some("{}"));
+}
+
+#[tokio::test]
+async fn the_legacy_string_leaves_no_placeholder_behind() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+
+    let view = f.launch(&id).await;
+
+    let unresolved: Vec<&String> = view.args.iter().filter(|a| a.contains("${")).collect();
+    assert!(unresolved.is_empty(), "unsubstituted placeholders: {unresolved:?}");
+}
+
+#[tokio::test]
+async fn a_version_with_no_argument_list_still_gets_a_classpath() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+
+    let view = f.launch(&id).await;
+
+    // 1.8.9 states no JVM arguments at all - the two facts the structured
+    // list replaced in 1.13 have to come from somewhere.
+    let classpath = value_of(&view.args, "-cp").expect("a classpath");
+    assert!(classpath.ends_with(&format!("{LEGACY}.jar")), "the client jar comes last");
+    assert!(
+        view.args.iter().any(|a| a.starts_with("-Djava.library.path=")),
+        "LWJGL 2 loads natives off java.library.path and will not start without it"
+    );
+}
+
+#[tokio::test]
+async fn the_legacy_target_runs_on_java_8() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+
+    let runtime = f.ash.ensure_runtime(&id, &NullSink, &Cancel::new()).await.expect("runtime");
+
+    // Handing 1.8.9 a modern JRE is the single most common way to make it
+    // refuse to start.
+    assert_eq!(runtime.component, "jre-legacy");
+    assert_eq!(runtime.version_name, "8.0.412");
+}
+
+#[tokio::test]
+async fn both_targets_are_served_by_one_code_path() {
+    let f = fixture();
+    let modern = f.ready().await;
+    let legacy = f.ready_legacy().await;
+
+    let a = f.launch(&modern).await;
+    let b = f.launch(&legacy).await;
+
+    // Same seam, same assembly, same shape out: java, JVM arguments, the main
+    // class, then game arguments. If these needed different handling the
+    // abstraction would have failed.
+    for view in [&a, &b] {
+        let main_at = view
+            .args
+            .iter()
+            .position(|arg| arg == "net.minecraft.client.main.Main")
+            .expect("a main class");
+        let cp_at = view.args.iter().position(|arg| arg == "-cp").expect("-cp");
+        let user_at = view.args.iter().position(|arg| arg == "--username").expect("--username");
+        assert!(cp_at < main_at && main_at < user_at);
+    }
+    assert_ne!(a.program, b.program, "the two targets run on different runtimes");
+}
+
+// ---- natives ----------------------------------------------------------------
+
+#[tokio::test]
+async fn native_libraries_are_unpacked_where_the_game_looks_for_them() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+
+    let view = f.launch(&id).await;
+
+    // Whatever `-Djava.library.path` points at is where LWJGL 2 will look, so
+    // that is where the files have to be.
+    let argument = view
+        .args
+        .iter()
+        .find(|a| a.starts_with("-Djava.library.path="))
+        .expect("java.library.path");
+    let directory = std::path::PathBuf::from(argument.trim_start_matches("-Djava.library.path="));
+
+    assert!(directory.join(NATIVE_FILE).is_file(), "the native library was never unpacked");
+    assert_eq!(std::fs::read(directory.join(NATIVE_FILE)).expect("read"), NATIVE_BODY);
+}
+
+#[tokio::test]
+async fn excluded_entries_are_not_unpacked() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+    f.launch(&id).await;
+
+    // `extract.exclude` says META-INF/, and a stray signature file in the
+    // natives directory is at best noise.
+    let natives = f.tmp.path().join(format!("depot/versions/{LEGACY}/natives"));
+    assert!(!natives.join(MANIFEST_ENTRY).exists(), "an excluded entry was unpacked");
+    assert!(!natives.join("META-INF").exists());
+}
+
+#[tokio::test]
+async fn the_arch_templated_classifier_resolves() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+    f.launch(&id).await;
+
+    // `natives-windows-${arch}` is the launcher's job to fill in, and a
+    // literal placeholder matches no classifier at all.
+    let jar = f.tmp.path().join(if cfg!(windows) {
+        "depot/libraries/legacy/natives-windows-64.jar"
+    } else {
+        "depot/libraries/legacy/natives-osx.jar"
+    });
+    assert!(jar.is_file(), "{} was never downloaded", jar.display());
+}
+
+#[tokio::test]
+async fn a_modern_version_unpacks_nothing() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.launch(&id).await;
+
+    // LWJGL 3 reads its natives straight out of the classpath, and 1.21.x
+    // metadata has no `natives` map to say otherwise. Unpacking anyway would
+    // be tens of megabytes written for nothing.
+    let natives = f.tmp.path().join(format!("depot/versions/{VERSION}/natives"));
+    let unpacked: Vec<_> = std::fs::read_dir(&natives).expect("the directory exists").collect();
+    assert!(unpacked.is_empty(), "1.21.x should need no unpacking");
+}
+
+#[tokio::test]
+async fn unpacking_twice_is_not_work_done_twice() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+    f.launch(&id).await;
+
+    let native = f.tmp.path().join(format!("depot/versions/{LEGACY}/natives/{NATIVE_FILE}"));
+    let first = std::fs::metadata(&native).expect("unpacked").modified().expect("mtime");
+
+    f.ash.stop_game(&id);
+    f.launch(&id).await;
+
+    assert_eq!(
+        std::fs::metadata(&native).expect("still there").modified().expect("mtime"),
+        first,
+        "the native library was rewritten on the second launch"
+    );
+}
+
+// ---- log4j ------------------------------------------------------------------
+
+#[tokio::test]
+async fn the_log4j_configuration_mojang_publishes_is_applied() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+
+    let view = f.launch(&id).await;
+
+    // For 1.7 to 1.11 this file *is* the Log4Shell mitigation: those versions
+    // ship a log4j too old for `formatMsgNoLookups`, so the patched
+    // configuration is the whole fix.
+    let argument = view
+        .args
+        .iter()
+        .find(|a| a.starts_with("-Dlog4j.configurationFile="))
+        .expect("the log4j configuration argument");
+    let path = std::path::PathBuf::from(argument.trim_start_matches("-Dlog4j.configurationFile="));
+
+    assert!(path.is_file(), "{} was never downloaded", path.display());
+    let contents = std::fs::read_to_string(&path).expect("read");
+    assert!(contents.contains("RegexFilter"), "this is not the patched configuration");
+}
+
+#[tokio::test]
+async fn the_log4j_argument_comes_before_anything_else() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+
+    let view = f.launch(&id).await;
+
+    assert!(
+        view.args[0].starts_with("-Dlog4j.configurationFile="),
+        "the mitigation has to be in force before the JVM is told anything else, got {:?}",
+        view.args[0]
+    );
+}
+
+#[tokio::test]
+async fn a_tampered_log4j_configuration_is_refused() {
+    let f = fixture();
+    let http = serving().route(LOG_CONFIG_URL, HttpResponse::ok("<Configuration/>"));
+    let ash = Ash::new(
+        Config::rooted_at(f.tmp.path().join("other")),
+        http as Arc<dyn HttpPort>,
+        Arc::clone(&f.store) as Arc<dyn CredentialStore>,
+        Arc::clone(&f.process) as Arc<dyn ProcessPort>,
+        "test-client",
+    );
+    ash.begin_sign_in().await.expect("device code");
+    ash.poll_sign_in().await.expect("sign-in");
+    let instance = ash.create_instance("legacy", LEGACY).expect("instance");
+
+    let err =
+        ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect_err("tampered config");
+
+    // Swapping the mitigation for an empty configuration would silently
+    // re-open Log4Shell, so it is verified like every other artifact.
+    assert_eq!(err.kind(), "verification_failed");
+    assert!(f.process.spawned().is_empty());
+}
+
+// ---- reading what the game says ---------------------------------------------
+
+#[tokio::test]
+async fn the_log_is_readable_even_though_log4j_writes_xml() {
+    let f = fixture_with(FakeProcessPort::new().set_log(&[
+        r#"<log4j:Event logger="net.minecraft.Foo" level="INFO" thread="Render thread">"#,
+        r#"<log4j:Message><![CDATA[Setting user: oogz]]></log4j:Message>"#,
+        r#"</log4j:Event>"#,
+    ]));
+    let id = f.ready_legacy().await;
+    f.launch(&id).await;
+
+    // Applying Mojang's configuration is what turns the console into XML.
+    // Showing a player that raw would be showing them nothing.
+    assert_eq!(f.ash.game_log(&id), ["[Render thread/INFO]: Setting user: oogz"]);
 }

@@ -6,8 +6,8 @@
 //! a thin adapter over it that holds no logic of its own.
 //!
 //! Outbound, ash talks to the world only through ports - [`http::HttpPort`]
-//! for the network and [`credentials::CredentialStore`] for the OS credential
-//! store, with a process port to come when launching arrives. Tests supply
+//! for the network, [`credentials::CredentialStore`] for the OS credential
+//! store, and [`process::ProcessPort`] for starting the game. Tests supply
 //! fakes, so no test touches the network, the credential store, or spawns a
 //! JVM.
 
@@ -17,8 +17,10 @@ mod catalogue;
 mod config;
 mod depot;
 mod error;
+mod gamelog;
 mod instance;
 mod launch;
+mod natives;
 mod runtime;
 mod version;
 
@@ -412,7 +414,12 @@ impl Ash {
     /// Available while it runs and after it exits, which is the only time it
     /// is worth reading.
     pub fn game_log(&self, id: &InstanceId) -> Vec<String> {
-        self.games.lock().unwrap().get(id.as_str()).map(|game| game.log()).unwrap_or_default()
+        let raw =
+            self.games.lock().unwrap().get(id.as_str()).map(|game| game.log()).unwrap_or_default();
+        // Mojang's log4j configuration makes the game write XML to stdout,
+        // and ash applies that configuration because for old versions it is
+        // the Log4Shell mitigation. Rendering it back is the price.
+        gamelog::readable(&raw)
     }
 
     /// Ask a running game to stop.
