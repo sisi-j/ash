@@ -1,8 +1,11 @@
-//! Fixtures shared between the depot and runtime tests.
+//! Fixtures shared between the depot, runtime and launch tests.
 //!
 //! Built here rather than checked in, because every artifact carries a hash
 //! ash will check - a stale fixture and a stale hash would drift apart
 //! silently.
+
+// Each test binary gets its own copy of this module and uses part of it.
+#![allow(dead_code)]
 
 use std::sync::Arc;
 
@@ -82,6 +85,68 @@ pub fn runtime_index() -> String {
     format!(
         r#"{{"windows-x64":{c},"windows-arm64":{c},"mac-os":{c},"mac-os-arm64":{c}}}"#,
         c = components
+    )
+}
+
+// ---- sign-in ---------------------------------------------------------------
+//
+// A single happy path, for tests that need a signed-in player but are not
+// about signing in. `tests/auth.rs` keeps its own hop-by-hop fixtures,
+// because those exist to be overridden one hop at a time.
+
+pub const DEVICE_CODE_URL: &str =
+    "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+pub const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
+pub const XBL_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
+pub const XSTS_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
+pub const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/launcher/login";
+pub const MC_ENTITLEMENTS_URL: &str = "https://api.minecraftservices.com/entitlements/license";
+pub const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
+
+/// The Minecraft access token the fake chain issues. Tests assert on where
+/// this does and does not appear.
+pub const MC_TOKEN: &str = "MC-ACCESS-TOKEN";
+pub const PLAYER_NAME: &str = "oogz";
+pub const PLAYER_UUID: &str = "99bffcc8ae2549a0a70481c9c3db7ced";
+pub const PLAYER_XUID: &str = "2535412345678901";
+
+pub fn with_auth_routes(http: Arc<FakeHttp>) -> Arc<FakeHttp> {
+    http.route(
+        DEVICE_CODE_URL,
+        HttpResponse::ok(
+            r#"{"device_code":"DEV","user_code":"WXYZ-ABCD",
+                "verification_uri":"https://microsoft.com/link",
+                "expires_in":900,"interval":5}"#,
+        ),
+    )
+    .route(
+        TOKEN_URL,
+        HttpResponse::ok(r#"{"access_token":"MS-ACCESS","refresh_token":"MS-REFRESH"}"#),
+    )
+    .route(
+        XBL_URL,
+        HttpResponse::ok(r#"{"Token":"XBL","DisplayClaims":{"xui":[{"uhs":"USERHASH"}]}}"#),
+    )
+    .route(
+        XSTS_URL,
+        HttpResponse::ok(format!(
+            r#"{{"Token":"XSTS","DisplayClaims":{{"xui":[{{"uhs":"USERHASH","xid":"{PLAYER_XUID}"}}]}}}}"#
+        )),
+    )
+    .route(
+        MC_LOGIN_URL,
+        HttpResponse::ok(format!(r#"{{"access_token":"{MC_TOKEN}","expires_in":86400}}"#)),
+    )
+    .route(
+        MC_ENTITLEMENTS_URL,
+        HttpResponse::ok(r#"{"items":[{"name":"product_minecraft"},{"name":"game_minecraft"}]}"#),
+    )
+    .route(
+        MC_PROFILE_URL,
+        HttpResponse::ok(format!(
+            r#"{{"id":"{PLAYER_UUID}","name":"{PLAYER_NAME}",
+                "skins":[{{"state":"ACTIVE","url":"https://textures/abc"}}]}}"#
+        )),
     )
 }
 

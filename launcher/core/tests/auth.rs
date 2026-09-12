@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
+use ash_core::process::FakeProcessPort;
 use ash_core::http::{FakeHttp, HttpResponse};
 use ash_core::{Ash, AshError, Config, SignInStatus};
 
@@ -101,6 +102,7 @@ fn fixture(http: Arc<FakeHttp>) -> Fixture {
         Config::rooted_at(tmp.path()),
         Arc::clone(&http) as Arc<dyn ash_core::http::HttpPort>,
         Arc::clone(&store) as Arc<dyn CredentialStore>,
+        FakeProcessPort::new(),
         CLIENT_ID,
     );
     Fixture { ash, http, store, _tmp: tmp }
@@ -395,6 +397,7 @@ async fn a_dead_refresh_token_asks_for_a_fresh_sign_in() {
         Config::rooted_at(f.ash.config().data_root.parent().unwrap()),
         rejected as Arc<dyn ash_core::http::HttpPort>,
         Arc::clone(&f.store) as Arc<dyn CredentialStore>,
+        FakeProcessPort::new(),
         CLIENT_ID,
     );
 

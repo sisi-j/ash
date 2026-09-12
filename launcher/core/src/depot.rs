@@ -346,10 +346,12 @@ pub(crate) async fn plan(
         });
     }
 
-    for library in &metadata.libraries {
-        // Rules are evaluated here, not at launch: downloading macOS natives
-        // onto Windows would be waste the player pays for in bandwidth.
-        if let Some(artifact) = library.artifact_for(os) {
+    // Selected here, not at launch: downloading macOS natives onto Windows
+    // is waste the player pays for in bandwidth. Selection is by rule *and*
+    // by native classifier, because a 1.21.x manifest gives all three
+    // Windows native jars the same rule.
+    for library in version::select_libraries(&metadata.libraries, os) {
+        if let Some(artifact) = &library.downloads.artifact {
             if let Some(relative) = &artifact.path {
                 artifacts.push(Artifact {
                     url: artifact.url.clone(),
@@ -475,6 +477,21 @@ pub(crate) async fn download_all<S: ProgressSink + ?Sized>(
 /// provisioning can skip work the same way preparation does.
 pub(crate) fn present(depot_root: &Path, artifact: &Artifact) -> bool {
     is_present(depot_root, artifact)
+}
+
+/// Read a version's metadata back out of the depot.
+///
+/// `plan` writes it there after verifying it against Mojang's published
+/// hash, so launching reads the same bytes the plan was built from rather
+/// than asking the network again and hoping for the same answer.
+pub(crate) fn read_metadata(
+    depot_root: &Path,
+    version_id: &str,
+) -> Result<version::VersionMetadata, AshError> {
+    let relative = version_json_path(version_id);
+    let bytes = fs::read(depot_root.join(&relative))
+        .map_err(|e| AshError::Storage { detail: format!("reading version metadata: {e}") })?;
+    version::parse(&relative, &bytes)
 }
 
 // ---- preparing -------------------------------------------------------------

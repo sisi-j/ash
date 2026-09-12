@@ -84,6 +84,30 @@ export type PrepareEvent =
   | { event: "cancelled" }
   | { event: "done"; version_id: string };
 
+/**
+ * Mirrors `ash_core::GameStatus`. `clean` is the whole point: a player whose
+ * game crashed should not be shown the same thing as one who quit.
+ */
+export type GameStatus =
+  | { state: "running" }
+  | { state: "exited"; code: number | null; clean: boolean };
+
+/**
+ * What ash would run. The access token is already `<redacted>` on the Rust
+ * side - the unredacted shape has no serializer, so it cannot reach here.
+ */
+export type InvocationView = {
+  program: string;
+  args: string[];
+  working_directory: string;
+};
+
+export type LaunchOutcome = {
+  ok: boolean;
+  invocation: InvocationView | null;
+  error: UiError | null;
+};
+
 export type PrepareOutcome = {
   ok: boolean;
   plan: Plan | null;
@@ -151,6 +175,13 @@ export const api = {
   ensureRuntime: (id: InstanceId) => invoke<Runtime>("ensure_runtime", { id }),
   cancelPreparation: () => invoke<void>("cancel_preparation"),
 
+  /** Returns as soon as the work is scheduled; watch the events for outcome. */
+  launch: (id: InstanceId) => invoke<void>("launch", { id }),
+  previewLaunch: (id: InstanceId) => invoke<InvocationView>("preview_launch", { id }),
+  gameStatus: (id: InstanceId) => invoke<GameStatus | null>("game_status", { id }),
+  gameLog: (id: InstanceId) => invoke<string[]>("game_log", { id }),
+  stopGame: (id: InstanceId) => invoke<void>("stop_game", { id }),
+
   instances: () => invoke<Instance[]>("instances"),
   createInstance: (name: string, versionId: string) =>
     invoke<Instance>("create_instance", { name, versionId }),
@@ -173,6 +204,14 @@ export function onPrepareProgress(handler: (event: PrepareEvent) => void) {
 
 export function onPrepareFinished(handler: (outcome: PrepareOutcome) => void) {
   return listen<PrepareOutcome>("prepare-finished", (e) => handler(e.payload));
+}
+
+/**
+ * Launching prepares whatever is missing first, so it reports progress on
+ * the same `prepare-progress` channel and finishes on this one.
+ */
+export function onLaunchFinished(handler: (outcome: LaunchOutcome) => void) {
+  return listen<LaunchOutcome>("launch-finished", (e) => handler(e.payload));
 }
 
 // ---- formatting ------------------------------------------------------------

@@ -7,9 +7,11 @@ use std::sync::{Arc, Mutex};
 
 use ash_core::credentials::OsCredentialStore;
 use ash_core::http::ReqwestHttp;
+use ash_core::process::OsProcessPort;
 use ash_core::{
-    Account, Accounts, Ash, Cancel, Catalogue, Config, DeletionPreview, Instance, InstanceId,
-    PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime, SignInStatus,
+    Account, Accounts, Ash, Cancel, Catalogue, Config, DeletionPreview, GameStatus, Instance,
+    InstanceId, InvocationView, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime,
+    SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -221,6 +223,89 @@ struct PrepareOutcome {
     error: Option<UiError>,
 }
 
+// ---- launching ----
+
+/// Start the game.
+///
+/// Spawned rather than awaited for the same reason preparation is: launching
+/// prepares whatever is missing first, which can take minutes. Progress
+/// arrives as `prepare-progress` and the outcome as `launch-finished`.
+#[tauri::command]
+fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
+    tauri::async_runtime::spawn(async move {
+        let cancel = Cancel::new();
+        let ash = {
+            let state = app.state::<AppState>();
+            *state.preparing.lock().unwrap() = Some(cancel.clone());
+            Arc::clone(&state.ash)
+        };
+
+        let sink = WindowSink(app.clone());
+        let outcome = ash.launch(&id, &sink, &cancel).await;
+
+        {
+            let state = app.state::<AppState>();
+            *state.preparing.lock().unwrap() = None;
+        }
+
+        let _ = app.emit(
+            "launch-finished",
+            match outcome {
+                Ok(invocation) => {
+                    LaunchOutcome { ok: true, invocation: Some(invocation), error: None }
+                }
+                Err(e) => {
+                    LaunchOutcome { ok: false, invocation: None, error: Some(UiError::from(e)) }
+                }
+            },
+        );
+    });
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct LaunchOutcome {
+    ok: bool,
+    invocation: Option<InvocationView>,
+    error: Option<UiError>,
+}
+
+/// Exactly what ash would run, without running it.
+#[tauri::command]
+async fn preview_launch(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<InvocationView, UiError> {
+    let ash = Arc::clone(&state.ash);
+    let sink = WindowSink(app);
+    ash.preview_launch(&id, &sink, &Cancel::new()).await.map_err(UiError::from)
+}
+
+/// Polled by the window while a game is up. `None` means ash never started
+/// this instance.
+#[tauri::command]
+async fn game_status(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Option<GameStatus>, UiError> {
+    Ok(state.ash.game_status(&id))
+}
+
+#[tauri::command]
+async fn game_log(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<String>, UiError> {
+    Ok(state.ash.game_log(&id))
+}
+
+#[tauri::command]
+async fn stop_game(state: tauri::State<'_, AppState>, id: InstanceId) -> Result<(), UiError> {
+    state.ash.stop_game(&id);
+    Ok(())
+}
+
 /// Which Java runtime an instance will use, provisioning it if needed.
 ///
 /// Deliberately not "which Java is installed": ash never consults the
@@ -263,6 +348,7 @@ fn ash_state() -> Ash {
         Config::rooted_at(base),
         Arc::new(ReqwestHttp::new()),
         Arc::new(OsCredentialStore::new()),
+        Arc::new(OsProcessPort::new()),
         CLIENT_ID,
     )
 }
@@ -300,7 +386,12 @@ pub fn run() {
             plan_instance,
             prepare_instance,
             ensure_runtime,
-            cancel_preparation
+            cancel_preparation,
+            launch,
+            preview_launch,
+            game_status,
+            game_log,
+            stop_game
         ])
         .run(tauri::generate_context!())
         .expect("error while running ash");

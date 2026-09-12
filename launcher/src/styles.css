@@ -502,3 +502,46 @@ body {
     transition: none;
   }
 }
+
+/* ---- game output --------------------------------------------------------- */
+
+/* A crash log is read, not skimmed: monospace, scrollable, and capped so it
+   never pushes the actions off the screen. */
+.log {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  max-height: 16rem;
+  overflow: auto;
+  background: #131315;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* A quieter affordance than a button, for something most players never open. */
+.link {
+  margin-top: 0.75rem;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--text);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}

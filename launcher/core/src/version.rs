@@ -35,6 +35,36 @@ impl Os {
         }
     }
 
+    /// Maven classifiers that carry this platform's native libraries, best
+    /// first.
+    ///
+    /// Rules cannot answer this. Mojang tags `natives-windows`,
+    /// `natives-windows-arm64` and `natives-windows-x86` with the *same*
+    /// rule - `{"os": {"name": "windows"}}` - so rule evaluation keeps all
+    /// three. The architecture lives only in the classifier.
+    ///
+    /// More than one entry means a fallback: an arm64 machine takes the
+    /// arm64 jar when the version publishes one and the x64 jar otherwise,
+    /// because emulated natives beat no natives.
+    pub fn natives_classifiers(self) -> &'static [&'static str] {
+        match self {
+            Os::Windows => {
+                if cfg!(target_arch = "aarch64") {
+                    &["natives-windows-arm64", "natives-windows"]
+                } else {
+                    &["natives-windows"]
+                }
+            }
+            Os::MacOs => {
+                if cfg!(target_arch = "aarch64") {
+                    &["natives-macos-arm64", "natives-macos", "natives-osx"]
+                } else {
+                    &["natives-macos", "natives-osx"]
+                }
+            }
+        }
+    }
+
     pub fn current() -> Os {
         if cfg!(target_os = "macos") {
             Os::MacOs
@@ -46,9 +76,6 @@ impl Os {
 
 // ---- wire format -----------------------------------------------------------
 
-/// `main_class` is read by launching (#8). It is part of the wire shape and
-/// parsed here so the format lives in one place.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionMetadata {
     pub id: String,
@@ -62,6 +89,42 @@ pub struct VersionMetadata {
     pub libraries: Vec<Library>,
     #[serde(rename = "javaVersion")]
     pub java_version: Option<JavaVersion>,
+    /// The structured argument lists, 1.13 and later.
+    #[serde(default)]
+    pub arguments: Arguments,
+    /// The pre-1.13 single string. Kept so assembly has one shape to work
+    /// with; making 1.8.9 actually run is #9.
+    #[serde(rename = "minecraftArguments")]
+    pub minecraft_arguments: Option<String>,
+    /// `release`, `snapshot`, ... Passed through as `${version_type}`.
+    #[serde(rename = "type")]
+    pub version_type: Option<String>,
+}
+
+/// The 1.13-and-later argument lists.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Arguments {
+    #[serde(default)]
+    pub game: Vec<ArgEntry>,
+    #[serde(default)]
+    pub jvm: Vec<ArgEntry>,
+}
+
+/// One entry in an argument list: either a bare string, or a value guarded
+/// by rules.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum ArgEntry {
+    Literal(String),
+    Conditional { rules: Vec<Rule>, value: ArgValue },
+}
+
+/// Mojang writes a guarded value as either one string or a list of them.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum ArgValue {
+    One(String),
+    Many(Vec<String>),
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -123,6 +186,13 @@ pub struct LibraryDownloads {
 pub struct Rule {
     pub action: String,
     pub os: Option<OsRule>,
+    /// Optional launcher features the rule requires, e.g. `is_demo_user`.
+    ///
+    /// ash turns none of these on. Parsing the clause is what makes that
+    /// true: serde would otherwise drop the field, leaving a rule that reads
+    /// as an unconditional `allow` and putting `--demo` on every launch.
+    #[serde(default)]
+    pub features: std::collections::HashMap<String, bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -135,6 +205,11 @@ pub struct OsRule {
 
 impl Rule {
     fn matches(&self, os: Os) -> bool {
+        // Every feature ash could be asked for is off, so a rule that needs
+        // one can never match - whichever way its action points.
+        if !self.features.is_empty() {
+            return false;
+        }
         let Some(rule) = &self.os else {
             // A rule with no `os` clause matches everything.
             return true;
@@ -171,13 +246,24 @@ pub fn rules_allow(rules: &[Rule], os: Os) -> bool {
 }
 
 impl Library {
-    /// The jar that belongs on the classpath, if this library applies here.
-    pub fn artifact_for(&self, os: Os) -> Option<&DownloadRef> {
-        if !rules_allow(&self.rules, os) {
-            return None;
+    /// `group:artifact:version`, with any classifier dropped.
+    pub fn coordinate(&self) -> &str {
+        match self.name.match_indices(':').nth(2) {
+            Some((at, _)) => &self.name[..at],
+            None => &self.name,
         }
-        self.downloads.artifact.as_ref()
     }
+
+    /// The `natives-*` classifier from the Maven coordinate, if this is a
+    /// native jar at all.
+    pub fn native_classifier(&self) -> Option<&str> {
+        self.name.split(':').nth(3).filter(|c| c.starts_with("natives-"))
+    }
+
+    // There is deliberately no `artifact_for(os)` here. Rules alone are not
+    // enough to pick a library - see `select_libraries`, which is the only
+    // correct way to ask - and a method that looked like it answered the
+    // question would quietly reintroduce the three-native-jars bug.
 
     /// The native jar to extract, for versions that still use classifiers.
     pub fn natives_for(&self, os: Os) -> Option<&DownloadRef> {
@@ -189,6 +275,71 @@ impl Library {
         let classifier = classifier.replace("${arch}", "64");
         self.downloads.classifiers.get(&classifier)
     }
+}
+
+/// The libraries that belong on this machine, in metadata order.
+///
+/// Rules decide most of it, but they cannot decide natives: a 1.21.x
+/// manifest tags `natives-windows`, `natives-windows-arm64` and
+/// `natives-windows-x86` with one identical `{"os": {"name": "windows"}}`
+/// rule, so rule evaluation alone keeps all three. That would download three
+/// jars to use one and put 32-bit natives on a 64-bit classpath.
+///
+/// So native jars are grouped by coordinate and exactly one is taken per
+/// group, chosen by classifier.
+pub fn select_libraries(libraries: &[Library], os: Os) -> Vec<&Library> {
+    let permitted: Vec<&Library> =
+        libraries.iter().filter(|library| rules_allow(&library.rules, os)).collect();
+
+    let mut chosen: Vec<&Library> = Vec::new();
+    let mut resolved: Vec<&str> = Vec::new();
+
+    for &library in &permitted {
+        if library.native_classifier().is_none() {
+            chosen.push(library);
+            continue;
+        }
+
+        // One native jar per coordinate, at the position of its first
+        // candidate, so classpath order still follows the metadata.
+        let coordinate = library.coordinate();
+        if resolved.contains(&coordinate) {
+            continue;
+        }
+        resolved.push(coordinate);
+
+        for wanted in os.natives_classifiers() {
+            let found = permitted.iter().find(|candidate| {
+                candidate.coordinate() == coordinate
+                    && candidate.native_classifier() == Some(*wanted)
+            });
+            if let Some(&best) = found {
+                chosen.push(best);
+                break;
+            }
+        }
+    }
+
+    chosen
+}
+
+/// Flatten an argument list, keeping only what the rules permit here.
+pub fn resolve_arguments(entries: &[ArgEntry], os: Os) -> Vec<String> {
+    let mut out = Vec::new();
+    for entry in entries {
+        match entry {
+            ArgEntry::Literal(value) => out.push(value.clone()),
+            ArgEntry::Conditional { rules, value } => {
+                if rules_allow(rules, os) {
+                    match value {
+                        ArgValue::One(one) => out.push(one.clone()),
+                        ArgValue::Many(many) => out.extend(many.iter().cloned()),
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 pub fn parse(url: &str, body: &[u8]) -> Result<VersionMetadata, AshError> {
@@ -232,6 +383,16 @@ mod tests {
         Rule {
             action: action.to_owned(),
             os: os.map(|name| OsRule { name: Some(name.to_owned()), arch: None }),
+            features: Default::default(),
+        }
+    }
+
+    fn library(name: &str, rules: Vec<Rule>) -> Library {
+        Library {
+            name: name.to_owned(),
+            downloads: Default::default(),
+            rules,
+            natives: Default::default(),
         }
     }
 
@@ -269,7 +430,97 @@ mod tests {
         let rules = vec![Rule {
             action: "allow".into(),
             os: Some(OsRule { name: Some("windows".into()), arch: Some("x86".into()) }),
+            features: Default::default(),
         }];
         assert!(!rules_allow(&rules, Os::Windows));
+    }
+
+    #[test]
+    fn a_rule_that_asks_for_a_feature_never_matches() {
+        // Every conditional game argument in 1.21.x is feature-gated. ash
+        // turns none of them on, so treating an unparsed `features` clause
+        // as an unconditional allow would launch the game in demo mode with
+        // a literal `${resolution_width}` on the command line.
+        let mut features = std::collections::HashMap::new();
+        features.insert("is_demo_user".to_owned(), true);
+        let rules = vec![Rule { action: "allow".into(), os: None, features }];
+        assert!(!rules_allow(&rules, Os::Windows));
+    }
+
+    #[test]
+    fn feature_gated_arguments_are_dropped_whole() {
+        let entries: Vec<ArgEntry> = serde_json::from_str(
+            r#"["--username", "${auth_player_name}",
+                {"rules":[{"action":"allow","features":{"is_demo_user":true}}],
+                 "value":"--demo"},
+                {"rules":[{"action":"allow","features":{"has_custom_resolution":true}}],
+                 "value":["--width","${resolution_width}"]}]"#,
+        )
+        .expect("the real 1.21.x game argument shape");
+
+        assert_eq!(resolve_arguments(&entries, Os::Windows), ["--username", "${auth_player_name}"]);
+    }
+
+    #[test]
+    fn a_guarded_value_may_be_one_string_or_a_list() {
+        let entries: Vec<ArgEntry> = serde_json::from_str(
+            r#"[{"rules":[{"action":"allow","os":{"name":"windows"}}],"value":"-XX:Flag"},
+                {"rules":[{"action":"allow","os":{"name":"windows"}}],"value":["-a","-b"]}]"#,
+        )
+        .expect("Mojang writes both shapes");
+
+        assert_eq!(resolve_arguments(&entries, Os::Windows), ["-XX:Flag", "-a", "-b"]);
+        assert!(resolve_arguments(&entries, Os::MacOs).is_empty());
+    }
+
+    #[test]
+    fn one_native_jar_is_taken_per_coordinate() {
+        // All three carry the same rule - only the classifier separates
+        // them - so rules alone would keep every one.
+        let windows = vec![rule("allow", Some("windows"))];
+        let libraries = vec![
+            library("org.lwjgl:lwjgl:3.3.3", vec![]),
+            library("org.lwjgl:lwjgl:3.3.3:natives-windows", windows.clone()),
+            library("org.lwjgl:lwjgl:3.3.3:natives-windows-x86", windows.clone()),
+            library("org.lwjgl:lwjgl:3.3.3:natives-windows-arm64", windows),
+            library("org.lwjgl:lwjgl:3.3.3:natives-macos", vec![rule("allow", Some("osx"))]),
+        ];
+
+        let chosen: Vec<&str> =
+            select_libraries(&libraries, Os::Windows).iter().map(|l| l.name.as_str()).collect();
+
+        let expected = if cfg!(target_arch = "aarch64") {
+            "org.lwjgl:lwjgl:3.3.3:natives-windows-arm64"
+        } else {
+            "org.lwjgl:lwjgl:3.3.3:natives-windows"
+        };
+        assert_eq!(chosen, ["org.lwjgl:lwjgl:3.3.3", expected]);
+    }
+
+    #[test]
+    fn a_platform_without_its_own_native_jar_falls_back() {
+        // Versions before the Apple Silicon split publish only
+        // `natives-macos`. Taking nothing would leave the game with no
+        // natives at all; the x64 jar under emulation is the better answer.
+        let libraries = vec![library(
+            "org.lwjgl:lwjgl:3.2.2:natives-macos",
+            vec![rule("allow", Some("osx"))],
+        )];
+
+        let chosen = select_libraries(&libraries, Os::MacOs);
+
+        assert_eq!(chosen.len(), 1);
+        assert_eq!(chosen[0].native_classifier(), Some("natives-macos"));
+    }
+
+    #[test]
+    fn a_coordinate_drops_its_classifier() {
+        let native = library("org.lwjgl:lwjgl:3.3.3:natives-windows", vec![]);
+        assert_eq!(native.coordinate(), "org.lwjgl:lwjgl:3.3.3");
+        assert_eq!(native.native_classifier(), Some("natives-windows"));
+
+        // A classifier that is not a natives classifier is left alone.
+        let sources = library("com.example:thing:1.0:sources", vec![]);
+        assert_eq!(sources.native_classifier(), None);
     }
 }

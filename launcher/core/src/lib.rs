@@ -18,11 +18,13 @@ mod config;
 mod depot;
 mod error;
 mod instance;
+mod launch;
 mod runtime;
 mod version;
 
 pub mod credentials;
 pub mod http;
+pub mod process;
 
 pub use account::{Account, Accounts};
 pub use catalogue::{
@@ -32,9 +34,11 @@ pub use config::Config;
 pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
+pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
 pub use version::Os;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -75,10 +79,17 @@ pub struct Ash {
     config: Config,
     http: Arc<dyn HttpPort>,
     credentials: Arc<dyn CredentialStore>,
+    process: Arc<dyn ProcessPort>,
     client_id: String,
     /// One sign-in at a time. The device code lives here rather than
     /// travelling to the UI and back.
     pending: Mutex<Option<auth::Pending>>,
+    /// Games ash has started, by instance.
+    ///
+    /// An exited game stays in the map: its status and the tail of its log
+    /// are what the player needs *after* a crash, and dropping the entry on
+    /// exit would throw both away at the moment they matter.
+    games: Mutex<HashMap<String, Box<dyn GameProcess>>>,
 }
 
 impl Ash {
@@ -89,14 +100,17 @@ impl Ash {
         config: Config,
         http: Arc<dyn HttpPort>,
         credentials: Arc<dyn CredentialStore>,
+        process: Arc<dyn ProcessPort>,
         client_id: impl Into<String>,
     ) -> Self {
         Self {
             config,
             http,
             credentials,
+            process,
             client_id: client_id.into(),
             pending: Mutex::new(None),
+            games: Mutex::new(HashMap::new()),
         }
     }
 
@@ -274,6 +288,20 @@ impl Ash {
         sink: &S,
         cancel: &Cancel,
     ) -> Result<Plan, AshError> {
+        Ok(self.prepare_all(id, sink, cancel).await?.0)
+    }
+
+    /// Preparation, keeping the runtime it provisioned.
+    ///
+    /// Launching needs the java executable's path, and re-deriving it would
+    /// mean reading Mojang's runtime manifest a second time to learn
+    /// something this call already knew.
+    async fn prepare_all<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<(Plan, Runtime), AshError> {
         let source = self.version_source(id).await?;
         let plan = depot::prepare(
             self.http.as_ref(),
@@ -288,10 +316,11 @@ impl Ash {
         // An instance with every game file and no JRE is not prepared. The
         // runtime is part of what it takes to launch, so it is part of this -
         // and `Done` only fires once both are in place.
-        self.provision_runtime(plan.java_component.as_deref(), sink, cancel).await?;
+        let runtime =
+            self.provision_runtime(plan.java_component.as_deref(), sink, cancel).await?;
 
         sink.emit(PrepareEvent::Done { version_id: plan.version_id.clone() });
-        Ok(plan)
+        Ok((plan, runtime))
     }
 
     /// Download and lay out the Java runtime a version target needs.
@@ -325,6 +354,104 @@ impl Ash {
             cancel,
         )
         .await
+    }
+
+    // ---- launching --------------------------------------------------------
+
+    /// Exactly what ash would run, without running it.
+    ///
+    /// Preparing is part of this: every path on the command line names a
+    /// file that has to exist, and a preview of a classpath pointing at
+    /// nothing would be a preview of a launch that fails. On an already
+    /// prepared instance it downloads nothing.
+    ///
+    /// The access token is redacted, and [`InvocationView`] is the only
+    /// shape of this that can leave ash-core.
+    pub async fn preview_launch<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<InvocationView, AshError> {
+        Ok(self.assemble(id, sink, cancel).await?.view())
+    }
+
+    /// Start the game, and return once it is running.
+    ///
+    /// Does not wait for the game to exit - ash stays usable while it runs,
+    /// and the player can watch [`Ash::game_status`] or close the launcher.
+    pub async fn launch<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<InvocationView, AshError> {
+        if matches!(self.game_status(id), Some(GameStatus::Running)) {
+            return Err(AshError::AlreadyRunning { id: id.as_str().to_owned() });
+        }
+
+        let invocation = self.assemble(id, sink, cancel).await?;
+        let process = self.process.spawn(&invocation)?;
+        self.games.lock().unwrap().insert(id.as_str().to_owned(), process);
+
+        // Recorded now rather than on exit: a session that ends in a crash
+        // still happened, and the player looking for "what did I play last"
+        // means the same thing either way.
+        self.mark_played(id)?;
+
+        Ok(invocation.view())
+    }
+
+    /// How a launched game is doing. `None` if ash never started it.
+    pub fn game_status(&self, id: &InstanceId) -> Option<GameStatus> {
+        self.games.lock().unwrap().get(id.as_str()).map(|game| game.status())
+    }
+
+    /// The tail of the game's own output.
+    ///
+    /// Available while it runs and after it exits, which is the only time it
+    /// is worth reading.
+    pub fn game_log(&self, id: &InstanceId) -> Vec<String> {
+        self.games.lock().unwrap().get(id.as_str()).map(|game| game.log()).unwrap_or_default()
+    }
+
+    /// Ask a running game to stop.
+    pub fn stop_game(&self, id: &InstanceId) {
+        if let Some(game) = self.games.lock().unwrap().get(id.as_str()) {
+            game.stop();
+        }
+    }
+
+    /// Prepare whatever is missing, then build the command line.
+    async fn assemble<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<Invocation, AshError> {
+        // The session is settled first, before any download and long before
+        // anything spawns. A signed-out player should be told in a moment,
+        // not after several minutes of preparation.
+        let accounts = self.accounts();
+        let account = accounts.active_account().ok_or(AshError::NoAccountSelected)?;
+        let stored = account::refresh_token(self.credentials.as_ref(), &account.profile_id)?;
+        let session = auth::refresh(self.http.as_ref(), &self.client_id, &stored).await?;
+
+        let (plan, runtime) = self.prepare_all(id, sink, cancel).await?;
+        let metadata = depot::read_metadata(&self.config.depot_root, &plan.version_id)?;
+
+        launch::assemble(&launch::LaunchContext {
+            metadata: &metadata,
+            runtime: &runtime,
+            depot_root: &self.config.depot_root,
+            game_directory: self.game_directory(id),
+            username: &session.username,
+            profile_id: &session.profile_id,
+            access_token: &session.minecraft_token,
+            xuid: &session.xuid,
+            client_id: &self.client_id,
+            os: Os::current(),
+        })
     }
 
     /// The version id an instance runs, where its metadata lives, and that

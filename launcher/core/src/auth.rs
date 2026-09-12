@@ -44,7 +44,11 @@ const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 // ---- what the chain produces ----------------------------------------------
 
 /// A completed sign-in: who the player is, and what lets ash act as them.
-#[derive(Debug, Clone)]
+///
+/// `Debug` is written by hand. Two fields here are bearer credentials, and a
+/// derived `Debug` would put both into any log line or panic message that
+/// ever formatted a session.
+#[derive(Clone)]
 pub(crate) struct Session {
     /// The undashed Minecraft profile UUID. ADR-0009's account key.
     pub profile_id: String,
@@ -53,9 +57,25 @@ pub(crate) struct Session {
     /// Kept only if Microsoft issued one. Goes to the credential store,
     /// never to a file ash writes.
     pub refresh_token: Option<String>,
-    // The Minecraft access token is used by hops 6 and 7 and then dropped.
-    // Launch (#8) is the first thing that needs to hold on to it; storing it
-    // here before then would be state nothing reads.
+    /// What the game authenticates with. Lives in memory for as long as it
+    /// takes to build a command line, and is never written anywhere.
+    pub minecraft_token: String,
+    /// The Xbox user id, which 1.20+ passes as `--xuid`. Empty when the XSTS
+    /// response carried none.
+    pub xuid: String,
+}
+
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("profile_id", &self.profile_id)
+            .field("username", &self.username)
+            .field("skin_url", &self.skin_url)
+            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "<redacted>"))
+            .field("minecraft_token", &"<redacted>")
+            .field("xuid", &self.xuid)
+            .finish()
+    }
 }
 
 /// A sign-in waiting on the player to approve it in their browser.
@@ -113,6 +133,10 @@ struct XboxDisplayClaims {
 #[derive(Deserialize)]
 struct XboxUserHash {
     uhs: String,
+    /// The Xbox user id. Present on the XSTS response, absent on the Xbox
+    /// Live one, so it is optional here.
+    #[serde(default)]
+    xid: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -284,23 +308,34 @@ async fn complete_chain(
     microsoft_token: &str,
     refresh_token: Option<String>,
 ) -> Result<Session, AshError> {
-    let (xbl_token, _) = xbox_live(http, microsoft_token).await?;
-    let (xsts_token, user_hash) = xsts(http, &xbl_token).await?;
+    let (xbl_token, _, _) = xbox_live(http, microsoft_token).await?;
+    let (xsts_token, user_hash, claimed_xuid) = xsts(http, &xbl_token).await?;
     let minecraft_token = minecraft_login(http, &user_hash, &xsts_token).await?;
     check_entitlement(http, &minecraft_token).await?;
     let profile = profile(http, &minecraft_token).await?;
+
+    // The token first, the XSTS claim second. Mojang's XSTS response for the
+    // Minecraft relying party has been observed without an `xid`, and
+    // launching with an empty `--xuid` is not what the official launcher
+    // does.
+    let xuid = xuid_from_token(&minecraft_token).unwrap_or(claimed_xuid);
 
     Ok(Session {
         profile_id: profile.0,
         username: profile.1,
         skin_url: profile.2,
         refresh_token,
+        minecraft_token,
+        xuid,
     })
 }
 
 /// Hop 3. Note the `d=` prefix on the ticket - every reference implementation
 /// carries it and sign-in fails silently without it.
-async fn xbox_live(http: &dyn HttpPort, microsoft_token: &str) -> Result<(String, String), AshError> {
+async fn xbox_live(
+    http: &dyn HttpPort,
+    microsoft_token: &str,
+) -> Result<(String, String, String), AshError> {
     let body = serde_json::json!({
         "Properties": {
             "AuthMethod": "RPS",
@@ -314,18 +349,20 @@ async fn xbox_live(http: &dyn HttpPort, microsoft_token: &str) -> Result<(String
     require_success(XBL_URL, &response)?;
 
     let decoded: XboxResponse = decode(XBL_URL, &response.body)?;
-    let hash = decoded
+    let claim = decoded
         .display_claims
         .xui
         .first()
-        .map(|x| x.uhs.clone())
         .ok_or(AshError::SignInFailed { detail: "no user hash in the Xbox response".into() })?;
-    Ok((decoded.token, hash))
+    Ok((decoded.token.clone(), claim.uhs.clone(), claim.xid.clone().unwrap_or_default()))
 }
 
 /// Hop 4. A 401 here carries an `XErr` code, and those map to real,
 /// user-facing situations - several of which no retry will fix.
-async fn xsts(http: &dyn HttpPort, xbl_token: &str) -> Result<(String, String), AshError> {
+async fn xsts(
+    http: &dyn HttpPort,
+    xbl_token: &str,
+) -> Result<(String, String, String), AshError> {
     let body = serde_json::json!({
         "Properties": { "SandboxId": "RETAIL", "UserTokens": [xbl_token] },
         "RelyingParty": "rp://api.minecraftservices.com/",
@@ -340,13 +377,15 @@ async fn xsts(http: &dyn HttpPort, xbl_token: &str) -> Result<(String, String), 
     require_success(XSTS_URL, &response)?;
 
     let decoded: XboxResponse = decode(XSTS_URL, &response.body)?;
-    let hash = decoded
+    let claim = decoded
         .display_claims
         .xui
         .first()
-        .map(|x| x.uhs.clone())
         .ok_or(AshError::SignInFailed { detail: "no user hash in the XSTS response".into() })?;
-    Ok((decoded.token, hash))
+    // The xuid is what 1.20+ passes as `--xuid`. Mojang has shipped XSTS
+    // responses without one, and the game accepts an empty value, so an
+    // absent xid is not a failed sign-in.
+    Ok((decoded.token.clone(), claim.uhs.clone(), claim.xid.clone().unwrap_or_default()))
 }
 
 /// Hop 5. The first hop the allow list gates.
@@ -407,6 +446,53 @@ async fn profile(
     Ok((normalise_uuid(&decoded.id), decoded.name, skin))
 }
 
+/// Read the Xbox user id out of the Minecraft access token.
+///
+/// The token is a JWT and its payload carries `xuid`. Decoded, never
+/// verified: ash is not the audience and has no key to verify with. Nothing
+/// here is trusted with a decision - the value is passed to the game, which
+/// checks it against the same service that issued it.
+fn xuid_from_token(token: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Claims {
+        xuid: Option<String>,
+    }
+
+    let payload = token.split('.').nth(1)?;
+    let claims: Claims = serde_json::from_slice(&base64url(payload)?).ok()?;
+    claims.xuid.filter(|xuid| !xuid.is_empty())
+}
+
+/// Base64url without padding, as JWT uses it.
+///
+/// Hand-rolled rather than pulling in a dependency: this decodes exactly one
+/// field of one token, and the alphabet is nine lines.
+fn base64url(input: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut buffer: u32 = 0;
+    let mut bits: u32 = 0;
+
+    for byte in input.bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'-' => 62,
+            b'_' => 63,
+            b'=' => break,
+            _ => return None,
+        };
+        buffer = (buffer << 6) | u32::from(value);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+        }
+    }
+
+    Some(out)
+}
+
 /// Mojang returns the profile id undashed here and dashed elsewhere. ash
 /// stores one form, always, because it is ADR-0009's primary key.
 fn normalise_uuid(raw: &str) -> String {
@@ -427,6 +513,58 @@ mod tests {
             normalise_uuid("986dec87b7ec47ff89ff033fdb95c4b5"),
             "986dec87b7ec47ff89ff033fdb95c4b5"
         );
+    }
+
+    /// A JWT with the given payload. Header and signature are never read, so
+    /// they only have to be shaped like one.
+    fn jwt(payload: &str) -> String {
+        let body: String = base64url_encode(payload.as_bytes());
+        format!("header.{body}.signature")
+    }
+
+    fn base64url_encode(bytes: &[u8]) -> String {
+        const ALPHABET: &[u8] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut out = String::new();
+        let mut buffer: u32 = 0;
+        let mut bits: u32 = 0;
+        for byte in bytes {
+            buffer = (buffer << 8) | u32::from(*byte);
+            bits += 8;
+            while bits >= 6 {
+                bits -= 6;
+                out.push(ALPHABET[((buffer >> bits) & 0x3F) as usize] as char);
+            }
+        }
+        if bits > 0 {
+            out.push(ALPHABET[((buffer << (6 - bits)) & 0x3F) as usize] as char);
+        }
+        out
+    }
+
+    #[test]
+    fn the_xuid_comes_out_of_the_access_token() {
+        let token = jwt(r#"{"xuid":"2535412345678901","agg":"Adult"}"#);
+        assert_eq!(xuid_from_token(&token), Some("2535412345678901".to_owned()));
+    }
+
+    #[test]
+    fn a_token_with_no_usable_xuid_yields_nothing_rather_than_an_empty_string() {
+        // So the caller falls back to the XSTS claim instead of launching
+        // with `--xuid ""`.
+        assert_eq!(xuid_from_token(&jwt(r#"{"agg":"Adult"}"#)), None);
+        assert_eq!(xuid_from_token(&jwt(r#"{"xuid":""}"#)), None);
+        assert_eq!(xuid_from_token("not-a-jwt"), None);
+        assert_eq!(xuid_from_token("header.!!!not-base64!!!.signature"), None);
+    }
+
+    #[test]
+    fn base64url_decodes_unpadded_input() {
+        // Lengths 1, 2 and 3 mod 3, so every padding case is covered.
+        for text in ["a", "ab", "abc", "abcd", "hello world"] {
+            let encoded = base64url_encode(text.as_bytes());
+            assert_eq!(base64url(&encoded).as_deref(), Some(text.as_bytes()), "{text}");
+        }
     }
 
     #[test]

@@ -11,7 +11,7 @@ import {
   type InstanceId,
   type UiError,
 } from "./api";
-import { Prepare } from "./Prepare";
+import { Play } from "./Play";
 import { SignIn } from "./SignIn";
 
 export default function App() {
@@ -254,8 +254,8 @@ function InstanceDetail(props: {
         </button>
       </div>
 
-      <h3 className="panel-title">Files</h3>
-      <Prepare id={instance.id} />
+      <h3 className="panel-title">Play</h3>
+      <Play id={instance.id} />
     </section>
   );
 }

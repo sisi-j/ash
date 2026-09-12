@@ -6,12 +6,19 @@
 use std::fs;
 
 use ash_core::credentials::InMemoryCredentialStore;
+use ash_core::process::FakeProcessPort;
 use ash_core::http::FakeHttp;
 use ash_core::{Ash, Config};
 
 fn ash() -> (Ash, tempfile::TempDir) {
     let tmp = tempfile::tempdir().expect("temp dir");
-    let ash = Ash::new(Config::rooted_at(tmp.path()), FakeHttp::new(), InMemoryCredentialStore::new(), "test-client");
+    let ash = Ash::new(
+        Config::rooted_at(tmp.path()),
+        FakeHttp::new(),
+        InMemoryCredentialStore::new(),
+        FakeProcessPort::new(),
+        "test-client",
+    );
     (ash, tmp)
 }
 
@@ -142,7 +149,13 @@ fn deleting_an_instance_leaves_the_depot_and_other_instances_alone() {
     let tmp = tempfile::tempdir().unwrap();
     let config = Config::rooted_at(tmp.path());
     let depot_root = config.depot_root.clone();
-    let ash = Ash::new(config, FakeHttp::new(), InMemoryCredentialStore::new(), "test-client");
+    let ash = Ash::new(
+        config,
+        FakeHttp::new(),
+        InMemoryCredentialStore::new(),
+        FakeProcessPort::new(),
+        "test-client",
+    );
 
     fs::create_dir_all(&depot_root).unwrap();
     let shared_jar = depot_root.join("client-1.21.4.jar");

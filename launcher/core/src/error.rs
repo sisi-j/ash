@@ -91,6 +91,19 @@ pub enum AshError {
 
     #[error("this account has no Minecraft profile yet")]
     ProfileUnavailable,
+
+    // ---- launching ----
+    #[error("no account is signed in")]
+    NoAccountSelected,
+
+    #[error("ash cannot build a command line for {version_id}: {detail}")]
+    LaunchUnsupported { version_id: String, detail: String },
+
+    #[error("could not start the game: {detail}")]
+    LaunchFailed { detail: String },
+
+    #[error("instance {id} is already running")]
+    AlreadyRunning { id: String },
 }
 
 impl AshError {
@@ -123,6 +136,10 @@ impl AshError {
             AshError::NotAllowListed => "not_allow_listed",
             AshError::NotEntitled => "not_entitled",
             AshError::ProfileUnavailable => "profile_unavailable",
+            AshError::NoAccountSelected => "no_account_selected",
+            AshError::LaunchUnsupported { .. } => "launch_unsupported",
+            AshError::LaunchFailed { .. } => "launch_failed",
+            AshError::AlreadyRunning { .. } => "already_running",
         }
     }
 
@@ -212,6 +229,20 @@ impl AshError {
                  launcher once to create one, then come back."
                     .into()
             }
+            AshError::NoAccountSelected => {
+                "Sign in with a Microsoft account before launching.".into()
+            }
+            // Names the version. Which one it is is the whole point, and it
+            // is not a secret.
+            AshError::LaunchUnsupported { version_id, .. } => {
+                format!("ash can't launch {version_id} yet.")
+            }
+            AshError::LaunchFailed { .. } => {
+                "The game didn't start. ash's Java runtime may be damaged - preparing the \
+                 instance again will replace it."
+                    .into()
+            }
+            AshError::AlreadyRunning { .. } => "That instance is already running.".into(),
         }
     }
 
@@ -230,6 +261,7 @@ impl AshError {
                 | AshError::SessionExpired
                 | AshError::VerificationFailed { .. }
                 | AshError::Cancelled
+                | AshError::LaunchFailed { .. }
         )
     }
 }

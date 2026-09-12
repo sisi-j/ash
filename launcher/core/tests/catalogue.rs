@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ash_core::credentials::InMemoryCredentialStore;
+use ash_core::process::FakeProcessPort;
 use ash_core::http::{FakeHttp, HttpResponse};
 use ash_core::{Ash, Config, CatalogueSource, VersionKind, VERSION_MANIFEST_URL};
 
@@ -21,7 +22,13 @@ fn offline() -> Arc<FakeHttp> {
 }
 
 fn ash_with(http: Arc<FakeHttp>, tmp: &tempfile::TempDir) -> Ash {
-    Ash::new(Config::rooted_at(tmp.path()), http, InMemoryCredentialStore::new(), "test-client")
+    Ash::new(
+        Config::rooted_at(tmp.path()),
+        http,
+        InMemoryCredentialStore::new(),
+        FakeProcessPort::new(),
+        "test-client",
+    )
 }
 
 #[tokio::test]
