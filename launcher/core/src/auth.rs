@@ -6,9 +6,14 @@
 //! `docs/research/0001-minecraft-launcher-api-access.md`, cross-checked
 //! against three shipping launchers.
 //!
-//! Hops 5 to 7 return `403 Invalid app registration` until ash's client id is
-//! on Mojang's allow list, so in practice only hops 1 to 4 can be exercised
-//! against the real services today. Everything here is fixture-driven.
+//! ash's client id was added to Mojang's allow list on 2026-09-12, and all
+//! seven hops have since completed against the live services - see
+//! `examples/allow-list.rs`, which is how that gets re-checked rather than
+//! assumed. The allow list is revocable, so `AshError::NotAllowListed` stays:
+//! a 403 at hop 5 means the gate closed again, not a transient fault.
+//!
+//! The tests here remain fixture-driven, and must. A test that needs a real
+//! Microsoft account and a human at a browser is not a test.
 
 use serde::Deserialize;
 

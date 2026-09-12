@@ -627,6 +627,26 @@ Captured 2026-09-11 from <https://aka.ms/mce-reviewappid>. Submitted **2026-09-1
 
 The form does not require sign-in and states it "will not automatically collect your details like name and email address unless you provide it yourself."
 
+### The outcome, and how long it took **[PRACTICE — ash's own submission]**
+
+**Approved.** No applicant appears to have published their turnaround anywhere, so this is recorded here for exactly that reason.
+
+| | |
+|---|---|
+| Submitted | 2026-09-10 |
+| Resubmitted, publisher domain now verified | 2026-09-11 |
+| Notification received | 2026-09-12 |
+| **Elapsed** | **~2 days** |
+
+Two caveats, both of which make that number weaker evidence than it looks:
+
+1. **n=1, and it beat the published cadence.** The form says reviews happen *weekly*; this cleared in about two days. A single sample that lands faster than the stated cadence says little about the next applicant and nothing about one with a thinner publisher surface. Plan for the week Mojang publishes, not the two days ash got.
+2. **The notification is a generic batch email and confirms nothing on its own.** Its operative sentence is conditional — *“**If** your application adhered to the necessary criteria, it has been approved and added to our allow list”* — and it names neither the application nor the client id. It goes to an entire review batch, approved and rejected alike. It says a batch was processed; it does not say which side of the line you are on.
+
+**So approval was confirmed empirically, not by reading the email.** `launcher/core/examples/allow-list.rs` drives the real seam against the live services and reports which hop answered what. Hop 5, `POST /launcher/login`, is the allow-list gate and the only source of `403 Invalid app registration`, so a token from it is the proof. Two of the failure modes prove it as well, because they come from hops *after* the gate: `not_entitled` (hop 6) and `profile_unavailable` (hop 7) both mean the client id got through.
+
+Full chain completed 2026-09-12 against `api.minecraftservices.com`.
+
 ### Preamble
 
 > Welcome to our AppID review form. This platform serves as a tool for both requesting the approval of a new AppID or reporting an existing AppID that may pose a security threat.
@@ -682,7 +702,7 @@ Question 2 says contact information is **cross-referenced against the Azure Port
 
 Priority order. Items 1 and 2 are time-sensitive because their duration is unknown and not under ash's control.
 
-1. **Submit the Java Edition Game Service API allow-list request — this week, before writing auth code.** Form: <https://aka.ms/mce-reviewappid>. Do these in order:
+1. **[DONE — approved 2026-09-12, see §11.]** **Submit the Java Edition Game Service API allow-list request — this week, before writing auth code.** Form: <https://aka.ms/mce-reviewappid>. Do these in order:
    1. Register the Azure app first (you need a client id to submit). Name it **"ash"** — nothing containing "Minecraft" (Microsoft identity platform ToU §3.1, §2.1.5). Personal Microsoft accounts, public client flows = Yes, no secret, scopes `XboxLive.signin offline_access`.
    2. Stand up the minimum credible publisher surface **before** submitting: a website that identifies the publisher, a real contact email (not a Discord invite), a privacy statement, and an EULA. Microsoft identity platform ToU §2.1.6 and §2.1.7 require the last two regardless; the phishing rationale in Mojang's article means the application will be judged on whether ash looks legitimate.
    3. Carry the required disclaimer on that site from day one: "NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT."
@@ -694,7 +714,7 @@ Priority order. Items 1 and 2 are time-sensitive because their duration is unkno
    - Proceed as Lunar/Badlion do, with eyes open, and accept a revocable position. Record that as an explicit, dated decision if chosen.
 3. **Correct ADR-0007.** Its consequence line asserts "real lead time" for Microsoft approval. That is not supported by any primary source — **no lead time is published anywhere**. Reword to something like: "gated behind a Mojang allow-list with no published criteria or turnaround; the application must be submitted before Phase 1 acceptance can be met." Link to this document.
 4. **Add a Phase 1 acceptance caveat to `docs/specs/0001-phase-1-launcher-mvp.md`.** The "Manual acceptance, not automated" clause cannot be satisfied until approval lands. Everything else can. Make that dependency explicit rather than discovering it at the end of the phase.
-5. **Capture HTTP fixtures for hops 1–4 early, with an unapproved client id.** Those four hops work today. Recording them now de-risks the auth module and means only hops 5–7 are blocked on approval. Hops 5–7 fixtures can be hand-written from §4 and corrected once real responses are available.
+5. **[DONE — and hops 5–7 are no longer blocked, see §11.]** **Capture HTTP fixtures for hops 1–4 early, with an unapproved client id.** Those four hops work today. Recording them now de-risks the auth module and means only hops 5–7 are blocked on approval. Hops 5–7 fixtures can be hand-written from §4 and corrected once real responses are available.
 6. **Design for the endpoint ambiguity.** Pick `/launcher/login` + `/entitlements/license?requestId=` (the Prism/ATLauncher pairing — two independent implementations, and `PC_LAUNCHER` is the platform ash actually is), put both hops behind the HTTP port, and record in the fixture which variant was captured. §4 documents the alternative for when it changes without notice.
 7. **Make 429 and 5xx from `api.minecraftservices.com` a distinct typed error.** Not "auth failed", not "you don't own Minecraft". §5. This directly affects user stories 15, 48 and 65.
 8. **Handle `slow_down` in the device-code poll**, even though Microsoft does not document it. Back off and continue; do not treat as fatal. §3.
