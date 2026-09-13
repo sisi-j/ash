@@ -14,6 +14,7 @@ import {
 } from "./api";
 import { Accounts } from "./Accounts";
 import { Play } from "./Play";
+import { Settings } from "./Settings";
 import { SignIn } from "./SignIn";
 
 /**
@@ -314,6 +315,9 @@ function InstanceDetail(props: {
 
       <h3 className="panel-title">Play</h3>
       <Play id={instance.id} playingAs={props.playingAs} />
+
+      <h3 className="panel-title">This machine</h3>
+      <Settings key={instance.id} id={instance.id} />
     </section>
   );
 }

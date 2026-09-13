@@ -99,6 +99,10 @@ pub enum AshError {
     #[error("ash knows no account {profile_id}")]
     AccountNotFound { profile_id: String },
 
+    // ---- settings ----
+    #[error("invalid setting: {detail}")]
+    InvalidSetting { detail: String },
+
     // ---- launching ----
 
     #[error("ash cannot build a command line for {version_id}: {detail}")]
@@ -143,6 +147,7 @@ impl AshError {
             AshError::ProfileUnavailable => "profile_unavailable",
             AshError::NoAccountSelected => "no_account_selected",
             AshError::AccountNotFound { .. } => "account_not_found",
+            AshError::InvalidSetting { .. } => "invalid_setting",
             AshError::LaunchUnsupported { .. } => "launch_unsupported",
             AshError::LaunchFailed { .. } => "launch_failed",
             AshError::AlreadyRunning { .. } => "already_running",
@@ -243,6 +248,16 @@ impl AshError {
             // them to fix something that is not broken.
             AshError::AccountNotFound { .. } => {
                 "That account is no longer on this machine.".into()
+            }
+            // The detail is the whole message here: it names the field and
+            // the range, which is what the player needs to fix it, and it
+            // contains nothing they did not just type.
+            AshError::InvalidSetting { detail } => {
+                let mut message = detail.clone();
+                if let Some(first) = message.get_mut(0..1) {
+                    first.make_ascii_uppercase();
+                }
+                format!("{message}.")
             }
             // Names the version. Which one it is is the whole point, and it
             // is not a secret.

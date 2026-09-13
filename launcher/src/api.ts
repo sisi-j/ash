@@ -108,6 +108,23 @@ export type LaunchOutcome = {
   error: UiError | null;
 };
 
+export type Resolution = { width: number; height: number };
+
+/**
+ * Settings that belong to this machine and must never leave it.
+ *
+ * Deliberately not part of `Instance`: Phase 4 syncs an account's launcher
+ * state between machines, and a memory figure from a 32GB desktop is a game
+ * that will not start on an 8GB laptop. `null` means "whatever ash would do
+ * anyway", which is not the same as a value that happens to match today's
+ * default.
+ */
+export type MachineOverrides = {
+  memory_mb: number | null;
+  java_executable: string | null;
+  resolution: Resolution | null;
+};
+
 export type PrepareOutcome = {
   ok: boolean;
   plan: Plan | null;
@@ -181,6 +198,11 @@ export const api = {
   gameStatus: (id: InstanceId) => invoke<GameStatus | null>("game_status", { id }),
   gameLog: (id: InstanceId) => invoke<string[]>("game_log", { id }),
   stopGame: (id: InstanceId) => invoke<void>("stop_game", { id }),
+
+  overrides: (id: InstanceId) => invoke<MachineOverrides>("overrides", { id }),
+  setOverrides: (id: InstanceId, settings: MachineOverrides) =>
+    invoke<MachineOverrides>("set_overrides", { id, settings }),
+  defaultMemoryMb: () => invoke<number>("default_memory_mb"),
 
   instances: () => invoke<Instance[]>("instances"),
   createInstance: (name: string, versionId: string) =>

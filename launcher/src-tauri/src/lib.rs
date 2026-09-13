@@ -10,8 +10,8 @@ use ash_core::http::ReqwestHttp;
 use ash_core::process::OsProcessPort;
 use ash_core::{
     Account, Accounts, Ash, Cancel, Catalogue, Config, DeletionPreview, GameStatus, Instance,
-    InstanceId, InvocationView, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime,
-    SignInStatus,
+    InstanceId, InvocationView, MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink,
+    Runtime, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -223,6 +223,38 @@ struct PrepareOutcome {
     error: Option<UiError>,
 }
 
+// ---- machine-local settings ----
+//
+// Kept distinct from the instance commands on purpose: these are the values
+// Phase 4 sync must not carry, and a command named `update_instance` that
+// happened to take a memory figure is exactly how that boundary erodes.
+
+/// What ash passes when the player has not chosen.
+///
+/// Served rather than duplicated in the UI: a hardcoded copy that drifts
+/// would show a player one figure while the JVM got another.
+#[tauri::command]
+async fn default_memory_mb() -> Result<u32, UiError> {
+    Ok(ash_core::DEFAULT_MEMORY_MB)
+}
+
+#[tauri::command]
+async fn overrides(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<MachineOverrides, UiError> {
+    state.ash.overrides(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn set_overrides(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    settings: MachineOverrides,
+) -> Result<MachineOverrides, UiError> {
+    state.ash.set_overrides(&id, settings).map_err(UiError::from)
+}
+
 // ---- launching ----
 
 /// Start the game.
@@ -391,7 +423,10 @@ pub fn run() {
             preview_launch,
             game_status,
             game_log,
-            stop_game
+            stop_game,
+            overrides,
+            set_overrides,
+            default_memory_mb
         ])
         .run(tauri::generate_context!())
         .expect("error while running ash");

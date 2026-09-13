@@ -4,6 +4,11 @@
 //! never looks at system Java. A player should not have to know that 1.8.9
 //! wants Java 8 and 1.21.x wants Java 21, and whatever happens to be on PATH
 //! is almost certainly neither.
+//!
+//! Nothing here reads `PATH` or `JAVA_HOME`, and nothing here ever will. A
+//! player naming a specific binary as a machine-local override is a
+//! different thing - that is a decision they made, not a guess ash made -
+//! and it is applied in `launch.rs`, never by searching from in here.
 
 use std::collections::HashMap;
 use std::fs;

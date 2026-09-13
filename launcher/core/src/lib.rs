@@ -21,6 +21,7 @@ mod gamelog;
 mod instance;
 mod launch;
 mod natives;
+mod overrides;
 mod runtime;
 mod version;
 
@@ -36,6 +37,7 @@ pub use config::Config;
 pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
+pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
 pub use version::Os;
@@ -263,6 +265,10 @@ impl Ash {
 
     /// Delete an instance and everything inside it. Never touches the depot.
     pub fn delete_instance(&self, id: &InstanceId) -> Result<(), AshError> {
+        // The overrides live under the data root, so removing the instance
+        // directory does not remove them. An orphan would be inherited by
+        // the next instance that happened to take the same id.
+        overrides::forget(&self.config.data_root, id);
         instance::delete(&self.config.instances_root, id)
     }
 
@@ -356,6 +362,35 @@ impl Ash {
             cancel,
         )
         .await
+    }
+
+    // ---- machine-local settings -------------------------------------------
+
+    /// This machine's settings for an instance.
+    ///
+    /// Never part of [`Instance`]. These are the values Phase 4 sync must
+    /// not carry, and they are stored outside `instances/` so that it
+    /// cannot: see [`crate::MachineOverrides`].
+    pub fn overrides(&self, id: &InstanceId) -> Result<MachineOverrides, AshError> {
+        // Resolved through the instance, so asking about one that does not
+        // exist is an error rather than a silent set of defaults.
+        self.instance(id)?;
+        Ok(overrides::load(&self.config.data_root, id))
+    }
+
+    /// Set this machine's settings for an instance.
+    ///
+    /// Validated here rather than at launch, so a figure the JVM would
+    /// refuse is refused while the player is still looking at the field.
+    pub fn set_overrides(
+        &self,
+        id: &InstanceId,
+        settings: MachineOverrides,
+    ) -> Result<MachineOverrides, AshError> {
+        self.instance(id)?;
+        settings.validate()?;
+        overrides::save(&self.config.data_root, id, &settings)?;
+        Ok(settings)
     }
 
     // ---- launching --------------------------------------------------------
@@ -458,6 +493,7 @@ impl Ash {
             xuid: &session.xuid,
             client_id: &self.client_id,
             os: Os::current(),
+            overrides: &overrides::load(&self.config.data_root, id),
         })
     }
 

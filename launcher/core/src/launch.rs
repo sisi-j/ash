@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use crate::depot;
 use crate::error::AshError;
 use crate::natives;
+use crate::overrides::MachineOverrides;
 use crate::process::Invocation;
 use crate::runtime::Runtime;
 use crate::version::{self, Os, VersionMetadata};
@@ -32,6 +33,8 @@ pub(crate) struct LaunchContext<'a> {
     pub xuid: &'a str,
     pub client_id: &'a str,
     pub os: Os,
+    /// This machine's settings. Never read from anything that syncs.
+    pub overrides: &'a MachineOverrides,
 }
 
 /// Build the command that starts the game.
@@ -57,7 +60,10 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
     let variables = variables(context, &natives, &classpath, separator, assets_index.as_deref());
 
     let mut jvm = resolve(&jvm_entries(metadata, context.os), &variables);
-    let game = resolve(&game_entries(metadata, context.os), &variables);
+    let mut game = resolve(&game_entries(metadata, context.os), &variables);
+
+    // Mojang's metadata never states a heap size, so this is ash's to add.
+    jvm.insert(0, format!("-Xmx{}M", context.overrides.memory_mb_or_default()));
 
     // First, so it is in force before anything else the JVM is told. For
     // 1.7 to 1.11 this argument is the Log4Shell mitigation.
@@ -65,12 +71,25 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
         jvm.insert(0, argument);
     }
 
+    // Appended by ash for both eras rather than by enabling Mojang's
+    // `has_custom_resolution` feature. The feature only exists in the 1.13+
+    // format, so honouring it there and appending here for 1.8.9 would be
+    // two code paths producing the same two arguments.
+    if let Some(resolution) = context.overrides.resolution {
+        game.extend([
+            "--width".to_owned(),
+            resolution.width.to_string(),
+            "--height".to_owned(),
+            resolution.height.to_string(),
+        ]);
+    }
+
     let mut args = jvm;
     args.push(main_class);
     args.extend(game);
 
     Ok(Invocation {
-        program: context.runtime.java_executable.clone(),
+        program: java_executable(context)?,
         args,
         working_directory: context.game_directory.clone(),
         // The access token is the only thing on this command line that must
@@ -109,6 +128,25 @@ fn classpath(context: &LaunchContext) -> Result<Vec<PathBuf>, AshError> {
     )));
 
     Ok(entries)
+}
+
+/// The Java to run.
+///
+/// ash still never *searches* for a Java: `runtime.rs` provisions one and no
+/// code reads `PATH` or `JAVA_HOME`. A player naming a specific binary is a
+/// different thing from ash guessing, and it is the escape hatch for a
+/// machine where the provisioned runtime cannot run at all.
+fn java_executable(context: &LaunchContext) -> Result<PathBuf, AshError> {
+    let Some(chosen) = &context.overrides.java_executable else {
+        return Ok(context.runtime.java_executable.clone());
+    };
+    if !chosen.is_file() {
+        // It was checked when it was set, so something removed it since.
+        return Err(AshError::InvalidSetting {
+            detail: "the Java path set for this instance is no longer there".into(),
+        });
+    }
+    Ok(chosen.clone())
 }
 
 /// Mojang's `-Dlog4j.configurationFile=${path}`, pointed at the file the

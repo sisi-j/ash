@@ -612,3 +612,69 @@ body {
   color: var(--text);
   font-weight: 500;
 }
+
+/* ---- settings fields ----------------------------------------------------- */
+
+.field {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  align-items: center;
+  gap: 0.5rem 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.field-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The note sits under the input, not the label, so the eye reads
+   label -> value -> what the value means. */
+.field-note {
+  grid-column: 2;
+  font-size: 0.75rem;
+}
+
+.input {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.375rem 0.625rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--emphasis);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+/* Numeric fields are read as quantities, so they get a fixed width rather
+   than stretching to whatever space is going. */
+.field-input .numeric {
+  flex: 0 0 7rem;
+}
+
+.unit {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.saved-note {
+  align-self: center;
+  font-size: 0.8125rem;
+}
