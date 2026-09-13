@@ -194,12 +194,12 @@ fn write_atomically(depot_root: &Path, relative: &str, bytes: &[u8]) -> Result<(
     let temp = path.with_extension("part");
     {
         let mut file = fs::File::create(&temp)
-            .map_err(|e| AshError::Storage { detail: format!("creating a temp file: {e}") })?;
+            .map_err(AshError::writing("creating a temp file"))?;
         file.write_all(bytes)
-            .map_err(|e| AshError::Storage { detail: format!("writing a temp file: {e}") })?;
+            .map_err(AshError::writing("writing a temp file"))?;
     }
     fs::rename(&temp, &path)
-        .map_err(|e| AshError::Storage { detail: format!("finishing a download: {e}") })
+        .map_err(AshError::writing("finishing a download"))
 }
 
 // ---- fetching --------------------------------------------------------------
@@ -245,11 +245,10 @@ async fn fetch_verified<S: ProgressSink + ?Sized>(
         let append = response.status == 206 && resuming;
         write_partial(&part_path, &response.body, append)?;
 
-        let bytes = fs::read(&part_path)
-            .map_err(|e| AshError::Storage { detail: format!("reading a partial file: {e}") })?;
+        let bytes = fs::read(&part_path).map_err(vanished_or(&artifact.path, "reading"))?;
 
         if bytes.len() as u64 == artifact.size && sha1_of(&bytes) == artifact.sha1 {
-            return promote(&part_path, &final_path);
+            return promote(&part_path, &final_path, &artifact.path);
         }
 
         // Whatever is on disk is wrong. Drop it so the retry is a clean
@@ -278,16 +277,32 @@ fn write_partial(part_path: &Path, bytes: &[u8], append: bool) -> Result<(), Ash
         .append(append)
         .truncate(!append)
         .open(part_path)
-        .map_err(|e| AshError::Storage { detail: format!("opening a partial file: {e}") })?;
+        .map_err(AshError::writing("opening a partial file"))?;
     file.write_all(bytes)
-        .map_err(|e| AshError::Storage { detail: format!("writing a partial file: {e}") })
+        .map_err(AshError::writing("writing a partial file"))
 }
 
 /// Rename the verified partial into place. Only a file that has passed both
 /// its size and hash check ever gets the real name.
-fn promote(part_path: &Path, final_path: &Path) -> Result<(), AshError> {
-    fs::rename(part_path, final_path)
-        .map_err(|e| AshError::Storage { detail: format!("finishing a download: {e}") })
+fn promote(part_path: &Path, final_path: &Path, relative: &str) -> Result<(), AshError> {
+    fs::rename(part_path, final_path).map_err(vanished_or(relative, "finishing"))
+}
+
+/// ash wrote this file moments ago, so "not found" is not a normal failure -
+/// something else on the machine took it.
+///
+/// Antivirus software quarantining a jar mid-download is the common cause,
+/// and it is worth its own message: "storage problem" sends a player looking
+/// at their disk, which is fine, and then nowhere.
+fn vanished_or(relative: &str, context: &'static str) -> impl Fn(std::io::Error) -> AshError {
+    let relative = relative.to_owned();
+    move |e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            AshError::FileVanished { path: relative.clone() }
+        } else {
+            AshError::writing(context)(e)
+        }
+    }
 }
 
 /// Fetch a metadata file the planner itself needs.
@@ -512,7 +527,7 @@ pub(crate) fn read_metadata(
 ) -> Result<version::VersionMetadata, AshError> {
     let relative = version_json_path(version_id);
     let bytes = fs::read(depot_root.join(&relative))
-        .map_err(|e| AshError::Storage { detail: format!("reading version metadata: {e}") })?;
+        .map_err(AshError::writing("reading version metadata"))?;
     version::parse(&relative, &bytes)
 }
 

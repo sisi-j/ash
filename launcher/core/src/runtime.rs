@@ -196,9 +196,7 @@ pub(crate) async fn provision<S: ProgressSink + ?Sized>(
                 }
             }
             "directory" => {
-                fs::create_dir_all(depot_root.join(&path)).map_err(|e| AshError::Storage {
-                    detail: format!("creating a runtime directory: {e}"),
-                })?;
+                fs::create_dir_all(depot_root.join(&path)).map_err(AshError::writing("creating a runtime directory"))?;
             }
             "link" => {
                 if let Some(target) = &entry.target {
@@ -275,7 +273,7 @@ fn mark_executable(path: &Path) -> Result<(), AshError> {
     let mut permissions = metadata.permissions();
     permissions.set_mode(permissions.mode() | 0o755);
     fs::set_permissions(path, permissions)
-        .map_err(|e| AshError::Storage { detail: format!("marking a runtime file executable: {e}") })
+        .map_err(AshError::writing("marking a runtime file executable"))
 }
 
 #[cfg(not(unix))]
@@ -293,7 +291,7 @@ fn create_link(path: &Path, target: &str) -> Result<(), AshError> {
         let _ = fs::create_dir_all(parent);
     }
     std::os::unix::fs::symlink(target, path)
-        .map_err(|e| AshError::Storage { detail: format!("creating a runtime link: {e}") })
+        .map_err(AshError::writing("creating a runtime link"))
 }
 
 #[cfg(not(unix))]

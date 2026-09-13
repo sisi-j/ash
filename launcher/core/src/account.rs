@@ -60,11 +60,11 @@ pub(crate) fn load(data_root: &Path) -> Accounts {
 
 fn save(data_root: &Path, accounts: &Accounts) -> Result<(), AshError> {
     fs::create_dir_all(data_root)
-        .map_err(|e| AshError::Storage { detail: format!("creating the data directory: {e}") })?;
+        .map_err(AshError::writing("creating the data directory"))?;
     let encoded = serde_json::to_vec_pretty(accounts)
         .map_err(|e| AshError::Storage { detail: format!("encoding accounts: {e}") })?;
     fs::write(accounts_path(data_root), encoded)
-        .map_err(|e| AshError::Storage { detail: format!("writing accounts: {e}") })
+        .map_err(AshError::writing("writing accounts"))
 }
 
 /// Record a completed sign-in.

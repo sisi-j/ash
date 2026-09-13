@@ -319,7 +319,7 @@ export function Play(props: { id: InstanceId; playingAs: Account | null }) {
       {progress.note && <p className="muted">{progress.note}</p>}
 
       <div className="actions">
-        <button className="button" onClick={() => void api.cancelPreparation()}>
+        <button className="button" onClick={() => void api.cancelPreparation(props.id)}>
           Cancel
         </button>
       </div>

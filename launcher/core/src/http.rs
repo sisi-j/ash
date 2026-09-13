@@ -125,6 +125,16 @@ pub trait HttpPort: Send + Sync {
 }
 
 /// The real one.
+///
+/// Two things it deliberately does not do. It never calls `no_proxy`, so the
+/// machine's proxy settings are honoured - a player behind a school or office
+/// proxy is a player who cannot download anything otherwise. And it trusts
+/// the system certificate store rather than a bundled root list, so a
+/// corporate TLS-inspecting proxy with a locally installed CA works instead
+/// of failing every request with a certificate error.
+///
+/// Both come from features on the dependency rather than code here, which is
+/// what the test at the bottom of this file is guarding.
 pub struct ReqwestHttp {
     client: reqwest::Client,
 }
@@ -292,6 +302,34 @@ impl HttpPort for FakeHttp {
             // An unrouted URL is a test authoring mistake, not a network
             // failure. Say so loudly rather than inventing a plausible 404.
             Err(known) => panic!("FakeHttp has no route for {url}\nrouted: {known:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod proxy_tests {
+    /// The manifest, read at compile time.
+    const MANIFEST: &str = include_str!("../Cargo.toml");
+
+    /// Honouring a system proxy is a dependency feature, not code.
+    ///
+    /// This is a weaker test than driving a real proxy, and it is what can
+    /// be written without one: it fails if somebody trims the feature list,
+    /// which is the way this would actually regress. Verifying the behaviour
+    /// itself needs a proxy on the machine and belongs in manual acceptance.
+    #[test]
+    fn the_features_that_make_a_proxied_machine_work_are_still_declared() {
+        for feature in [
+            // The machine's proxy settings.
+            "system-proxy",
+            // The system certificate store, so a TLS-inspecting proxy with a
+            // locally trusted CA does not fail every request.
+            "rustls-native-certs",
+        ] {
+            assert!(
+                MANIFEST.contains(&format!("\"{feature}\"")),
+                "the {feature} feature is gone, and a proxied machine cannot download"
+            );
         }
     }
 }

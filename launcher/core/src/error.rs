@@ -25,11 +25,17 @@ pub enum AshError {
     #[error("storage problem: {detail}")]
     Storage { detail: String },
 
+    #[error("out of disk space")]
+    OutOfSpace,
+
     #[error("credential store problem: {detail}")]
     Credential { detail: String },
 
     #[error("{path} did not match its published hash")]
     VerificationFailed { path: String },
+
+    #[error("{path} disappeared while ash was writing it")]
+    FileVanished { path: String },
 
     #[error("cancelled")]
     Cancelled,
@@ -115,7 +121,34 @@ pub enum AshError {
     AlreadyRunning { id: String },
 }
 
+/// Windows and Unix both have a distinct error for "the volume is full", and
+/// it is the one storage failure a player can act on directly.
+fn out_of_space(e: &std::io::Error) -> bool {
+    match e.raw_os_error() {
+        // ERROR_DISK_FULL, and ERROR_HANDLE_DISK_FULL from the older APIs.
+        Some(112) | Some(39) if cfg!(windows) => true,
+        // ENOSPC.
+        Some(28) if !cfg!(windows) => true,
+        _ => false,
+    }
+}
+
 impl AshError {
+    /// Map a filesystem failure, recognising the ones worth their own words.
+    ///
+    /// A closure so call sites read `.map_err(AshError::writing("..."))`
+    /// rather than repeating the match, which is how one of them would end
+    /// up being the site that forgets.
+    pub(crate) fn writing(context: &'static str) -> impl Fn(std::io::Error) -> AshError {
+        move |e| {
+            if out_of_space(&e) {
+                AshError::OutOfSpace
+            } else {
+                AshError::Storage { detail: format!("{context}: {e}") }
+            }
+        }
+    }
+
     /// A stable machine-readable discriminant. Safe to match on in the UI;
     /// unlike the Display text, it is part of the contract.
     pub fn kind(&self) -> &'static str {
@@ -124,8 +157,10 @@ impl AshError {
             AshError::UnexpectedStatus { .. } => "unexpected_status",
             AshError::Malformed { .. } => "malformed",
             AshError::Storage { .. } => "storage",
+            AshError::OutOfSpace => "out_of_space",
             AshError::Credential { .. } => "credential",
             AshError::VerificationFailed { .. } => "verification_failed",
+            AshError::FileVanished { .. } => "file_vanished",
             AshError::Cancelled => "cancelled",
             AshError::InstanceNotFound { .. } => "instance_not_found",
             AshError::InvalidInstanceName { .. } => "invalid_instance_name",
@@ -171,12 +206,26 @@ impl AshError {
                 "ash could not write to its own data folder. Check disk space and permissions."
                     .into()
             }
+            // Worth its own message: "check disk space and permissions" is
+            // a guess, and this is the one case where ash knows.
+            AshError::OutOfSpace => {
+                "The disk is full. Free some space and try again.".into()
+            }
             AshError::Credential { .. } => {
                 "ash could not use the Windows credential store. Your sign-in was not saved.".into()
             }
-            AshError::VerificationFailed { .. } => {
-                "A downloaded file kept arriving corrupted. Check your connection, and any antivirus or proxy that might be altering downloads."
-                    .into()
+            // Names the file. It is a path inside ash's own depot, not
+            // anything of the player's, and it is the one thing they need in
+            // order to add an exclusion in their antivirus.
+            AshError::VerificationFailed { path } => {
+                format!(
+                    "A downloaded file kept arriving corrupted: {path}. Check your connection,                      and any antivirus or proxy that might be altering downloads."
+                )
+            }
+            AshError::FileVanished { path } => {
+                format!(
+                    "{path} was removed straight after ash downloaded it. Antivirus software                      usually does this; adding ash's folder as an exclusion will fix it."
+                )
             }
             AshError::Cancelled => "Cancelled.".into(),
             AshError::InstanceNotFound { .. } => {
@@ -289,6 +338,76 @@ impl AshError {
                 | AshError::VerificationFailed { .. }
                 | AshError::Cancelled
                 | AshError::LaunchFailed { .. }
+                | AshError::FileVanished { .. }
+                | AshError::OutOfSpace
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Error, ErrorKind};
+
+    /// The OS code for a full volume, as this platform reports it.
+    fn disk_full() -> Error {
+        Error::from_raw_os_error(if cfg!(windows) { 112 } else { 28 })
+    }
+
+    #[test]
+    fn a_full_disk_is_told_apart_from_every_other_write_failure() {
+        let err = AshError::writing("writing a temp file")(disk_full());
+
+        // "Check disk space and permissions" is a guess. This is the one
+        // case where ash knows, and saying so is the difference between a
+        // player fixing it and a player filing a bug.
+        assert_eq!(err.kind(), "out_of_space");
+        assert!(err.user_message().contains("disk is full"), "{}", err.user_message());
+        assert!(err.is_retryable(), "freeing space and trying again is exactly the fix");
+    }
+
+    #[test]
+    fn any_other_write_failure_stays_generic() {
+        let err = AshError::writing("writing a temp file")(Error::from(ErrorKind::PermissionDenied));
+        assert_eq!(err.kind(), "storage");
+    }
+
+    #[test]
+    fn a_full_disk_on_the_other_platforms_code_is_not_claimed() {
+        // 28 on Windows is ERROR_NOT_SAME_DEVICE, and 112 on Unix is not
+        // ENOSPC. Matching both everywhere would mislabel real failures.
+        let other = Error::from_raw_os_error(if cfg!(windows) { 28 } else { 112 });
+        assert_eq!(AshError::writing("x")(other).kind(), "storage");
+    }
+
+    #[test]
+    fn no_user_message_leaks_a_path_a_url_or_a_token() {
+        let leaky = [
+            AshError::Transport {
+                url: "https://api.minecraftservices.com/x".into(),
+                detail: "tls".into(),
+            },
+            AshError::UnexpectedStatus { url: "https://piston-meta.mojang.com".into(), status: 500 },
+            AshError::Malformed { url: "https://x".into(), detail: "expected value".into() },
+            AshError::Storage { detail: "C:/Users/someone/secret: denied".into() },
+            AshError::LaunchFailed { detail: "C:/Users/someone/java.exe".into() },
+            AshError::InstanceNotFound { id: "whatever".into() },
+        ];
+
+        for err in leaky {
+            let message = err.user_message();
+            assert!(!message.contains("http"), "{} leaks a url: {message}", err.kind());
+            assert!(!message.contains("C:/"), "{} leaks a path: {message}", err.kind());
+        }
+    }
+
+    #[test]
+    fn the_files_a_player_must_be_able_to_name_are_named() {
+        // The exception to the rule above, and a deliberate one: these are
+        // paths inside ash's own depot, and they are what a player needs in
+        // order to add an antivirus exclusion.
+        let path = "libraries/com/example/thing.jar";
+        assert!(AshError::VerificationFailed { path: path.into() }.user_message().contains(path));
+        assert!(AshError::FileVanished { path: path.into() }.user_message().contains(path));
     }
 }

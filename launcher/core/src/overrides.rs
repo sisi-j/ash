@@ -134,14 +134,12 @@ pub(crate) fn save(
 ) -> Result<(), AshError> {
     let file = path(data_root, id);
     let dir = file.parent().expect("the machine path always has a parent");
-    fs::create_dir_all(dir).map_err(|e| AshError::Storage {
-        detail: format!("creating the machine settings directory: {e}"),
-    })?;
+    fs::create_dir_all(dir).map_err(AshError::writing("creating the machine settings directory"))?;
 
     let encoded = serde_json::to_vec_pretty(overrides)
         .map_err(|e| AshError::Storage { detail: format!("encoding machine settings: {e}") })?;
     fs::write(&file, encoded)
-        .map_err(|e| AshError::Storage { detail: format!("writing machine settings: {e}") })
+        .map_err(AshError::writing("writing machine settings"))
 }
 
 /// Forget an instance's overrides.

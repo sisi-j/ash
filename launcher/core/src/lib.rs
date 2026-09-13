@@ -16,6 +16,7 @@ mod auth;
 mod catalogue;
 mod config;
 mod depot;
+mod diagnostics;
 mod error;
 mod gamelog;
 mod instance;
@@ -35,6 +36,7 @@ pub use catalogue::{
 };
 pub use config::Config;
 pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
+pub use diagnostics::Diagnostics;
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
 pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
@@ -88,6 +90,9 @@ pub struct Ash {
     /// One sign-in at a time. The device code lives here rather than
     /// travelling to the UI and back.
     pending: Mutex<Option<auth::Pending>>,
+    /// ash's own log. Written to from the operations worth a record: what
+    /// was launched, what preparation did, and what failed.
+    diagnostics: Diagnostics,
     /// Games ash has started, by instance.
     ///
     /// An exited game stays in the map: its status and the tail of its log
@@ -108,6 +113,7 @@ impl Ash {
         client_id: impl Into<String>,
     ) -> Self {
         Self {
+            diagnostics: Diagnostics::new(&config.data_root),
             config,
             http,
             credentials,
@@ -120,6 +126,11 @@ impl Ash {
 
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// ash's own log, for a UI that wants to offer "show me the log".
+    pub fn diagnostics(&self) -> &Diagnostics {
+        &self.diagnostics
     }
 
     // ---- catalogue --------------------------------------------------------
@@ -328,6 +339,13 @@ impl Ash {
             self.provision_runtime(plan.java_component.as_deref(), sink, cancel).await?;
 
         sink.emit(PrepareEvent::Done { version_id: plan.version_id.clone() });
+        self.diagnostics.info(
+            "prepared",
+            &format!(
+                "instance={id} version={} files={} fetched={} runtime={}",
+                plan.version_id, plan.total_files, plan.missing_files, runtime.component
+            ),
+        );
         Ok((plan, runtime))
     }
 
@@ -428,7 +446,29 @@ impl Ash {
         }
 
         let invocation = self.assemble(id, sink, cancel).await?;
-        let process = self.process.spawn(&invocation)?;
+        let view = invocation.view();
+
+        // Logged from the view, which has no serialiser for the access token
+        // and no field holding one. Writing the raw invocation here would be
+        // the single easiest way to put a credential on disk.
+        self.diagnostics.info(
+            "launch",
+            &format!(
+                "instance={} version={}
+  {}",
+                id,
+                self.instance(id).map(|i| i.version_id).unwrap_or_default(),
+                diagnostics::describe(&view)
+            ),
+        );
+
+        let process = match self.process.spawn(&invocation) {
+            Ok(process) => process,
+            Err(e) => {
+                self.diagnostics.warn("launch-failed", &format!("instance={id} {}", e.kind()));
+                return Err(e);
+            }
+        };
         self.games.lock().unwrap().insert(id.as_str().to_owned(), process);
 
         // Recorded now rather than on exit: a session that ends in a crash
@@ -436,7 +476,7 @@ impl Ash {
         // means the same thing either way.
         self.mark_played(id)?;
 
-        Ok(invocation.view())
+        Ok(view)
     }
 
     /// How a launched game is doing. `None` if ash never started it.

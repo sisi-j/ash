@@ -308,6 +308,9 @@ function InstanceDetail(props: {
         <button className="button" onClick={props.onReveal}>
           Open folder
         </button>
+        <button className="button" onClick={() => void api.revealLog()}>
+          Show log
+        </button>
         <button className="button button-danger" onClick={props.onDelete}>
           Delete
         </button>

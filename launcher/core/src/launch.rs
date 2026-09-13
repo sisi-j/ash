@@ -51,7 +51,7 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
     // assembly does not need to know which happened.
     let natives = natives::directory(context.depot_root, &metadata.id);
     fs::create_dir_all(&natives)
-        .map_err(|e| AshError::Storage { detail: format!("creating the natives directory: {e}") })?;
+        .map_err(AshError::writing("creating the natives directory"))?;
 
     let classpath = classpath(context)?;
     let separator = if context.os == Os::Windows { ";" } else { ":" };

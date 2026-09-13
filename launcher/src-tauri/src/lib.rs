@@ -3,6 +3,7 @@
 //! assembling of results, no business rules. If logic starts accumulating in
 //! this file it belongs in `ash-core` instead, where it can be tested.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use ash_core::credentials::OsCredentialStore;
@@ -79,10 +80,12 @@ struct AppState {
     /// `tauri::State` guard across an await - the guard borrows from the
     /// app handle and a spawned future has to be `'static`.
     ash: Arc<Ash>,
-    /// The cancel handle for whatever preparation is running. One at a time:
-    /// a player preparing two instances at once would only be competing with
-    /// themselves for bandwidth.
-    preparing: Mutex<Option<Cancel>>,
+    /// Cancel handles for preparation in flight, by instance.
+    ///
+    /// Keyed rather than a single slot: two instances can be launched at
+    /// once, and one shared handle would mean cancelling either one reached
+    /// whichever started most recently.
+    preparing: Mutex<HashMap<String, Cancel>>,
 }
 
 // ---- sign-in ----
@@ -193,7 +196,7 @@ fn prepare_instance(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError
         // to outlive this function.
         let ash = {
             let state = app.state::<AppState>();
-            *state.preparing.lock().unwrap() = Some(cancel.clone());
+            state.preparing.lock().unwrap().insert(id.as_str().to_owned(), cancel.clone());
             Arc::clone(&state.ash)
         };
 
@@ -202,7 +205,7 @@ fn prepare_instance(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError
 
         {
             let state = app.state::<AppState>();
-            *state.preparing.lock().unwrap() = None;
+            state.preparing.lock().unwrap().remove(id.as_str());
         }
 
         let _ = app.emit(
@@ -268,7 +271,7 @@ fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
         let cancel = Cancel::new();
         let ash = {
             let state = app.state::<AppState>();
-            *state.preparing.lock().unwrap() = Some(cancel.clone());
+            state.preparing.lock().unwrap().insert(id.as_str().to_owned(), cancel.clone());
             Arc::clone(&state.ash)
         };
 
@@ -277,7 +280,7 @@ fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
 
         {
             let state = app.state::<AppState>();
-            *state.preparing.lock().unwrap() = None;
+            state.preparing.lock().unwrap().remove(id.as_str());
         }
 
         let _ = app.emit(
@@ -354,11 +357,35 @@ async fn ensure_runtime(
 }
 
 #[tauri::command]
-async fn cancel_preparation(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
-    if let Some(cancel) = state.preparing.lock().unwrap().as_ref() {
+async fn cancel_preparation(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<(), UiError> {
+    if let Some(cancel) = state.preparing.lock().unwrap().get(id.as_str()) {
         cancel.cancel();
     }
     Ok(())
+}
+
+/// Open the folder holding ash's own log.
+///
+/// The log is the first thing anyone will ask for when a launch goes wrong,
+/// so getting to it should not involve knowing where LOCALAPPDATA is.
+#[tauri::command]
+async fn reveal_log(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
+    let path = state.ash.diagnostics().path().to_path_buf();
+    // Revealing a file that does not exist yet fails; the folder always
+    // does once ash has written anything at all.
+    let target = if path.is_file() {
+        path
+    } else {
+        path.parent().map(std::path::Path::to_path_buf).unwrap_or(path)
+    };
+    tauri_plugin_opener::reveal_item_in_dir(&target).map_err(|_| UiError {
+        kind: "reveal_failed",
+        message: "Could not open the log folder.".into(),
+        retryable: true,
+    })
 }
 
 /// Opening a file manager is an OS concern, so it lives here rather than in
@@ -398,7 +425,7 @@ fn dirs_next_data_dir() -> std::path::PathBuf {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState { ash: Arc::new(ash_state()), preparing: Mutex::new(None) })
+        .manage(AppState { ash: Arc::new(ash_state()), preparing: Mutex::new(HashMap::new()) })
         .invoke_handler(tauri::generate_handler![
             catalogue,
             refresh_catalogue,
@@ -426,7 +453,8 @@ pub fn run() {
             stop_game,
             overrides,
             set_overrides,
-            default_memory_mb
+            default_memory_mb,
+            reveal_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running ash");

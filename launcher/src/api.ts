@@ -190,7 +190,7 @@ export const api = {
   /** Returns as soon as the work is scheduled; watch the events for outcome. */
   prepareInstance: (id: InstanceId) => invoke<void>("prepare_instance", { id }),
   ensureRuntime: (id: InstanceId) => invoke<Runtime>("ensure_runtime", { id }),
-  cancelPreparation: () => invoke<void>("cancel_preparation"),
+  cancelPreparation: (id: InstanceId) => invoke<void>("cancel_preparation", { id }),
 
   /** Returns as soon as the work is scheduled; watch the events for outcome. */
   launch: (id: InstanceId) => invoke<void>("launch", { id }),
@@ -214,6 +214,8 @@ export const api = {
   deleteInstance: (id: InstanceId) => invoke<void>("delete_instance", { id }),
   revealGameDirectory: (id: InstanceId) =>
     invoke<void>("reveal_game_directory", { id }),
+  /** ash's own log: the first thing anyone asks for when a launch fails. */
+  revealLog: () => invoke<void>("reveal_log"),
 };
 
 /**
