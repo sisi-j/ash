@@ -5,6 +5,7 @@ import {
   onLaunchFinished,
   onPrepareFinished,
   onPrepareProgress,
+  type Account,
   type InstanceId,
   type InvocationView,
   type Plan,
@@ -40,6 +41,12 @@ const START: Progress = {
 /** How often a running game is asked whether it is still running. */
 const POLL_MS = 1500;
 
+/** The argument after `--flag`, for reading a value back off a command line. */
+function valueOf(args: string[], flag: string): string | null {
+  const at = args.indexOf(flag);
+  return at >= 0 ? (args[at + 1] ?? null) : null;
+}
+
 /**
  * Playing one instance: preparing what it needs, starting it, and saying
  * what happened when it stops.
@@ -48,7 +55,7 @@ const POLL_MS = 1500;
  * because "4,300 of 4,900 files" and "re-verifying a corrupt file" are both
  * things a player wants to see and a single number cannot say.
  */
-export function Play(props: { id: InstanceId }) {
+export function Play(props: { id: InstanceId; playingAs: Account | null }) {
   const [phase, setPhase] = useState<Phase>({ at: "checking" });
   const [command, setCommand] = useState<InvocationView | null>(null);
   const goal = useRef<"prepare" | "play">("play");
@@ -182,6 +189,11 @@ export function Play(props: { id: InstanceId }) {
     [props.id],
   );
 
+  // Who is *actually* playing, read off the command line ash ran rather than
+  // from whoever is selected now. Switching accounts mid-session must not
+  // relabel a game that is already up as someone else.
+  const running = command ? valueOf(command.args, "--username") : null;
+
   if (phase.at === "checking") {
     return <p className="muted">Checking what this instance needs…</p>;
   }
@@ -209,7 +221,9 @@ export function Play(props: { id: InstanceId }) {
   if (phase.at === "running") {
     return (
       <>
-        <p className="muted">Running.</p>
+        <p className="muted">
+          Running{running ? <> as <strong>{running}</strong></> : null}.
+        </p>
         <div className="actions">
           <button className="button" onClick={() => void api.stopGame(props.id)}>
             Stop
@@ -251,6 +265,11 @@ export function Play(props: { id: InstanceId }) {
     const missing = phase.plan.missing_files;
     return (
       <>
+        {props.playingAs && (
+          <p className="muted playing-as">
+            Playing as <strong>{props.playingAs.username}</strong>.
+          </p>
+        )}
         <p className="muted">
           {missing === 0 ? (
             "Everything this instance needs is in the depot."

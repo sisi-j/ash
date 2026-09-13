@@ -113,7 +113,7 @@ pub(crate) fn upsert(
 pub(crate) fn select(data_root: &Path, profile_id: &str) -> Result<Accounts, AshError> {
     let mut state = load(data_root);
     if !state.accounts.iter().any(|a| a.profile_id == profile_id) {
-        return Err(AshError::SessionExpired);
+        return Err(AshError::AccountNotFound { profile_id: profile_id.to_owned() });
     }
     state.active = Some(profile_id.to_owned());
     save(data_root, &state)?;

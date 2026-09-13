@@ -4,15 +4,26 @@ import {
   describeAge,
   describeBytes,
   isUiError,
-  type Accounts,
+  type Account,
+  type Accounts as AccountList,
   type Catalogue,
   type DeletionPreview,
   type Instance,
   type InstanceId,
   type UiError,
 } from "./api";
+import { Accounts } from "./Accounts";
 import { Play } from "./Play";
 import { SignIn } from "./SignIn";
+
+/**
+ * What the main area is showing instead of an instance.
+ *
+ * One value rather than two booleans: "managing accounts" and "signing in"
+ * are steps in one flow, and two flags would allow a fourth state that means
+ * nothing.
+ */
+type Overlay = null | "accounts" | "sign-in";
 
 export default function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -21,8 +32,9 @@ export default function App() {
   const [error, setError] = useState<UiError | null>(null);
   const [creating, setCreating] = useState(false);
   const [pendingDeletion, setPendingDeletion] = useState<DeletionPreview | null>(null);
-  const [accounts, setAccounts] = useState<Accounts | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
+  const [accounts, setAccounts] = useState<AccountList | null>(null);
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [switching, setSwitching] = useState(false);
 
   const fail = useCallback((e: unknown) => {
     setError(
@@ -53,6 +65,37 @@ export default function App() {
 
   const signedIn = (accounts?.accounts.length ?? 0) > 0;
   const active = accounts?.accounts.find((a) => a.profile_id === accounts.active) ?? null;
+
+  const selectAccount = useCallback(
+    async (profileId: string) => {
+      setSwitching(true);
+      try {
+        setAccounts(await api.selectAccount(profileId));
+      } catch (e) {
+        fail(e);
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [fail],
+  );
+
+  const removeAccount = useCallback(
+    async (profileId: string) => {
+      setSwitching(true);
+      try {
+        const left = await api.removeAccount(profileId);
+        setAccounts(left);
+        // Nobody left to manage, so the only useful screen is signing in.
+        if (left.accounts.length === 0) setOverlay("sign-in");
+      } catch (e) {
+        fail(e);
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [fail],
+  );
 
   const selected = useMemo(
     () => instances.find((i) => i.id === selectedId) ?? null,
@@ -113,7 +156,11 @@ export default function App() {
 
         <button
           className="account"
-          onClick={() => setSigningIn(true)}
+          onClick={() =>
+            setOverlay((current) =>
+              current === "accounts" ? null : signedIn ? "accounts" : "sign-in",
+            )
+          }
           title={active ? "Manage accounts" : "Sign in"}
         >
           {active?.skin_url ? (
@@ -154,19 +201,28 @@ export default function App() {
           </p>
         )}
 
-        {signingIn ? (
+        {overlay === "sign-in" || (!signedIn && accounts !== null && overlay === null) ? (
           <SignIn
             onSignedIn={() => {
-              setSigningIn(false);
-              api.accounts().then(setAccounts).catch(fail);
+              // Back to the list, so adding a third account is one click and
+              // it is obvious who is now armed to play.
+              api.accounts()
+                .then((loaded) => {
+                  setAccounts(loaded);
+                  setOverlay(loaded.accounts.length > 1 ? "accounts" : null);
+                })
+                .catch(fail);
             }}
-            onCancel={signedIn ? () => setSigningIn(false) : undefined}
+            onCancel={signedIn ? () => setOverlay("accounts") : undefined}
           />
-        ) : !signedIn && accounts !== null ? (
-          <SignIn
-            onSignedIn={() => {
-              api.accounts().then(setAccounts).catch(fail);
-            }}
+        ) : overlay === "accounts" && accounts ? (
+          <Accounts
+            accounts={accounts}
+            busy={switching}
+            onSelect={selectAccount}
+            onRemove={removeAccount}
+            onAdd={() => setOverlay("sign-in")}
+            onClose={() => setOverlay(null)}
           />
         ) : creating ? (
           <NewInstance
@@ -177,6 +233,7 @@ export default function App() {
         ) : selected ? (
           <InstanceDetail
             instance={selected}
+            playingAs={active}
             onRename={rename}
             onReveal={() => api.revealGameDirectory(selected.id).catch(fail)}
             onDelete={() => askToDelete(selected.id)}
@@ -206,6 +263,7 @@ export default function App() {
 
 function InstanceDetail(props: {
   instance: Instance;
+  playingAs: Account | null;
   onRename: (id: InstanceId, name: string) => void;
   onReveal: () => void;
   onDelete: () => void;
@@ -255,7 +313,7 @@ function InstanceDetail(props: {
       </div>
 
       <h3 className="panel-title">Play</h3>
-      <Play id={instance.id} />
+      <Play id={instance.id} playingAs={props.playingAs} />
     </section>
   );
 }

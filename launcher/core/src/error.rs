@@ -92,9 +92,14 @@ pub enum AshError {
     #[error("this account has no Minecraft profile yet")]
     ProfileUnavailable,
 
-    // ---- launching ----
+    // ---- accounts ----
     #[error("no account is signed in")]
     NoAccountSelected,
+
+    #[error("ash knows no account {profile_id}")]
+    AccountNotFound { profile_id: String },
+
+    // ---- launching ----
 
     #[error("ash cannot build a command line for {version_id}: {detail}")]
     LaunchUnsupported { version_id: String, detail: String },
@@ -137,6 +142,7 @@ impl AshError {
             AshError::NotEntitled => "not_entitled",
             AshError::ProfileUnavailable => "profile_unavailable",
             AshError::NoAccountSelected => "no_account_selected",
+            AshError::AccountNotFound { .. } => "account_not_found",
             AshError::LaunchUnsupported { .. } => "launch_unsupported",
             AshError::LaunchFailed { .. } => "launch_failed",
             AshError::AlreadyRunning { .. } => "already_running",
@@ -231,6 +237,12 @@ impl AshError {
             }
             AshError::NoAccountSelected => {
                 "Sign in with a Microsoft account before launching.".into()
+            }
+            // Not "your session expired": nothing expired, the account is
+            // simply gone, and telling a player to sign in again would send
+            // them to fix something that is not broken.
+            AshError::AccountNotFound { .. } => {
+                "That account is no longer on this machine.".into()
             }
             // Names the version. Which one it is is the whole point, and it
             // is not a secret.

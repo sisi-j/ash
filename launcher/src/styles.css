@@ -545,3 +545,70 @@ body {
   outline: 2px solid var(--text);
   outline-offset: 2px;
 }
+
+/* ---- accounts ------------------------------------------------------------ */
+
+.account-list {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: transparent;
+}
+
+/* The armed account is marked, not merely ordered: joining a server as the
+   wrong player is the failure this whole screen exists to prevent. */
+.account-row.is-active {
+  border-color: var(--emphasis);
+}
+
+.face-lg {
+  width: 32px;
+  height: 32px;
+  background-size: 256px 256px;
+  background-position: -32px -32px;
+}
+
+.account-who {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.account-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.badge {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--emphasis);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.playing-as {
+  margin-bottom: 0.75rem;
+}
+
+.playing-as strong {
+  color: var(--text);
+  font-weight: 500;
+}
