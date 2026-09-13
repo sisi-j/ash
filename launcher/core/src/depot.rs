@@ -349,9 +349,7 @@ pub(crate) async fn plan(
     os: Os,
 ) -> Result<Plan, AshError> {
     let (version_id, version_url) = (source.id.as_str(), source.url.as_str());
-    let metadata_bytes =
-        fetch_metadata(http, version_url, Some(&source.sha1), None).await?;
-    write_atomically(depot_root, &version_json_path(version_id), &metadata_bytes)?;
+    let metadata_bytes = resolve_metadata(http, depot_root, source).await?;
     let metadata = version::parse(version_url, &metadata_bytes)?;
 
     // The manifest and the metadata disagreeing about which version this is
@@ -443,6 +441,42 @@ pub(crate) async fn plan(
         missing_bytes: missing.iter().map(|a| a.size).sum(),
         missing,
     })
+}
+
+/// A version's metadata, from Mojang or from the copy already in the depot.
+///
+/// Planning happens whenever a player looks at an instance, so requiring the
+/// network for it means an instance with every file already downloaded shows
+/// an error instead of a play button the moment the connection drops. The
+/// catalogue already works this way; this is the same bargain one level down.
+///
+/// The cached copy is verified against the published hash exactly like a
+/// fresh download, so falling back trusts the manifest, not the disk.
+async fn resolve_metadata(
+    http: &dyn HttpPort,
+    depot_root: &Path,
+    source: &VersionSource,
+) -> Result<Vec<u8>, AshError> {
+    let relative = version_json_path(&source.id);
+
+    match fetch_metadata(http, &source.url, Some(&source.sha1), None).await {
+        Ok(bytes) => {
+            write_atomically(depot_root, &relative, &bytes)?;
+            Ok(bytes)
+        }
+        // Only when the network is not there. A hash that does not match is
+        // not a connectivity problem and must not be answered from a cache.
+        Err(e) if e.kind() == "transport" => {
+            let cached = fs::read(depot_root.join(&relative)).map_err(|_| e)?;
+            if let Some(sha1) = Some(source.sha1.as_str()).filter(|s| !s.is_empty()) {
+                if sha1_of(&cached) != sha1 {
+                    return Err(AshError::VerificationFailed { path: relative });
+                }
+            }
+            Ok(cached)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 // ---- downloading -----------------------------------------------------------

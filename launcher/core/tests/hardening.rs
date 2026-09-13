@@ -317,3 +317,60 @@ async fn the_log_survives_a_session_and_keeps_appending() {
     let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("a log");
     assert_eq!(log.matches("launch  instance=").count(), 2, "one launch overwrote the other");
 }
+
+// ---- a connection that went away ---------------------------------------------
+
+/// The same depot and the same account, with nothing reachable.
+fn gone_offline(f: &Fixture) -> Ash {
+    Ash::new(
+        Config::rooted_at(&f.root),
+        FakeHttp::offline() as Arc<dyn HttpPort>,
+        InMemoryCredentialStore::new(),
+        FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        "test-client",
+    )
+}
+
+#[tokio::test]
+async fn a_prepared_instance_still_plans_with_no_network() {
+    let f = fixture();
+    let id = f.ready("modern").await;
+    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepare");
+
+    let plan = gone_offline(&f).plan_instance(&id).await.expect("plan from the depot");
+
+    // Planning happens whenever a player looks at an instance. Needing the
+    // network for it means a fully downloaded instance shows an error
+    // instead of a play button the moment the connection drops.
+    assert_eq!(plan.missing_files, 0);
+    assert_eq!(plan.version_id, VERSION);
+}
+
+#[tokio::test]
+async fn a_version_never_downloaded_still_fails_with_no_network() {
+    let f = fixture();
+    let id = f.ready("modern").await;
+
+    // Nothing was ever fetched for this version, so there is nothing to fall
+    // back to and saying so is the only honest answer.
+    let err = gone_offline(&f).plan_instance(&id).await.expect_err("nothing cached");
+
+    assert_eq!(err.kind(), "transport");
+}
+
+#[tokio::test]
+async fn cached_metadata_is_still_held_to_its_published_hash() {
+    let f = fixture();
+    let id = f.ready("modern").await;
+    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepare");
+
+    let cached = f.root.join(format!("depot/versions/{VERSION}/{VERSION}.json"));
+    std::fs::write(&cached, r#"{"id":"1.21.11","mainClass":"somebody.Elses.Main"}"#)
+        .expect("tamper");
+
+    let err = gone_offline(&f).plan_instance(&id).await.expect_err("the hash does not match");
+
+    // Otherwise "the network is down" becomes the way to get ash to run
+    // whatever somebody wrote into its cache.
+    assert_eq!(err.kind(), "verification_failed");
+}

@@ -201,6 +201,8 @@ fn same_endpoint(recorded: &str, wanted: &str) -> bool {
 #[derive(Default)]
 pub struct FakeHttp {
     routes: Mutex<HashMap<String, VecDeque<HttpResponse>>>,
+    /// URLs that fail before any server is reached.
+    unreachable: Mutex<Vec<String>>,
     requested: Mutex<Vec<HttpRequest>>,
 }
 
@@ -213,6 +215,24 @@ impl FakeHttp {
     pub fn route(self: &Arc<Self>, url: impl Into<String>, response: HttpResponse) -> Arc<Self> {
         self.routes.lock().unwrap().insert(url.into(), VecDeque::from(vec![response]));
         Arc::clone(self)
+    }
+
+    /// Make a URL fail the way an absent network does.
+    ///
+    /// Distinct from routing an error status: a server answering 500 and no
+    /// server at all are different situations, and ash treats them
+    /// differently - only one of them is a reason to fall back to what is
+    /// already on disk.
+    pub fn route_unreachable(self: &Arc<Self>, url: impl Into<String>) -> Arc<Self> {
+        self.unreachable.lock().unwrap().push(url.into());
+        Arc::clone(self)
+    }
+
+    /// Nothing at all is reachable.
+    pub fn offline() -> Arc<Self> {
+        let fake = Self::new();
+        fake.unreachable.lock().unwrap().push(String::new());
+        fake
     }
 
     /// Register responses served in order, the last one repeating.
@@ -269,6 +289,18 @@ impl HttpPort for FakeHttp {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse, AshError> {
         let url = request.url.clone();
         self.requested.lock().unwrap().push(request);
+
+        // An empty prefix matches everything, which is how `offline` works.
+        let unreachable = {
+            let patterns = self.unreachable.lock().unwrap();
+            patterns.iter().any(|p| p.is_empty() || same_endpoint(&url, p))
+        };
+        if unreachable {
+            return Err(AshError::Transport {
+                url,
+                detail: "no route to host".into(),
+            });
+        }
 
         // Take the routes lock exactly once, and drop it before deciding what
         // to do - panicking while holding it would deadlock the message.

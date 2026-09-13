@@ -15,3 +15,17 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Release settings for a desktop app someone installs.
+#
+# `opt-level = 3` earns its keep on a path that is not obvious: preparing an
+# instance hashes every file already in the depot - 4,652 of them for 1.21.x -
+# and that is SHA-1 throughput, on the way to every launch.
+#
+# No `panic = "abort"`. The threads draining the game's output are allowed to
+# die without taking the launcher with them.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
