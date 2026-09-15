@@ -123,10 +123,7 @@ fn unique_id(instances_root: &Path, name: &str) -> InstanceId {
 /// Milliseconds, not seconds. Two instances played inside the same second
 /// would otherwise sort arbitrarily against each other.
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or_default()
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or_default()
 }
 
 fn storage_err(context: &'static str) -> impl Fn(std::io::Error) -> AshError {
@@ -196,9 +193,7 @@ pub(crate) fn list(instances_root: &Path) -> Result<Vec<Instance>, AshError> {
     // Most recently played first, then never-played by creation date. This is
     // the order the launcher shows, so it belongs here rather than in the UI.
     instances.sort_by(|a, b| {
-        b.last_played_ms
-            .cmp(&a.last_played_ms)
-            .then_with(|| b.created_at_ms.cmp(&a.created_at_ms))
+        b.last_played_ms.cmp(&a.last_played_ms).then_with(|| b.created_at_ms.cmp(&a.created_at_ms))
     });
     Ok(instances)
 }

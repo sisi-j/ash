@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use ash_core::credentials::InMemoryCredentialStore;
-use ash_core::process::FakeProcessPort;
 use ash_core::http::{FakeHttp, HttpResponse};
-use ash_core::{Ash, Config, CatalogueSource, VersionKind, VERSION_MANIFEST_URL};
+use ash_core::process::FakeProcessPort;
+use ash_core::{Ash, CatalogueSource, Config, VersionKind, VERSION_MANIFEST_URL};
 
 const MANIFEST: &str = include_str!("fixtures/version_manifest_v2.json");
 
@@ -47,8 +47,7 @@ async fn marks_exactly_the_first_class_targets() {
     let tmp = tempfile::tempdir().unwrap();
     let catalogue = ash_with(serving_manifest(), &tmp).catalogue().await.unwrap();
 
-    let first_class: Vec<&str> =
-        catalogue.first_class().map(|v| v.id.as_str()).collect();
+    let first_class: Vec<&str> = catalogue.first_class().map(|v| v.id.as_str()).collect();
 
     // ADR-0005: 1.8.9 and the newest 1.21.x. Not 1.21.3, not 1.21, not 1.8.
     assert_eq!(first_class, vec!["1.21.4", "1.8.9"]);

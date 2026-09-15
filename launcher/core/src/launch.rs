@@ -50,8 +50,7 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
     // it unpacked during preparation. Either way the path is the same, and
     // assembly does not need to know which happened.
     let natives = natives::directory(context.depot_root, &metadata.id);
-    fs::create_dir_all(&natives)
-        .map_err(AshError::writing("creating the natives directory"))?;
+    fs::create_dir_all(&natives).map_err(AshError::writing("creating the natives directory"))?;
 
     let classpath = classpath(context)?;
     let separator = if context.os == Os::Windows { ";" } else { ":" };
@@ -122,10 +121,8 @@ fn classpath(context: &LaunchContext) -> Result<Vec<PathBuf>, AshError> {
         entries.push(context.depot_root.join(format!("libraries/{relative}")));
     }
 
-    entries.push(context.depot_root.join(format!(
-        "versions/{id}/{id}.jar",
-        id = context.metadata.id
-    )));
+    entries
+        .push(context.depot_root.join(format!("versions/{id}/{id}.jar", id = context.metadata.id)));
 
     Ok(entries)
 }
@@ -168,11 +165,8 @@ fn variables(
     separator: &str,
     assets_index: Option<&str>,
 ) -> HashMap<&'static str, String> {
-    let joined = classpath
-        .iter()
-        .map(|path| path.display().to_string())
-        .collect::<Vec<_>>()
-        .join(separator);
+    let joined =
+        classpath.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(separator);
 
     let mut vars = HashMap::new();
     vars.insert("auth_player_name", context.username.to_owned());
@@ -197,11 +191,11 @@ fn variables(
     vars.insert("library_directory", context.depot_root.join("libraries").display().to_string());
 
     // Pre-1.13 shapes. Harmless on modern versions, which never ask.
-    vars.insert("game_assets", context.depot_root.join("assets/virtual/legacy").display().to_string());
     vars.insert(
-        "auth_session",
-        format!("token:{}:{}", context.access_token, context.profile_id),
+        "game_assets",
+        context.depot_root.join("assets/virtual/legacy").display().to_string(),
     );
+    vars.insert("auth_session", format!("token:{}:{}", context.access_token, context.profile_id));
     vars.insert("user_properties", "{}".to_owned());
 
     vars

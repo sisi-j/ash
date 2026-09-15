@@ -8,8 +8,8 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use ash_core::credentials::InMemoryCredentialStore;
-use ash_core::process::FakeProcessPort;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
+use ash_core::process::FakeProcessPort;
 use ash_core::{Ash, Cancel, Config, PrepareEvent, ProgressSink, VERSION_MANIFEST_URL};
 use sha1::{Digest, Sha1};
 
@@ -97,14 +97,14 @@ fn serving() -> Arc<FakeHttp> {
     // of a working fixture now.
     common::with_runtime_routes(
         FakeHttp::new()
-        .route(VERSION_MANIFEST_URL, HttpResponse::ok(manifest_json()))
-        .route(VERSION_URL, HttpResponse::ok(version_json()))
-        .route(ASSET_INDEX_URL, HttpResponse::ok(index))
-        .route(CLIENT_URL, HttpResponse::ok(CLIENT_JAR))
-        .route(WIN_LIB_URL, HttpResponse::ok(WIN_LIB))
-        .route(MAC_LIB_URL, HttpResponse::ok(MAC_LIB))
-        .route(asset_url(ASSET_A), HttpResponse::ok(ASSET_A))
-        .route(asset_url(ASSET_B), HttpResponse::ok(ASSET_B)),
+            .route(VERSION_MANIFEST_URL, HttpResponse::ok(manifest_json()))
+            .route(VERSION_URL, HttpResponse::ok(version_json()))
+            .route(ASSET_INDEX_URL, HttpResponse::ok(index))
+            .route(CLIENT_URL, HttpResponse::ok(CLIENT_JAR))
+            .route(WIN_LIB_URL, HttpResponse::ok(WIN_LIB))
+            .route(MAC_LIB_URL, HttpResponse::ok(MAC_LIB))
+            .route(asset_url(ASSET_A), HttpResponse::ok(ASSET_A))
+            .route(asset_url(ASSET_B), HttpResponse::ok(ASSET_B)),
     )
 }
 
@@ -327,8 +327,7 @@ async fn two_instances_on_one_version_download_the_shared_content_once() {
     let before = f.http.hits(CLIENT_URL);
 
     let sink = Recorder::new();
-    let plan =
-        f.ash.prepare_instance(&second.id, sink.as_ref(), &Cancel::new()).await.unwrap();
+    let plan = f.ash.prepare_instance(&second.id, sink.as_ref(), &Cancel::new()).await.unwrap();
 
     assert_eq!(f.http.hits(CLIENT_URL), before, "the client jar was fetched twice");
     assert_eq!(plan.missing_files, 0, "everything was already in the depot");
@@ -389,11 +388,8 @@ async fn cancelling_before_any_download_stops_immediately() {
     cancel.cancel();
     let sink = Recorder::new();
 
-    let err = f
-        .ash
-        .prepare_instance(&instance.id, sink.as_ref(), &cancel)
-        .await
-        .expect_err("cancelled");
+    let err =
+        f.ash.prepare_instance(&instance.id, sink.as_ref(), &cancel).await.expect_err("cancelled");
 
     assert_eq!(err.kind(), "cancelled");
     assert!(sink.events().iter().any(|e| matches!(e, PrepareEvent::Cancelled)));

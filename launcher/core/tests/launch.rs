@@ -174,8 +174,12 @@ fn native_jar() -> Vec<u8> {
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
     writer.start_file(MANIFEST_ENTRY, options).expect("manifest entry");
-    writer.write_all(b"Manifest-Version: 1.0
-").expect("manifest body");
+    writer
+        .write_all(
+            b"Manifest-Version: 1.0
+",
+        )
+        .expect("manifest body");
     writer.start_file(NATIVE_FILE, options).expect("library entry");
     writer.write_all(NATIVE_BODY).expect("library body");
 
@@ -299,8 +303,7 @@ fn serving() -> Arc<FakeHttp> {
         .route(format!("{LIB_BASE}/legacy/lwjgl-platform.jar"), HttpResponse::ok(ANY_JAR))
         .route(format!("{LIB_BASE}/legacy/jinput.jar"), HttpResponse::ok(ANY_JAR));
     for name in ["natives-windows", "natives-windows-64", "natives-osx"] {
-        http =
-            http.route(format!("{LIB_BASE}/legacy/{name}.jar"), HttpResponse::ok(native_jar()));
+        http = http.route(format!("{LIB_BASE}/legacy/{name}.jar"), HttpResponse::ok(native_jar()));
     }
     http
 }

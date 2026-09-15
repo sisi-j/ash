@@ -163,14 +163,20 @@ async fn an_instance_named_in_another_script_still_gets_a_usable_directory() {
 
     let spawned = f.process.last();
     assert!(spawned.working_directory.is_dir());
-    assert_eq!(f.ash.instance(&id).expect("instance").name, "\u{30de}\u{30a4}\u{30f3}\u{30af}\u{30e9}");
+    assert_eq!(
+        f.ash.instance(&id).expect("instance").name,
+        "\u{30de}\u{30a4}\u{30f3}\u{30af}\u{30e9}"
+    );
 }
 
 // ---- antivirus ---------------------------------------------------------------
 
 #[tokio::test]
 async fn a_file_that_keeps_arriving_altered_names_itself() {
-    let f = fixture_at(serving().route(LIB_URL, HttpResponse::ok(b"not what was published".to_vec())), "ash");
+    let f = fixture_at(
+        serving().route(LIB_URL, HttpResponse::ok(b"not what was published".to_vec())),
+        "ash",
+    );
     let id = f.ready("modern").await;
 
     let err = f

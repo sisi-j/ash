@@ -4,8 +4,8 @@
 use std::sync::{Arc, Mutex};
 
 use ash_core::credentials::InMemoryCredentialStore;
-use ash_core::process::FakeProcessPort;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
+use ash_core::process::FakeProcessPort;
 use ash_core::{Ash, Cancel, Config, PrepareEvent, ProgressSink, VERSION_MANIFEST_URL};
 use sha1::{Digest, Sha1};
 
@@ -232,19 +232,17 @@ async fn a_second_instance_on_the_same_runtime_downloads_nothing() {
     f.ash.ensure_runtime(&second.id, sink.as_ref(), &Cancel::new()).await.unwrap();
 
     assert_eq!(f.http.hits(common::JAVA_21_URL), before, "the runtime was fetched twice");
-    assert!(sink.events().iter().any(|e| matches!(
-        e,
-        PrepareEvent::Planned { missing_files: 0, .. }
-    )));
+    assert!(sink
+        .events()
+        .iter()
+        .any(|e| matches!(e, PrepareEvent::Planned { missing_files: 0, .. })));
 }
 
 #[tokio::test]
 async fn a_platform_mojang_does_not_publish_for_says_so() {
     // An index that knows the platform but not this component.
     let stripped = common::runtime_index().replace(r#""java-runtime-delta""#, r#""unused""#);
-    let f = fixture_with(
-        serving().route(common::RUNTIME_INDEX_URL, HttpResponse::ok(stripped)),
-    );
+    let f = fixture_with(serving().route(common::RUNTIME_INDEX_URL, HttpResponse::ok(stripped)));
     let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
 
     let err = f
@@ -288,17 +286,18 @@ async fn preparing_an_instance_leaves_it_with_both_game_files_and_a_runtime() {
     let depot = f.tmp.path().join("depot");
     assert!(depot.join("versions/1.21.4/1.21.4.jar").is_file(), "game files");
     assert!(
-        depot.join(format!(
-            "runtimes/{}/java-runtime-delta/bin/java.exe",
-            std::fs::read_dir(depot.join("runtimes"))
-                .unwrap()
-                .flatten()
-                .next()
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-        ))
-        .is_file(),
+        depot
+            .join(format!(
+                "runtimes/{}/java-runtime-delta/bin/java.exe",
+                std::fs::read_dir(depot.join("runtimes"))
+                    .unwrap()
+                    .flatten()
+                    .next()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+            ))
+            .is_file(),
         "a runtime"
     );
 

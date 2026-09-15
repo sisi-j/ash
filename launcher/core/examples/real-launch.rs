@@ -19,9 +19,7 @@ use std::time::Duration;
 use ash_core::credentials::OsCredentialStore;
 use ash_core::http::{HttpPort, ReqwestHttp};
 use ash_core::process::{GameStatus, OsProcessPort};
-use ash_core::{
-    Ash, Cancel, Config, PrepareEvent, ProgressSink, SignInStatus, VersionKind,
-};
+use ash_core::{Ash, Cancel, Config, PrepareEvent, ProgressSink, SignInStatus, VersionKind};
 
 struct Printer;
 

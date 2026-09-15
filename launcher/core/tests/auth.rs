@@ -10,8 +10,8 @@
 use std::sync::Arc;
 
 use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
-use ash_core::process::FakeProcessPort;
 use ash_core::http::{FakeHttp, HttpResponse};
+use ash_core::process::FakeProcessPort;
 use ash_core::{Ash, AshError, Config, SignInStatus};
 
 const CLIENT_ID: &str = "d8cc6384-820e-4608-9a60-f05da43d3571";
@@ -65,7 +65,9 @@ fn entitlements(items: &str) -> HttpResponse {
 }
 
 fn owns_the_game() -> HttpResponse {
-    entitlements(r#"{"name":"product_minecraft","signature":"s"},{"name":"game_minecraft","signature":"s"}"#)
+    entitlements(
+        r#"{"name":"product_minecraft","signature":"s"},{"name":"game_minecraft","signature":"s"}"#,
+    )
 }
 
 fn profile_ok() -> HttpResponse {
@@ -202,10 +204,8 @@ async fn the_token_request_uses_the_device_code_grant_and_our_client_id() {
 
 #[tokio::test]
 async fn polling_waits_while_the_player_has_not_approved_yet() {
-    let http = happy_chain().route_sequence(
-        TOKEN_URL,
-        vec![token_pending(), token_pending(), token_success()],
-    );
+    let http = happy_chain()
+        .route_sequence(TOKEN_URL, vec![token_pending(), token_pending(), token_success()]);
     let f = fixture(http);
 
     f.ash.begin_sign_in().await.unwrap();
@@ -392,7 +392,8 @@ async fn a_dead_refresh_token_asks_for_a_fresh_sign_in() {
     let f = fixture(happy_chain());
     sign_in(&f).await.unwrap();
 
-    let rejected = happy_chain().route(TOKEN_URL, HttpResponse::json(400, r#"{"error":"invalid_grant"}"#));
+    let rejected =
+        happy_chain().route(TOKEN_URL, HttpResponse::json(400, r#"{"error":"invalid_grant"}"#));
     let dead = Ash::new(
         Config::rooted_at(f.ash.config().data_root.parent().unwrap()),
         rejected as Arc<dyn ash_core::http::HttpPort>,

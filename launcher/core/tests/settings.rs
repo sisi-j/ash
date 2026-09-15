@@ -14,8 +14,8 @@ use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::{
-    Ash, Cancel, Config, InstanceId, MachineOverrides, NullSink, Resolution,
-    DEFAULT_MEMORY_MB, VERSION_MANIFEST_URL,
+    Ash, Cancel, Config, InstanceId, MachineOverrides, NullSink, Resolution, DEFAULT_MEMORY_MB,
+    VERSION_MANIFEST_URL,
 };
 
 mod common;

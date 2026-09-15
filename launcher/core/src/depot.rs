@@ -86,20 +86,41 @@ pub struct Plan {
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum PrepareEvent {
     /// Reading version metadata and the asset index.
-    Resolving { version_id: String },
+    Resolving {
+        version_id: String,
+    },
     /// The plan is known. `already_present` files need no work.
-    Planned { total_files: usize, missing_files: usize, missing_bytes: u64, already_present: usize },
+    Planned {
+        total_files: usize,
+        missing_files: usize,
+        missing_bytes: u64,
+        already_present: usize,
+    },
     /// One file finished and verified.
-    Downloaded { path: String, bytes: u64, done_files: usize, done_bytes: u64 },
+    Downloaded {
+        path: String,
+        bytes: u64,
+        done_files: usize,
+        done_bytes: u64,
+    },
     /// Picking a partly-downloaded file back up rather than restarting it.
-    Resuming { path: String, from_bytes: u64 },
+    Resuming {
+        path: String,
+        from_bytes: u64,
+    },
     /// Moving on to the Java runtime. A second `Planned` follows for it, so
     /// the UI knows the counters it is about to see belong to a new phase.
-    Runtime { component: String },
+    Runtime {
+        component: String,
+    },
     /// A file failed its hash and is being fetched again.
-    Reverifying { path: String },
+    Reverifying {
+        path: String,
+    },
     Cancelled,
-    Done { version_id: String },
+    Done {
+        version_id: String,
+    },
 }
 
 /// Where progress goes. Tests record it; the adapter forwards it to the UI.
@@ -185,21 +206,18 @@ fn is_present(depot_root: &Path, artifact: &Artifact) -> bool {
 fn write_atomically(depot_root: &Path, relative: &str, bytes: &[u8]) -> Result<(), AshError> {
     let path = depot_root.join(relative);
     let parent = path.parent().expect("a depot path always has a parent");
-    fs::create_dir_all(parent).map_err(|e| AshError::Storage {
-        detail: format!("creating {}: {e}", parent.display()),
-    })?;
+    fs::create_dir_all(parent)
+        .map_err(|e| AshError::Storage { detail: format!("creating {}: {e}", parent.display()) })?;
 
     // Write beside the target and rename, so an interrupted write can never
     // leave a half-file that passes a size check on the next run.
     let temp = path.with_extension("part");
     {
-        let mut file = fs::File::create(&temp)
-            .map_err(AshError::writing("creating a temp file"))?;
-        file.write_all(bytes)
-            .map_err(AshError::writing("writing a temp file"))?;
+        let mut file =
+            fs::File::create(&temp).map_err(AshError::writing("creating a temp file"))?;
+        file.write_all(bytes).map_err(AshError::writing("writing a temp file"))?;
     }
-    fs::rename(&temp, &path)
-        .map_err(AshError::writing("finishing a download"))
+    fs::rename(&temp, &path).map_err(AshError::writing("finishing a download"))
 }
 
 // ---- fetching --------------------------------------------------------------
@@ -278,8 +296,7 @@ fn write_partial(part_path: &Path, bytes: &[u8], append: bool) -> Result<(), Ash
         .truncate(!append)
         .open(part_path)
         .map_err(AshError::writing("opening a partial file"))?;
-    file.write_all(bytes)
-        .map_err(AshError::writing("writing a partial file"))
+    file.write_all(bytes).map_err(AshError::writing("writing a partial file"))
 }
 
 /// Rename the verified partial into place. Only a file that has passed both

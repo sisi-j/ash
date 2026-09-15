@@ -91,7 +91,9 @@ pub(crate) struct Pending {
 pub(crate) enum Poll {
     /// Still waiting. Carries the interval to wait before asking again,
     /// which the service can raise via `slow_down`.
-    Waiting { interval_secs: u64 },
+    Waiting {
+        interval_secs: u64,
+    },
     Complete(Box<Session>),
 }
 
@@ -359,10 +361,7 @@ async fn xbox_live(
 
 /// Hop 4. A 401 here carries an `XErr` code, and those map to real,
 /// user-facing situations - several of which no retry will fix.
-async fn xsts(
-    http: &dyn HttpPort,
-    xbl_token: &str,
-) -> Result<(String, String, String), AshError> {
+async fn xsts(http: &dyn HttpPort, xbl_token: &str) -> Result<(String, String, String), AshError> {
     let body = serde_json::json!({
         "Properties": { "SandboxId": "RETAIL", "UserTokens": [xbl_token] },
         "RelyingParty": "rp://api.minecraftservices.com/",
@@ -523,8 +522,7 @@ mod tests {
     }
 
     fn base64url_encode(bytes: &[u8]) -> String {
-        const ALPHABET: &[u8] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut out = String::new();
         let mut buffer: u32 = 0;
         let mut bits: u32 = 0;

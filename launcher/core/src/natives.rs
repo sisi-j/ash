@@ -52,9 +52,11 @@ fn exclusions(library: &Library) -> Vec<String> {
 }
 
 fn unpack(jar: &Path, target: &Path, exclude: &[String]) -> Result<(), AshError> {
-    let file = fs::File::open(jar).map_err(AshError::writing("opening a native library archive"))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| AshError::Storage { detail: format!("reading a native library archive: {e}") })?;
+    let file =
+        fs::File::open(jar).map_err(AshError::writing("opening a native library archive"))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| AshError::Storage {
+        detail: format!("reading a native library archive: {e}"),
+    })?;
 
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(|e| AshError::Storage {
@@ -89,7 +91,8 @@ fn unpack(jar: &Path, target: &Path, exclude: &[String]) -> Result<(), AshError>
         }
 
         if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent).map_err(AshError::writing("creating a natives directory"))?;
+            fs::create_dir_all(parent)
+                .map_err(AshError::writing("creating a natives directory"))?;
         }
 
         let mut bytes = Vec::with_capacity(entry.size() as usize);

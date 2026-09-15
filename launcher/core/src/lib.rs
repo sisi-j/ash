@@ -72,8 +72,12 @@ pub struct PendingSignIn {
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum SignInStatus {
     /// Ask again in this many seconds. The service can raise the interval.
-    Waiting { interval_secs: u64 },
-    Complete { account: Account },
+    Waiting {
+        interval_secs: u64,
+    },
+    Complete {
+        account: Account,
+    },
 }
 
 fn now_ms() -> u64 {
@@ -335,8 +339,7 @@ impl Ash {
         // An instance with every game file and no JRE is not prepared. The
         // runtime is part of what it takes to launch, so it is part of this -
         // and `Done` only fires once both are in place.
-        let runtime =
-            self.provision_runtime(plan.java_component.as_deref(), sink, cancel).await?;
+        let runtime = self.provision_runtime(plan.java_component.as_deref(), sink, cancel).await?;
 
         sink.emit(PrepareEvent::Done { version_id: plan.version_id.clone() });
         self.diagnostics.info(
@@ -545,9 +548,9 @@ impl Ash {
     async fn version_source(&self, id: &InstanceId) -> Result<depot::VersionSource, AshError> {
         let instance = self.instance(id)?;
         let catalogue = self.catalogue().await?;
-        let entry = catalogue.entry(&instance.version_id).ok_or_else(|| {
-            AshError::UnknownVersion { version_id: instance.version_id.clone() }
-        })?;
+        let entry = catalogue
+            .entry(&instance.version_id)
+            .ok_or_else(|| AshError::UnknownVersion { version_id: instance.version_id.clone() })?;
         Ok(depot::VersionSource {
             id: entry.id.clone(),
             url: entry.url.clone(),

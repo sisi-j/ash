@@ -38,9 +38,7 @@ fn profile(player: (&str, &str), skin: Option<&str>) -> HttpResponse {
 }
 
 fn token(refresh: &str) -> HttpResponse {
-    HttpResponse::ok(format!(
-        r#"{{"access_token":"MS-ACCESS","refresh_token":"{refresh}"}}"#
-    ))
+    HttpResponse::ok(format!(r#"{{"access_token":"MS-ACCESS","refresh_token":"{refresh}"}}"#))
 }
 
 /// A version with no libraries and no assets: these tests are about accounts,
@@ -84,10 +82,7 @@ fn serving() -> Arc<FakeHttp> {
     ))
     .route_sequence(
         common::MC_PROFILE_URL,
-        vec![
-            profile(ALICE, Some("https://textures/alice")),
-            profile(BOB, None),
-        ],
+        vec![profile(ALICE, Some("https://textures/alice")), profile(BOB, None)],
     )
     .route_sequence(common::TOKEN_URL, vec![token(ALICE_REFRESH), token(BOB_REFRESH)])
 }

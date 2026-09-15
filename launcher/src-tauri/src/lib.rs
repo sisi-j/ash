@@ -391,7 +391,10 @@ async fn reveal_log(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
 /// Opening a file manager is an OS concern, so it lives here rather than in
 /// ash-core, which only says *which* directory.
 #[tauri::command]
-async fn reveal_game_directory(state: tauri::State<'_, AppState>, id: InstanceId) -> Result<(), UiError> {
+async fn reveal_game_directory(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<(), UiError> {
     let path = state.ash.game_directory(&id);
     tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|_| UiError {
         kind: "reveal_failed",
@@ -417,7 +420,9 @@ fn ash_state() -> Ash {
 fn dirs_next_data_dir() -> std::path::PathBuf {
     std::env::var_os("LOCALAPPDATA")
         .map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")))
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share"))
+        })
         .unwrap_or_else(std::env::temp_dir)
 }
 

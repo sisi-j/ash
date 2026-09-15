@@ -136,9 +136,7 @@ fn attribute<'a>(event: &'a str, name: &str) -> Option<&'a str> {
 
 /// The text of `<tag>`, with or without the `log4j:` prefix.
 fn element<'a>(event: &'a str, tag: &str) -> Option<&'a str> {
-    let start = ["<log4j:", "<"]
-        .iter()
-        .find_map(|prefix| event.find(&format!("{prefix}{tag}")))?;
+    let start = ["<log4j:", "<"].iter().find_map(|prefix| event.find(&format!("{prefix}{tag}")))?;
     let after = &event[start..];
     let body = &after[after.find('>')? + 1..];
     let end = body.find("</")?;

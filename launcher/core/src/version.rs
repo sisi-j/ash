@@ -546,10 +546,8 @@ mod tests {
         // Versions before the Apple Silicon split publish only
         // `natives-macos`. Taking nothing would leave the game with no
         // natives at all; the x64 jar under emulation is the better answer.
-        let libraries = vec![library(
-            "org.lwjgl:lwjgl:3.2.2:natives-macos",
-            vec![rule("allow", Some("osx"))],
-        )];
+        let libraries =
+            vec![library("org.lwjgl:lwjgl:3.2.2:natives-macos", vec![rule("allow", Some("osx"))])];
 
         let chosen = select_libraries(&libraries, Os::MacOs);
 

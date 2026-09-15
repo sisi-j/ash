@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use ash_core::credentials::InMemoryCredentialStore;
-use ash_core::process::FakeProcessPort;
 use ash_core::http::{FakeHttp, HttpResponse};
+use ash_core::process::FakeProcessPort;
 use ash_core::{Ash, AshError, Config, VERSION_MANIFEST_URL};
 
 const MANIFEST: &str = include_str!("fixtures/version_manifest_v2.json");

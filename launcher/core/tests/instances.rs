@@ -6,8 +6,8 @@
 use std::fs;
 
 use ash_core::credentials::InMemoryCredentialStore;
-use ash_core::process::FakeProcessPort;
 use ash_core::http::FakeHttp;
+use ash_core::process::FakeProcessPort;
 use ash_core::{Ash, Config};
 
 fn ash() -> (Ash, tempfile::TempDir) {

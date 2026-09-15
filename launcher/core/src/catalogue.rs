@@ -160,10 +160,7 @@ fn mark_first_class(versions: &mut [CatalogueEntry]) {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or_default()
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or_default()
 }
 
 fn parse(body: &[u8]) -> Result<Catalogue, AshError> {
@@ -200,10 +197,7 @@ fn parse(body: &[u8]) -> Result<Catalogue, AshError> {
 /// If the network fails but a cache exists, the cached catalogue is returned
 /// with `source: Cache` rather than an error - a player who is offline should
 /// still see their versions. With no cache, the failure propagates.
-pub(crate) async fn refresh(
-    http: &dyn HttpPort,
-    depot_root: &Path,
-) -> Result<Catalogue, AshError> {
+pub(crate) async fn refresh(http: &dyn HttpPort, depot_root: &Path) -> Result<Catalogue, AshError> {
     let fetched = match http.get(VERSION_MANIFEST_URL).await {
         Ok(response) if response.is_success() => parse(&response.body),
         Ok(response) => Err(AshError::UnexpectedStatus {

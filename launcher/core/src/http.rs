@@ -50,10 +50,7 @@ impl HttpRequest {
         Self {
             method: Method::Post,
             url: url.into(),
-            headers: vec![(
-                "Content-Type".into(),
-                "application/x-www-form-urlencoded".into(),
-            )],
+            headers: vec![("Content-Type".into(), "application/x-www-form-urlencoded".into())],
             body: Some(body.into_bytes()),
         }
     }
@@ -169,10 +166,10 @@ impl HttpPort for ReqwestHttp {
             builder = builder.body(body);
         }
 
-        let response = builder.send().await.map_err(|e| AshError::Transport {
-            url: request.url.clone(),
-            detail: e.to_string(),
-        })?;
+        let response = builder
+            .send()
+            .await
+            .map_err(|e| AshError::Transport { url: request.url.clone(), detail: e.to_string() })?;
         let status = response.status().as_u16();
         let body = response
             .bytes()
@@ -296,10 +293,7 @@ impl HttpPort for FakeHttp {
             patterns.iter().any(|p| p.is_empty() || same_endpoint(&url, p))
         };
         if unreachable {
-            return Err(AshError::Transport {
-                url,
-                detail: "no route to host".into(),
-            });
+            return Err(AshError::Transport { url, detail: "no route to host".into() });
         }
 
         // Take the routes lock exactly once, and drop it before deciding what
@@ -313,7 +307,11 @@ impl HttpPort for FakeHttp {
                 Some(url.clone())
             } else {
                 let base = strip_query(&url);
-                if routes.contains_key(&base) { Some(base) } else { None }
+                if routes.contains_key(&base) {
+                    Some(base)
+                } else {
+                    None
+                }
             };
 
             match key {

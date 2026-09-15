@@ -18,8 +18,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ash_core::credentials::InMemoryCredentialStore;
-use ash_core::process::FakeProcessPort;
 use ash_core::http::{HttpPort, ReqwestHttp};
+use ash_core::process::FakeProcessPort;
 use ash_core::{Ash, AshError, Config, SignInStatus};
 
 #[tokio::main]

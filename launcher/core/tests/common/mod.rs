@@ -15,8 +15,10 @@ use sha1::{Digest, Sha1};
 pub const RUNTIME_INDEX_URL: &str =
     "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
-pub const LEGACY_MANIFEST_URL: &str = "https://piston-meta.mojang.com/v1/packages/jre8/manifest.json";
-pub const MODERN_MANIFEST_URL: &str = "https://piston-meta.mojang.com/v1/packages/jre21/manifest.json";
+pub const LEGACY_MANIFEST_URL: &str =
+    "https://piston-meta.mojang.com/v1/packages/jre8/manifest.json";
+pub const MODERN_MANIFEST_URL: &str =
+    "https://piston-meta.mojang.com/v1/packages/jre21/manifest.json";
 
 pub const JAVA_8_BIN: &[u8] = b"pretend this is a java 8 binary";
 pub const JAVA_21_BIN: &[u8] = b"pretend this is a java 21 binary";

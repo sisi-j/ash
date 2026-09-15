@@ -110,7 +110,6 @@ pub enum AshError {
     InvalidSetting { detail: String },
 
     // ---- launching ----
-
     #[error("ash cannot build a command line for {version_id}: {detail}")]
     LaunchUnsupported { version_id: String, detail: String },
 
@@ -208,9 +207,7 @@ impl AshError {
             }
             // Worth its own message: "check disk space and permissions" is
             // a guess, and this is the one case where ash knows.
-            AshError::OutOfSpace => {
-                "The disk is full. Free some space and try again.".into()
-            }
+            AshError::OutOfSpace => "The disk is full. Free some space and try again.".into(),
             AshError::Credential { .. } => {
                 "ash could not use the Windows credential store. Your sign-in was not saved.".into()
             }
@@ -239,7 +236,8 @@ impl AshError {
                 "Mojang no longer publishes that version, so ash can't prepare it.".into()
             }
             AshError::RuntimeUnavailable { .. } => {
-                "Mojang doesn't publish a Java runtime this version can use on your platform.".into()
+                "Mojang doesn't publish a Java runtime this version can use on your platform."
+                    .into()
             }
             AshError::NoSignInPending => "There is no sign-in to complete. Start again.".into(),
             AshError::SignInExpired => {
@@ -257,9 +255,7 @@ impl AshError {
                  in again."
                     .into()
             }
-            AshError::XboxBanned => {
-                "This Xbox account is banned and can't be used to play.".into()
-            }
+            AshError::XboxBanned => "This Xbox account is banned and can't be used to play.".into(),
             AshError::XboxRegionUnavailable => {
                 "Xbox Live isn't available in this account's country, so it can't be used to play."
                     .into()
@@ -281,9 +277,7 @@ impl AshError {
                 "ash isn't yet approved for Mojang's game service API, so sign-in can't complete."
                     .into()
             }
-            AshError::NotEntitled => {
-                "This account doesn't own Minecraft: Java Edition.".into()
-            }
+            AshError::NotEntitled => "This account doesn't own Minecraft: Java Edition.".into(),
             AshError::ProfileUnavailable => {
                 "This account has no Minecraft profile yet. Sign into the official Minecraft \
                  launcher once to create one, then come back."
@@ -295,9 +289,7 @@ impl AshError {
             // Not "your session expired": nothing expired, the account is
             // simply gone, and telling a player to sign in again would send
             // them to fix something that is not broken.
-            AshError::AccountNotFound { .. } => {
-                "That account is no longer on this machine.".into()
-            }
+            AshError::AccountNotFound { .. } => "That account is no longer on this machine.".into(),
             // The detail is the whole message here: it names the field and
             // the range, which is what the player needs to fix it, and it
             // contains nothing they did not just type.
@@ -368,7 +360,8 @@ mod tests {
 
     #[test]
     fn any_other_write_failure_stays_generic() {
-        let err = AshError::writing("writing a temp file")(Error::from(ErrorKind::PermissionDenied));
+        let err =
+            AshError::writing("writing a temp file")(Error::from(ErrorKind::PermissionDenied));
         assert_eq!(err.kind(), "storage");
     }
 
@@ -387,7 +380,10 @@ mod tests {
                 url: "https://api.minecraftservices.com/x".into(),
                 detail: "tls".into(),
             },
-            AshError::UnexpectedStatus { url: "https://piston-meta.mojang.com".into(), status: 500 },
+            AshError::UnexpectedStatus {
+                url: "https://piston-meta.mojang.com".into(),
+                status: 500,
+            },
             AshError::Malformed { url: "https://x".into(), detail: "expected value".into() },
             AshError::Storage { detail: "C:/Users/someone/secret: denied".into() },
             AshError::LaunchFailed { detail: "C:/Users/someone/java.exe".into() },

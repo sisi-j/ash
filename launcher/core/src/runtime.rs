@@ -196,7 +196,8 @@ pub(crate) async fn provision<S: ProgressSink + ?Sized>(
                 }
             }
             "directory" => {
-                fs::create_dir_all(depot_root.join(&path)).map_err(AshError::writing("creating a runtime directory"))?;
+                fs::create_dir_all(depot_root.join(&path))
+                    .map_err(AshError::writing("creating a runtime directory"))?;
             }
             "link" => {
                 if let Some(target) = &entry.target {
@@ -248,20 +249,17 @@ fn find_java(depot_root: &Path, root: &str, listing: &RuntimeFiles) -> Result<Pa
     let mut candidates: Vec<&String> = listing
         .files
         .keys()
-        .filter(|relative| {
-            relative.ends_with("bin/java.exe") || relative.ends_with("bin/java")
-        })
+        .filter(|relative| relative.ends_with("bin/java.exe") || relative.ends_with("bin/java"))
         .collect();
     // Shortest path wins, so a nested duplicate never shadows the real one.
     candidates.sort_by_key(|relative| relative.len());
 
-    candidates
-        .first()
-        .map(|relative| depot_root.join(format!("{root}/{relative}")))
-        .ok_or_else(|| AshError::Malformed {
+    candidates.first().map(|relative| depot_root.join(format!("{root}/{relative}"))).ok_or_else(
+        || AshError::Malformed {
             url: RUNTIME_MANIFEST_URL.to_owned(),
             detail: "the runtime manifest lists no java executable".into(),
-        })
+        },
+    )
 }
 
 #[cfg(unix)]
@@ -290,8 +288,7 @@ fn create_link(path: &Path, target: &str) -> Result<(), AshError> {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    std::os::unix::fs::symlink(target, path)
-        .map_err(AshError::writing("creating a runtime link"))
+    std::os::unix::fs::symlink(target, path).map_err(AshError::writing("creating a runtime link"))
 }
 
 #[cfg(not(unix))]
