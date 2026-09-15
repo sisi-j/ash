@@ -1,0 +1,10 @@
+# Revisions that changed formatting only, and should be skipped by blame.
+#
+# Git does not pick this file up on its own. Once per clone:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub reads it without any configuration.
+
+# Adopt rustfmt. 28 files reformatted, no behaviour changed.
+5dbee4c138988cbc22b5b71e7966e3b5c985e2b5
