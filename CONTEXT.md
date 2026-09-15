@@ -60,8 +60,12 @@ _Avoid_: .minecraft, instance folder
 One toggleable ash capability, such as toggle sprint or the custom crosshair. Presentation layer only.
 _Avoid_: mod, module, tweak, hack
 
+**Load report**:
+The record the client writes saying which features loaded and which degraded. Written by the client, read by the launcher, never the other way.
+_Avoid_: health check, status file, diagnostics
+
 **Bundled mod**:
-A third-party mod ash ships unmodified inside an instance — currently Sodium and Lithium.
+A third-party mod ash ships unmodified inside an instance — currently Fabric API on modern targets and Legacy Fabric API on 1.8.9.
 _Avoid_: dependency, vendored mod
 
 **Third-party mod**:
