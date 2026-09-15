@@ -79,6 +79,21 @@ impl Os {
 #[derive(Debug, Clone, Deserialize)]
 pub struct VersionMetadata {
     pub id: String,
+    /// The version target this document layers on top of, if any.
+    ///
+    /// A loader ships a document carrying only what it adds; everything the
+    /// game actually needs to start comes from the parent. Resolving this
+    /// is [`crate::profile::resolve`], and the merge it performs is
+    /// specified nowhere - see that module.
+    #[serde(rename = "inheritsFrom")]
+    pub inherits_from: Option<String>,
+    /// Which version's client jar to use, when it is not this one's.
+    ///
+    /// Mojang's field for exactly the case a loader creates: the merged
+    /// document's `id` names a profile, and there is no jar behind that
+    /// name - Fabric's own installer deletes the file it creates. Without
+    /// this the classpath would end at a path that does not exist.
+    pub jar: Option<String>,
     #[serde(rename = "mainClass")]
     pub main_class: Option<String>,
     #[serde(rename = "assetIndex")]
@@ -244,6 +259,19 @@ pub struct OsRule {
     pub arch: Option<String>,
 }
 
+impl VersionMetadata {
+    /// Which version's client jar this document runs.
+    ///
+    /// Normally its own id. After a loader merge it is the parent's, because
+    /// the merged `id` names a profile and there is no jar behind that name -
+    /// Fabric's own installer deletes the file it creates. Anything that
+    /// builds a path to the client jar has to ask this rather than use `id`,
+    /// or a modded classpath ends at a file that does not exist.
+    pub fn client_jar_id(&self) -> &str {
+        self.jar.as_deref().unwrap_or(&self.id)
+    }
+}
+
 // ---- rule evaluation -------------------------------------------------------
 
 impl Rule {
@@ -297,10 +325,33 @@ impl Library {
         }
     }
 
+    /// `group:artifact`, with the version and any classifier dropped.
+    ///
+    /// The key the `inheritsFrom` merge replaces on. The version is
+    /// deliberately not part of it: a loader replaces a vanilla library by
+    /// naming the same `group:artifact` at a different version, and a key
+    /// that included the version would keep both and put two incompatible
+    /// copies of the same library on one classpath.
+    pub fn group_artifact(&self) -> &str {
+        match self.name.match_indices(':').nth(1) {
+            Some((at, _)) => &self.name[..at],
+            None => &self.name,
+        }
+    }
+
+    /// The Maven classifier, native or otherwise.
+    ///
+    /// Part of the merge key alongside [`Library::group_artifact`], so that
+    /// a jar and its natives - which share a coordinate and differ only
+    /// here - are not taken for two versions of one library.
+    pub fn classifier(&self) -> Option<&str> {
+        self.name.split(':').nth(3)
+    }
+
     /// The `natives-*` classifier from the Maven coordinate, if this is a
     /// native jar at all.
     pub fn native_classifier(&self) -> Option<&str> {
-        self.name.split(':').nth(3).filter(|c| c.starts_with("natives-"))
+        self.classifier().filter(|c| c.starts_with("natives-"))
     }
 
     // There is deliberately no `artifact_for(os)` here. Rules alone are not

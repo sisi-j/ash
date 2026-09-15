@@ -32,25 +32,27 @@ export type Catalogue = {
 export type InstanceId = string;
 
 /**
- * Every loader ash can create an instance with, in the order to offer them.
+ * Mirrors `ash_core::Loader`: the mod-loading layer an instance runs under.
  *
- * Mirrors `ash_core::Loader`. Vanilla is a loader rather than the absence of
- * one, so every instance has exactly one and nothing here handles "no loader"
- * as its own case. Fabric and Legacy Fabric join the list when the launcher
- * can actually prepare them - offering a loader ash cannot install would be
- * offering an instance that can never launch.
+ * Vanilla is a loader rather than the absence of one, so every instance has
+ * exactly one and nothing here handles "no loader" as its own case.
  *
- * The list is the source, and `Loader` is read off it, so the two cannot
- * disagree: a loader added here is one the picker offers and one
- * `LOADER_LABELS` stops compiling until it has a name.
+ * Which of these a given version target can actually run is not decided
+ * here - ash pins the loaders it has tested per target and `loadersFor`
+ * answers it, so a loader ash cannot install is never offered.
  */
-export const LOADERS = ["vanilla"] as const;
+export type Loader = "vanilla" | "fabric";
 
-export type Loader = (typeof LOADERS)[number];
-
-/** What to call a loader in front of a player, never a version number. */
+/**
+ * What to call a loader in front of a player, never a version number.
+ *
+ * A `Record` on purpose: adding a loader to the union above stops this
+ * compiling until it has been given a name, so the picker can never render
+ * a blank chip.
+ */
 export const LOADER_LABELS: Record<Loader, string> = {
   vanilla: "Vanilla",
+  fabric: "Fabric",
 };
 
 export type Instance = {
@@ -229,6 +231,9 @@ export const api = {
   defaultMemoryMb: () => invoke<number>("default_memory_mb"),
 
   instances: () => invoke<Instance[]>("instances"),
+  /** The loaders this version target can run, vanilla always among them. */
+  loadersFor: (versionId: string) =>
+    invoke<Loader[]>("loaders_for", { versionId }),
   createInstance: (name: string, versionId: string, loader: Loader) =>
     invoke<Instance>("create_instance", { name, versionId, loader }),
   renameInstance: (id: InstanceId, name: string) =>

@@ -6,7 +6,12 @@
 //! `allow-list.rs` is: it needs a Microsoft account and a human at a
 //! browser.
 //!
-//!     cargo run -p ash-core --example real-launch -- <client-id> [version]
+//!     cargo run -p ash-core --example real-launch -- <client-id> [version] [loader]
+//!
+//! `loader` is `vanilla` (the default) or `fabric`. A modded run is the only
+//! way to see the acceptance criteria that no fixture can stand in for: the
+//! game reaching its main menu with the loader running, and Fabric Loader and
+//! Fabric API appearing in the game's own mod list.
 //!
 //! It uses ash's real data directory and the real OS credential store, so
 //! this is the product rather than a simulation of it, and a sign-in here is
@@ -52,10 +57,20 @@ impl ProgressSink for Printer {
 async fn main() {
     let mut args = std::env::args().skip(1);
     let Some(client_id) = args.next() else {
-        eprintln!("usage: cargo run -p ash-core --example real-launch -- <client-id> [version]");
+        eprintln!(
+            "usage: cargo run -p ash-core --example real-launch -- <client-id> [version] [loader]"
+        );
         std::process::exit(2);
     };
     let wanted = args.next();
+    let loader = match args.next().as_deref() {
+        None | Some("vanilla") => Loader::Vanilla,
+        Some("fabric") => Loader::Fabric,
+        Some(other) => {
+            eprintln!("unknown loader {other}; expected vanilla or fabric");
+            std::process::exit(2);
+        }
+    };
 
     let ash = Ash::new(
         Config::rooted_at(data_dir()),
@@ -102,15 +117,25 @@ async fn main() {
     println!("version {version}");
 
     // ---- an instance ----
+    let make = || match ash.create_instance("real-launch", &version, loader) {
+        Ok(instance) => instance,
+        Err(e) => {
+            println!("FAILED ({}): {}", e.kind(), e.user_message());
+            std::process::exit(1);
+        }
+    };
     let instances = ash.instances().expect("instances");
     let instance = match instances.into_iter().find(|i| i.name == "real-launch") {
-        Some(existing) if existing.version_id == version => existing,
+        // The loader is fixed at creation, so switching one means a new
+        // instance rather than an edit.
+        Some(existing) if existing.version_id == version && existing.loader == loader => existing,
         Some(existing) => {
             ash.delete_instance(&existing.id).expect("replacing the old one");
-            ash.create_instance("real-launch", &version, Loader::Vanilla).expect("instance")
+            make()
         }
-        None => ash.create_instance("real-launch", &version, Loader::Vanilla).expect("instance"),
+        None => make(),
     };
+    println!("instance {} ({:?})", instance.id, instance.loader);
 
     // ---- prepare and launch ----
     println!("preparing (this is the slow part on a cold depot)");

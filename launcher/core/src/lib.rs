@@ -24,6 +24,7 @@ mod launch;
 mod loader;
 mod natives;
 mod overrides;
+mod profile;
 mod runtime;
 mod version;
 
@@ -40,7 +41,7 @@ pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use diagnostics::Diagnostics;
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
-pub use loader::Loader;
+pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary};
 pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
@@ -266,7 +267,24 @@ impl Ash {
         version_id: &str,
         loader: Loader,
     ) -> Result<Instance, AshError> {
+        // Refused here rather than at the first launch. ash pins the loaders
+        // it has tested per version target, and an instance for a pairing it
+        // has no pin for is one that could never start - which is a thing to
+        // say while the player is still choosing, not after they have named
+        // it and put worlds in it.
+        if !loader::is_supported(self.config.loaders, loader, version_id) {
+            return Err(AshError::LoaderUnavailable { loader, version_id: version_id.to_owned() });
+        }
         instance::create(&self.config.instances_root, name, version_id, loader)
+    }
+
+    /// The loaders a version target can run, for a UI that has to offer them.
+    ///
+    /// Served rather than duplicated in the UI: a hardcoded copy would drift
+    /// from the pins, and the first symptom would be a player creating an
+    /// instance that can never launch.
+    pub fn loaders_for(&self, version_id: &str) -> Vec<Loader> {
+        loader::loaders_for(self.config.loaders, version_id)
     }
 
     /// Every instance, most recently played first.
@@ -310,8 +328,8 @@ impl Ash {
 
     /// Work out what an instance still needs, without downloading anything.
     pub async fn plan_instance(&self, id: &InstanceId) -> Result<Plan, AshError> {
-        let source = self.version_source(id).await?;
-        depot::plan(self.http.as_ref(), &self.config.depot_root, &source, Os::current()).await
+        let (source, pin) = self.preparation_inputs(id).await?;
+        depot::plan(self.http.as_ref(), &self.config.depot_root, &source, pin, Os::current()).await
     }
 
     /// Download everything the instance needs into the depot, verified.
@@ -339,16 +357,32 @@ impl Ash {
         sink: &S,
         cancel: &Cancel,
     ) -> Result<(Plan, Runtime), AshError> {
-        let source = self.version_source(id).await?;
+        let (source, pin) = self.preparation_inputs(id).await?;
         let plan = depot::prepare(
             self.http.as_ref(),
             &self.config.depot_root,
             &source,
+            pin,
             Os::current(),
             sink,
             cancel,
         )
         .await?;
+
+        // The depot has the bundled mods, verified and shared. The loader
+        // only ever looks in the instance's own mods directory, so being
+        // prepared means they are in both places.
+        if let Some(pin) = pin {
+            for bundled in pin.bundled_mods {
+                instance::install_bundled_mod(
+                    &self.config.instances_root,
+                    id,
+                    &self.config.depot_root.join(bundled.depot_path()?),
+                    bundled.artifact()?,
+                    &bundled.file_name()?,
+                )?;
+            }
+        }
 
         // An instance with every game file and no JRE is not prepared. The
         // runtime is part of what it takes to launch, so it is part of this -
@@ -559,16 +593,27 @@ impl Ash {
     ///
     /// Served from the cached catalogue, so preparing an already-known
     /// version does not require Mojang to be reachable to get started.
-    async fn version_source(&self, id: &InstanceId) -> Result<depot::VersionSource, AshError> {
+    async fn preparation_inputs(
+        &self,
+        id: &InstanceId,
+    ) -> Result<(depot::VersionSource, Option<&'static LoaderPin>), AshError> {
         let instance = self.instance(id)?;
         let catalogue = self.catalogue().await?;
         let entry = catalogue
             .entry(&instance.version_id)
             .ok_or_else(|| AshError::UnknownVersion { version_id: instance.version_id.clone() })?;
-        Ok(depot::VersionSource {
-            id: entry.id.clone(),
-            url: entry.url.clone(),
-            sha1: entry.sha1.clone(),
-        })
+
+        // Both come from the one instance read. They always travel together
+        // and are always derived from the same two fields, so splitting them
+        // into two calls would mean reading the instance twice to learn the
+        // same thing.
+        Ok((
+            depot::VersionSource {
+                id: entry.id.clone(),
+                url: entry.url.clone(),
+                sha1: entry.sha1.clone(),
+            },
+            loader::pin_for(self.config.loaders, instance.loader, &instance.version_id),
+        ))
     }
 }

@@ -121,8 +121,12 @@ fn classpath(context: &LaunchContext) -> Result<Vec<PathBuf>, AshError> {
         entries.push(context.depot_root.join(format!("libraries/{relative}")));
     }
 
-    entries
-        .push(context.depot_root.join(format!("versions/{id}/{id}.jar", id = context.metadata.id)));
+    // The client jar last, and found through `client_jar_id` rather than
+    // `id`. After a loader merge the id names a profile with no jar behind
+    // it, so using it here would end the classpath at a path that does not
+    // exist.
+    let jar = context.metadata.client_jar_id();
+    entries.push(context.depot_root.join(format!("versions/{jar}/{jar}.jar")));
 
     Ok(entries)
 }

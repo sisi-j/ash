@@ -46,6 +46,10 @@ _Avoid_: version range, supported version, MC version
 The mod-loading layer an instance runs under: vanilla, Fabric, or Legacy Fabric. Vanilla is a loader rather than the absence of one, so every instance has exactly one and nothing downstream needs a "no loader" case. Fabric and Legacy Fabric run the same Fabric Loader artifact; what differs is the intermediary mappings and the API around it.
 _Avoid_: Fabric (ambiguous — Loader, API and Loom are three different things), modloader, Legacy Fabric Loader (there is no such artifact), no loader (vanilla is one)
 
+**Version document**:
+The JSON that says what a build is made of - its libraries, arguments, main class and client jar. Mojang publishes one per version target. A loader publishes a **loader profile**: a version document carrying only what the loader adds, which names the version target it inherits from and is merged onto it before anything is prepared or launched.
+_Avoid_: profile (unqualified - it means an instance or an ash account), manifest (that is Mojang's index of every version), version JSON
+
 **Depot**:
 The single content-addressed pool of downloaded jars, libraries and assets that every instance draws from.
 _Avoid_: store (reserved for the cosmetics storefront), cache, library folder

@@ -148,6 +148,14 @@ async fn create_instance(
 }
 
 #[tauri::command]
+async fn loaders_for(
+    state: tauri::State<'_, AppState>,
+    version_id: String,
+) -> Result<Vec<Loader>, UiError> {
+    Ok(state.ash.loaders_for(&version_id))
+}
+
+#[tauri::command]
 async fn instances(state: tauri::State<'_, AppState>) -> Result<Vec<Instance>, UiError> {
     state.ash.instances().map_err(UiError::from)
 }
@@ -443,6 +451,7 @@ pub fn run() {
             remove_account,
             ensure_session,
             create_instance,
+            loaders_for,
             instances,
             rename_instance,
             preview_deletion,

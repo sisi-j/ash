@@ -6,8 +6,10 @@
 //! ```text
 //! depot/
 //! ├── meta/version_manifest_v2.json
+//! ├── meta/fabric-loader-<version>.json  the loader's own metadata, pinned
 //! ├── versions/<id>/<id>.json
 //! ├── versions/<id>/<id>.jar
+//! ├── versions/fabric-loader-<v>-<id>/…  a loader profile, inheriting from <id>
 //! ├── versions/<id>/natives/          unpacked, for versions that need it
 //! ├── libraries/<maven path>.jar
 //! ├── runtimes/<platform>/<component> the JRE ash downloaded
@@ -17,7 +19,9 @@
 //! ```
 //!
 //! The depot is a cache, never a redistribution point: every byte comes from
-//! Mojang's own manifest and CDN, which the EULA requires.
+//! Mojang's own manifest and CDN, which the EULA requires - or, for a loader,
+//! from its own Maven. ash distributes a loader and mods and assembles them
+//! on the player's machine; it never distributes a modified game jar.
 
 use std::fs;
 use std::io::Write;
@@ -31,8 +35,10 @@ use sha1::{Digest, Sha1};
 
 use crate::error::AshError;
 use crate::http::{HttpPort, HttpRequest, HttpResponse};
+use crate::loader::LoaderPin;
 use crate::natives;
-use crate::version::{self, Os};
+use crate::profile;
+use crate::version::{self, Os, VersionMetadata};
 
 /// How many downloads run at once.
 ///
@@ -169,6 +175,15 @@ fn asset_index_path(id: &str) -> String {
 
 fn library_path(relative: &str) -> String {
     format!("libraries/{relative}")
+}
+
+/// Where a loader's own metadata is cached.
+///
+/// Keyed by loader version rather than by version target: one loader version
+/// serves every target ash pins it for, and the document is the same bytes
+/// for all of them.
+fn loader_document_path(pin: &LoaderPin) -> String {
+    format!("meta/fabric-loader-{}.json", pin.loader_version)
 }
 
 /// Where Mojang's own launcher keeps log4j configurations, so a depot stays
@@ -363,26 +378,49 @@ pub(crate) async fn plan(
     http: &dyn HttpPort,
     depot_root: &Path,
     source: &VersionSource,
+    pin: Option<&LoaderPin>,
     os: Os,
 ) -> Result<Plan, AshError> {
     let (version_id, version_url) = (source.id.as_str(), source.url.as_str());
     let metadata_bytes = resolve_metadata(http, depot_root, source).await?;
-    let metadata = version::parse(version_url, &metadata_bytes)?;
+    let parent = version::parse(version_url, &metadata_bytes)?;
 
     // The manifest and the metadata disagreeing about which version this is
     // means one of them is not what we asked for.
-    if metadata.id != version_id {
+    if parent.id != version_id {
         return Err(AshError::UnknownVersion { version_id: version_id.to_owned() });
     }
 
     let mut artifacts: Vec<Artifact> = Vec::new();
+
+    // A loader contributes a document of its own, which ash writes as a
+    // child of the version target and merges here. Everything below this
+    // point works on the merged result and never asks which half a library
+    // came from - that is the point of doing the merge at all.
+    let metadata = match pin {
+        None => parent,
+        Some(pin) => {
+            for bundled in pin.bundled_mods {
+                artifacts.push(Artifact {
+                    url: bundled.url()?,
+                    sha1: bundled.sha1.to_owned(),
+                    size: bundled.size,
+                    path: bundled.depot_path()?,
+                });
+            }
+            let child = loader_profile(http, depot_root, pin, version_id).await?;
+            profile::merge(&parent, &child)
+        }
+    };
 
     if let Some(client) = &metadata.downloads.client {
         artifacts.push(Artifact {
             url: client.url.clone(),
             sha1: client.sha1.clone(),
             size: client.size,
-            path: version_jar_path(version_id),
+            // Not `metadata.id`: after a loader merge that names a profile
+            // with no jar behind it.
+            path: version_jar_path(metadata.client_jar_id()),
         });
     }
 
@@ -451,13 +489,60 @@ pub(crate) async fn plan(
         artifacts.into_iter().filter(|a| !is_present(depot_root, a)).collect();
 
     Ok(Plan {
-        version_id: version_id.to_owned(),
+        // The merged id, so that reading this back gets the document the
+        // plan was actually built from.
+        version_id: metadata.id.clone(),
         java_component: metadata.java_version.as_ref().map(|j| j.component.clone()),
         total_files,
         missing_files: missing.len(),
         missing_bytes: missing.iter().map(|a| a.size).sum(),
         missing,
     })
+}
+
+/// The loader's own metadata, from Maven or from the copy in the depot.
+///
+/// The same bargain as the version metadata one level up, and for the same
+/// reason: a fully prepared instance has to plan with no network at all. The
+/// cached copy is re-verified against the hash ash pinned before it is
+/// trusted, so falling back trusts the pin rather than the disk.
+///
+/// The document is immutable per loader version, which is what makes pinning
+/// its hash possible. Fabric Meta's profile endpoint is not - it is generated
+/// per request - and that is exactly why ash does not use it.
+async fn resolve_loader_document(
+    http: &dyn HttpPort,
+    depot_root: &Path,
+    pin: &LoaderPin,
+) -> Result<Vec<u8>, AshError> {
+    cached_or_fetched(
+        http,
+        depot_root,
+        &loader_document_path(pin),
+        pin.document.url,
+        Some(pin.document.sha1),
+        Some(pin.document.size),
+    )
+    .await
+}
+
+/// Build the loader's version document and write it into the depot.
+///
+/// Written as a child that inherits from the version target, which is what a
+/// Fabric install puts in `versions/` the ordinary way - so a depot stays
+/// legible to anyone who has seen one, and launching resolves it with the
+/// same merge any launcher performs.
+async fn loader_profile(
+    http: &dyn HttpPort,
+    depot_root: &Path,
+    pin: &LoaderPin,
+    version_id: &str,
+) -> Result<VersionMetadata, AshError> {
+    let document = resolve_loader_document(http, depot_root, pin).await?;
+    let relative = version_json_path(&pin.profile_id(version_id));
+    let bytes = crate::loader::synthesise_profile(pin, version_id, &document)?;
+    write_atomically(depot_root, &relative, &bytes)?;
+    version::parse(&relative, &bytes)
 }
 
 /// A version's metadata, from Mojang or from the copy already in the depot.
@@ -474,20 +559,48 @@ async fn resolve_metadata(
     depot_root: &Path,
     source: &VersionSource,
 ) -> Result<Vec<u8>, AshError> {
-    let relative = version_json_path(&source.id);
+    cached_or_fetched(
+        http,
+        depot_root,
+        &version_json_path(&source.id),
+        &source.url,
+        Some(&source.sha1),
+        None,
+    )
+    .await
+}
 
-    match fetch_metadata(http, &source.url, Some(&source.sha1), None).await {
+/// A metadata document the planner needs, fetched and cached, or read back
+/// out of the depot when there is no network.
+///
+/// Shared by the version metadata and the loader's own document, because the
+/// bargain is identical for both and stating it twice is how the two would
+/// come to differ. The cached copy is re-verified against the published hash
+/// before it is trusted, so falling back trusts the hash rather than the
+/// disk - without which "the network is down" becomes the way to make ash run
+/// whatever happens to be in its cache.
+async fn cached_or_fetched(
+    http: &dyn HttpPort,
+    depot_root: &Path,
+    relative: &str,
+    url: &str,
+    sha1: Option<&str>,
+    size: Option<u64>,
+) -> Result<Vec<u8>, AshError> {
+    match fetch_metadata(http, url, sha1, size).await {
         Ok(bytes) => {
-            write_atomically(depot_root, &relative, &bytes)?;
+            write_atomically(depot_root, relative, &bytes)?;
             Ok(bytes)
         }
         // Only when the network is not there. A hash that does not match is
         // not a connectivity problem and must not be answered from a cache.
         Err(e) if e.kind() == "transport" => {
-            let cached = fs::read(depot_root.join(&relative)).map_err(|_| e)?;
-            if let Some(sha1) = Some(source.sha1.as_str()).filter(|s| !s.is_empty()) {
+            let cached = fs::read(depot_root.join(relative)).map_err(|_| e)?;
+            // Mojang has shipped manifest entries with an empty sha1, so an
+            // absent hash is tolerated here exactly as it is on the way in.
+            if let Some(sha1) = sha1.filter(|s| !s.is_empty()) {
                 if sha1_of(&cached) != sha1 {
-                    return Err(AshError::VerificationFailed { path: relative });
+                    return Err(AshError::VerificationFailed { path: relative.to_owned() });
                 }
             }
             Ok(cached)
@@ -575,7 +688,16 @@ pub(crate) fn present(depot_root: &Path, artifact: &Artifact) -> bool {
 pub(crate) fn read_metadata(
     depot_root: &Path,
     version_id: &str,
-) -> Result<version::VersionMetadata, AshError> {
+) -> Result<VersionMetadata, AshError> {
+    let leaf = read_one(depot_root, version_id)?;
+    // A loader's document carries only what it adds, so resolving the
+    // inheritance is part of reading it back. A vanilla version inherits
+    // from nothing and comes straight back out.
+    profile::resolve(&leaf, &|id| read_one(depot_root, id))
+}
+
+/// One document, exactly as it was written.
+fn read_one(depot_root: &Path, version_id: &str) -> Result<VersionMetadata, AshError> {
     let relative = version_json_path(version_id);
     let bytes = fs::read(depot_root.join(&relative))
         .map_err(AshError::writing("reading version metadata"))?;
@@ -588,13 +710,14 @@ pub(crate) async fn prepare<S: ProgressSink + ?Sized>(
     http: &dyn HttpPort,
     depot_root: &Path,
     source: &VersionSource,
+    pin: Option<&LoaderPin>,
     os: Os,
     sink: &S,
     cancel: &Cancel,
 ) -> Result<Plan, AshError> {
     sink.emit(PrepareEvent::Resolving { version_id: source.id.clone() });
 
-    let plan = plan(http, depot_root, source, os).await?;
+    let plan = plan(http, depot_root, source, pin, os).await?;
     sink.emit(PrepareEvent::Planned {
         total_files: plan.total_files,
         missing_files: plan.missing_files,

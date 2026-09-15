@@ -108,6 +108,14 @@ body {
   color: var(--muted);
 }
 
+.rail-loader {
+  margin-left: 0.4375rem;
+  padding: 0.0625rem 0.3125rem;
+  border: 1px solid var(--emphasis);
+  border-radius: 3px;
+  font-size: 0.6875rem;
+}
+
 .rail-new {
   width: 100%;
 }

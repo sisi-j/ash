@@ -109,6 +109,16 @@ pub enum AshError {
     #[error("invalid setting: {detail}")]
     InvalidSetting { detail: String },
 
+    // ---- loaders ----
+    /// A loader ash has not pinned for this version target.
+    ///
+    /// Its own variant rather than an invalid setting: the player picked a
+    /// pairing that is simply not on offer yet, and what they do about it -
+    /// choose another version target, or another loader - is different from
+    /// anything else here.
+    #[error("ash has no {} loader pinned for {version_id}", loader.name())]
+    LoaderUnavailable { loader: crate::Loader, version_id: String },
+
     // ---- launching ----
     #[error("ash cannot build a command line for {version_id}: {detail}")]
     LaunchUnsupported { version_id: String, detail: String },
@@ -182,6 +192,7 @@ impl AshError {
             AshError::NoAccountSelected => "no_account_selected",
             AshError::AccountNotFound { .. } => "account_not_found",
             AshError::InvalidSetting { .. } => "invalid_setting",
+            AshError::LoaderUnavailable { .. } => "loader_unavailable",
             AshError::LaunchUnsupported { .. } => "launch_unsupported",
             AshError::LaunchFailed { .. } => "launch_failed",
             AshError::AlreadyRunning { .. } => "already_running",
@@ -304,6 +315,9 @@ impl AshError {
             }
             // Names the version. Which one it is is the whole point, and it
             // is not a secret.
+            AshError::LoaderUnavailable { version_id, .. } => {
+                format!("ash doesn't support that loader on {version_id} yet.")
+            }
             AshError::LaunchUnsupported { version_id, .. } => {
                 format!("ash can't launch {version_id} yet.")
             }

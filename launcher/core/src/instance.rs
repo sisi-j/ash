@@ -247,6 +247,45 @@ pub(crate) fn mark_played(instances_root: &Path, id: &InstanceId) -> Result<Inst
     Ok(instance)
 }
 
+/// Put a bundled mod where the loader will find it.
+///
+/// Copied out of the depot rather than fetched again: the depot already has
+/// it verified, and two instances on one version target share those bytes.
+///
+/// An ash release that moves a pin has to *replace* the jar rather than sit
+/// beside it. A loader refuses to start when two files claim one mod id, so
+/// leaving the previous version behind would turn an ash update into a game
+/// that no longer launches - and the player would have no reason to connect
+/// the two.
+///
+/// Removal is scoped to this artifact's own file names. A player's own mods,
+/// worlds and resource packs share this directory tree and are not ash's to
+/// manage; preparing an instance must never touch them.
+pub(crate) fn install_bundled_mod(
+    instances_root: &Path,
+    id: &InstanceId,
+    source: &Path,
+    artifact: &str,
+    file_name: &str,
+) -> Result<(), AshError> {
+    let mods = game_dir(instances_root, id).join("mods");
+    fs::create_dir_all(&mods).map_err(storage_err("creating the mods directory"))?;
+
+    let prefix = format!("{artifact}-");
+    for entry in fs::read_dir(&mods).into_iter().flatten().flatten() {
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if name != file_name && name.starts_with(&prefix) && name.ends_with(".jar") {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+
+    fs::copy(source, mods.join(file_name))
+        .map(|_| ())
+        .map_err(storage_err("installing a bundled mod"))
+}
+
 fn dir_entry_names(dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(dir)
         .map(|entries| entries.flatten().filter_map(|e| e.file_name().into_string().ok()).collect())

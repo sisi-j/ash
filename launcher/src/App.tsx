@@ -12,7 +12,6 @@ import {
   type InstanceId,
   type Loader,
   type UiError,
-  LOADERS,
   LOADER_LABELS,
 } from "./api";
 import { Accounts } from "./Accounts";
@@ -187,7 +186,15 @@ export default function App() {
                 onClick={() => setSelectedId(instance.id)}
               >
                 <span className="rail-name">{instance.name}</span>
-                <span className="numeric rail-version">{instance.version_id}</span>
+                <span className="numeric rail-version">
+                  {instance.version_id}
+                  {/* Only when there is something to say. Every instance has
+                      a loader, but printing "Vanilla" on every row is a word
+                      that distinguishes nothing. */}
+                  {instance.loader !== "vanilla" && (
+                    <span className="rail-loader">{LOADER_LABELS[instance.loader]}</span>
+                  )}
+                </span>
               </button>
             </li>
           ))}
@@ -344,7 +351,8 @@ function NewInstance(props: {
   const { catalogue } = props;
   const [name, setName] = useState("");
   const [versionId, setVersionId] = useState<string>("");
-  const [loader, setLoader] = useState<Loader>(LOADERS[0]);
+  const [loader, setLoader] = useState<Loader>("vanilla");
+  const [loaders, setLoaders] = useState<Loader[]>(["vanilla"]);
   const [showSnapshots, setShowSnapshots] = useState(false);
 
   const pinned = useMemo(
@@ -362,6 +370,31 @@ function NewInstance(props: {
   useEffect(() => {
     if (!versionId && pinned[0]) setVersionId(pinned[0].id);
   }, [pinned, versionId]);
+
+  // Which loaders exist is ash's to answer, not the UI's: it pins the ones
+  // it has tested per version target, and offering one it cannot install
+  // would be offering an instance that could never launch.
+  useEffect(() => {
+    if (!versionId) return;
+    let live = true;
+    api
+      .loadersFor(versionId)
+      .then((offered) => {
+        if (!live) return;
+        setLoaders(offered);
+        // The version target just changed, and the loader that was chosen
+        // may not run on this one.
+        setLoader((current) => (offered.includes(current) ? current : "vanilla"));
+      })
+      .catch(() => {
+        // Deliberately nothing. Which loaders exist is ash's answer to give,
+        // and inventing one here would be a launcher decision taken where
+        // nothing can test it. The picker keeps showing what it last had.
+      });
+    return () => {
+      live = false;
+    };
+  }, [versionId]);
 
   const ready = name.trim().length > 0 && versionId.length > 0;
 
@@ -397,7 +430,7 @@ function NewInstance(props: {
 
       <h3 className="panel-title">Loader</h3>
       <div className="chips">
-        {LOADERS.map((option) => (
+        {loaders.map((option) => (
           <button
             key={option}
             className={`chip${option === loader ? " is-selected" : ""}`}
