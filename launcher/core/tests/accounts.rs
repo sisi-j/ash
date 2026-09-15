@@ -9,7 +9,7 @@ use std::sync::Arc;
 use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
-use ash_core::{Ash, Cancel, Config, NullSink, VERSION_MANIFEST_URL};
+use ash_core::{Ash, Cancel, Config, Loader, NullSink, VERSION_MANIFEST_URL};
 
 mod common;
 
@@ -217,7 +217,7 @@ async fn launching_presents_the_credential_of_the_chosen_account() {
     let f = fixture();
     f.sign_in_both().await;
     f.ash.select_account(ALICE.0).expect("select alice");
-    let instance = f.ash.create_instance("modern", VERSION).expect("instance");
+    let instance = f.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
 
     f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
 
@@ -233,7 +233,7 @@ async fn launching_presents_the_credential_of_the_chosen_account() {
 async fn switching_accounts_switches_who_the_next_launch_is() {
     let f = fixture();
     f.sign_in_both().await;
-    let instance = f.ash.create_instance("modern", VERSION).expect("instance");
+    let instance = f.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
 
     f.ash.select_account(ALICE.0).expect("select alice");
     f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
@@ -295,7 +295,7 @@ async fn signing_out_the_last_account_leaves_nobody_active() {
 async fn a_signed_out_account_cannot_launch_on_a_leftover_token() {
     let f = fixture();
     f.sign_in_both().await;
-    let instance = f.ash.create_instance("modern", VERSION).expect("instance");
+    let instance = f.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
     f.ash.remove_account(BOB.0).expect("remove bob");
     f.ash.select_account(ALICE.0).expect("select alice");
 

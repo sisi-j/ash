@@ -43,8 +43,8 @@ A specific Minecraft version ash supports as a first-class build. Not a range �
 _Avoid_: version range, supported version, MC version
 
 **Loader**:
-The mod-loading layer an instance runs under: vanilla (no loader), Fabric, or Legacy Fabric. Fabric and Legacy Fabric run the same Fabric Loader artifact; what differs is the intermediary mappings and the API around it.
-_Avoid_: Fabric (ambiguous — Loader, API and Loom are three different things), modloader, Legacy Fabric Loader (there is no such artifact)
+The mod-loading layer an instance runs under: vanilla, Fabric, or Legacy Fabric. Vanilla is a loader rather than the absence of one, so every instance has exactly one and nothing downstream needs a "no loader" case. Fabric and Legacy Fabric run the same Fabric Loader artifact; what differs is the intermediary mappings and the API around it.
+_Avoid_: Fabric (ambiguous — Loader, API and Loom are three different things), modloader, Legacy Fabric Loader (there is no such artifact), no loader (vanilla is one)
 
 **Depot**:
 The single content-addressed pool of downloaded jars, libraries and assets that every instance draws from.

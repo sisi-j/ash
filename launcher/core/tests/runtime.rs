@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::FakeProcessPort;
-use ash_core::{Ash, Cancel, Config, PrepareEvent, ProgressSink, VERSION_MANIFEST_URL};
+use ash_core::{Ash, Cancel, Config, Loader, PrepareEvent, ProgressSink, VERSION_MANIFEST_URL};
 use sha1::{Digest, Sha1};
 
 mod common;
@@ -111,7 +111,7 @@ fn fixture() -> Fixture {
 #[tokio::test]
 async fn a_modern_version_gets_the_modern_runtime() {
     let f = fixture();
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
 
     let runtime =
         f.ash.ensure_runtime(&instance.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
@@ -123,7 +123,7 @@ async fn a_modern_version_gets_the_modern_runtime() {
 #[tokio::test]
 async fn a_version_whose_metadata_predates_the_field_gets_the_legacy_runtime() {
     let f = fixture();
-    let instance = f.ash.create_instance("classic", "1.8.9").unwrap();
+    let instance = f.ash.create_instance("classic", "1.8.9", Loader::Vanilla).unwrap();
 
     let runtime =
         f.ash.ensure_runtime(&instance.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
@@ -137,8 +137,8 @@ async fn a_version_whose_metadata_predates_the_field_gets_the_legacy_runtime() {
 #[tokio::test]
 async fn the_two_first_class_targets_resolve_to_different_runtimes() {
     let f = fixture();
-    let modern = f.ash.create_instance("modern", "1.21.4").unwrap();
-    let legacy = f.ash.create_instance("classic", "1.8.9").unwrap();
+    let modern = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
+    let legacy = f.ash.create_instance("classic", "1.8.9", Loader::Vanilla).unwrap();
 
     let a = f.ash.ensure_runtime(&modern.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
     let b = f.ash.ensure_runtime(&legacy.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
@@ -152,7 +152,7 @@ async fn the_two_first_class_targets_resolve_to_different_runtimes() {
 #[tokio::test]
 async fn the_java_it_hands_back_is_always_inside_the_depot() {
     let f = fixture();
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
 
     let runtime =
         f.ash.ensure_runtime(&instance.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
@@ -172,7 +172,7 @@ async fn the_java_it_hands_back_is_always_inside_the_depot() {
 #[tokio::test]
 async fn runtime_files_land_under_a_platform_and_component_scoped_path() {
     let f = fixture();
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
     f.ash.ensure_runtime(&instance.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
 
     let runtimes = f.tmp.path().join("depot/runtimes");
@@ -192,7 +192,7 @@ async fn runtime_files_are_verified_like_any_other_artifact() {
     let f = fixture_with(
         serving().route(common::JAVA_21_URL, HttpResponse::ok(b"not the real binary".to_vec())),
     );
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
 
     let err = f
         .ash
@@ -208,7 +208,7 @@ async fn a_tampered_runtime_manifest_is_rejected() {
     let f = fixture_with(
         serving().route(common::MODERN_MANIFEST_URL, HttpResponse::ok(r#"{"files":{}}"#)),
     );
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
 
     let err = f
         .ash
@@ -222,8 +222,8 @@ async fn a_tampered_runtime_manifest_is_rejected() {
 #[tokio::test]
 async fn a_second_instance_on_the_same_runtime_downloads_nothing() {
     let f = fixture();
-    let first = f.ash.create_instance("one", "1.21.4").unwrap();
-    let second = f.ash.create_instance("two", "1.21.4").unwrap();
+    let first = f.ash.create_instance("one", "1.21.4", Loader::Vanilla).unwrap();
+    let second = f.ash.create_instance("two", "1.21.4", Loader::Vanilla).unwrap();
 
     f.ash.ensure_runtime(&first.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
     let before = f.http.hits(common::JAVA_21_URL);
@@ -243,7 +243,7 @@ async fn a_platform_mojang_does_not_publish_for_says_so() {
     // An index that knows the platform but not this component.
     let stripped = common::runtime_index().replace(r#""java-runtime-delta""#, r#""unused""#);
     let f = fixture_with(serving().route(common::RUNTIME_INDEX_URL, HttpResponse::ok(stripped)));
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
 
     let err = f
         .ash
@@ -259,7 +259,7 @@ async fn a_platform_mojang_does_not_publish_for_says_so() {
 #[tokio::test]
 async fn cancelling_stops_runtime_provisioning() {
     let f = fixture();
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
     let cancel = Cancel::new();
     cancel.cancel();
 
@@ -278,7 +278,7 @@ async fn cancelling_stops_runtime_provisioning() {
 #[tokio::test]
 async fn preparing_an_instance_leaves_it_with_both_game_files_and_a_runtime() {
     let f = fixture();
-    let instance = f.ash.create_instance("modern", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("modern", "1.21.4", Loader::Vanilla).unwrap();
     let sink = Recorder::new();
 
     f.ash.prepare_instance(&instance.id, sink.as_ref(), &Cancel::new()).await.unwrap();

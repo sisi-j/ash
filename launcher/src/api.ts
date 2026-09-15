@@ -31,10 +31,34 @@ export type Catalogue = {
 /** `InstanceId` is a newtype over String, so it crosses the wire as a string. */
 export type InstanceId = string;
 
+/**
+ * Every loader ash can create an instance with, in the order to offer them.
+ *
+ * Mirrors `ash_core::Loader`. Vanilla is a loader rather than the absence of
+ * one, so every instance has exactly one and nothing here handles "no loader"
+ * as its own case. Fabric and Legacy Fabric join the list when the launcher
+ * can actually prepare them - offering a loader ash cannot install would be
+ * offering an instance that can never launch.
+ *
+ * The list is the source, and `Loader` is read off it, so the two cannot
+ * disagree: a loader added here is one the picker offers and one
+ * `LOADER_LABELS` stops compiling until it has a name.
+ */
+export const LOADERS = ["vanilla"] as const;
+
+export type Loader = (typeof LOADERS)[number];
+
+/** What to call a loader in front of a player, never a version number. */
+export const LOADER_LABELS: Record<Loader, string> = {
+  vanilla: "Vanilla",
+};
+
 export type Instance = {
   id: InstanceId;
   name: string;
   version_id: string;
+  /** Fixed when the instance was created; nothing can change it afterwards. */
+  loader: Loader;
   created_at_ms: number;
   last_played_ms: number | null;
 };
@@ -205,8 +229,8 @@ export const api = {
   defaultMemoryMb: () => invoke<number>("default_memory_mb"),
 
   instances: () => invoke<Instance[]>("instances"),
-  createInstance: (name: string, versionId: string) =>
-    invoke<Instance>("create_instance", { name, versionId }),
+  createInstance: (name: string, versionId: string, loader: Loader) =>
+    invoke<Instance>("create_instance", { name, versionId, loader }),
   renameInstance: (id: InstanceId, name: string) =>
     invoke<Instance>("rename_instance", { id, name }),
   previewDeletion: (id: InstanceId) =>

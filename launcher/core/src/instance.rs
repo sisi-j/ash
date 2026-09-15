@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AshError;
+use crate::loader::Loader;
 
 const METADATA_FILE: &str = "instance.json";
 const GAME_DIR: &str = "minecraft";
@@ -40,6 +41,16 @@ pub struct Instance {
     pub name: String,
     /// The version target this instance runs.
     pub version_id: String,
+    /// The loader this instance runs under. Chosen at creation alongside the
+    /// version target, and never changed afterwards - no operation on `Ash`
+    /// takes a loader except creation.
+    ///
+    /// Defaulted on read so that every instance written before ash had
+    /// loaders reads back as vanilla, which is what it is. Removing the
+    /// default would make each of those a corrupt instance on the next
+    /// launcher start, with the player's worlds inside it.
+    #[serde(default = "vanilla")]
+    pub loader: Loader,
     pub created_at_ms: u64,
     pub last_played_ms: Option<u64>,
 }
@@ -56,6 +67,15 @@ pub struct DeletionPreview {
     pub resource_packs: usize,
     pub screenshots: usize,
     pub total_bytes: u64,
+}
+
+/// What an `instance.json` written before ash had loaders describes.
+///
+/// A named function rather than a `Default` impl on [`Loader`]: this is the
+/// only place in ash where a loader is not stated outright, and it is one
+/// because the file predates the field. Everywhere else has to name one.
+fn vanilla() -> Loader {
+    Loader::Vanilla
 }
 
 // ---- paths ----------------------------------------------------------------
@@ -150,6 +170,7 @@ pub(crate) fn create(
     instances_root: &Path,
     name: &str,
     version_id: &str,
+    loader: Loader,
 ) -> Result<Instance, AshError> {
     let name = name.trim();
     if name.is_empty() {
@@ -169,6 +190,7 @@ pub(crate) fn create(
         id,
         name: name.to_owned(),
         version_id: version_id.to_owned(),
+        loader,
         created_at_ms: now_ms(),
         last_played_ms: None,
     };

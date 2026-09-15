@@ -17,7 +17,7 @@ use std::sync::Arc;
 use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, GameStatus, ProcessPort};
-use ash_core::{Ash, Cancel, Config, InstanceId, NullSink, VERSION_MANIFEST_URL};
+use ash_core::{Ash, Cancel, Config, InstanceId, Loader, NullSink, VERSION_MANIFEST_URL};
 
 mod common;
 
@@ -347,7 +347,7 @@ impl Fixture {
             self.ash.begin_sign_in().await.expect("device code");
             self.ash.poll_sign_in().await.expect("sign-in");
         }
-        self.ash.create_instance(version, version).expect("instance").id
+        self.ash.create_instance(version, version, Loader::Vanilla).expect("instance").id
     }
 
     async fn launch(&self, id: &InstanceId) -> ash_core::InvocationView {
@@ -582,7 +582,7 @@ fn walk(root: &std::path::Path) -> Vec<std::path::PathBuf> {
 #[tokio::test]
 async fn launching_without_an_account_spawns_nothing() {
     let f = fixture();
-    let instance = f.ash.create_instance("modern", VERSION).expect("instance");
+    let instance = f.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
 
     let err = f
         .ash
@@ -995,7 +995,7 @@ async fn a_tampered_log4j_configuration_is_refused() {
     );
     ash.begin_sign_in().await.expect("device code");
     ash.poll_sign_in().await.expect("sign-in");
-    let instance = ash.create_instance("legacy", LEGACY).expect("instance");
+    let instance = ash.create_instance("legacy", LEGACY, Loader::Vanilla).expect("instance");
 
     let err =
         ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect_err("tampered config");

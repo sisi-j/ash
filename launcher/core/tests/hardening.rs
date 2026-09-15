@@ -11,7 +11,7 @@ use std::sync::Arc;
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
-use ash_core::{Ash, Cancel, Config, InstanceId, NullSink, VERSION_MANIFEST_URL};
+use ash_core::{Ash, Cancel, Config, InstanceId, Loader, NullSink, VERSION_MANIFEST_URL};
 
 mod common;
 
@@ -102,7 +102,7 @@ impl Fixture {
             self.ash.begin_sign_in().await.expect("device code");
             self.ash.poll_sign_in().await.expect("sign-in");
         }
-        self.ash.create_instance(name, VERSION).expect("instance").id
+        self.ash.create_instance(name, VERSION, Loader::Vanilla).expect("instance").id
     }
 }
 

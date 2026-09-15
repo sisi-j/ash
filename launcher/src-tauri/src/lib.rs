@@ -11,8 +11,8 @@ use ash_core::http::ReqwestHttp;
 use ash_core::process::OsProcessPort;
 use ash_core::{
     Account, Accounts, Ash, Cancel, Catalogue, Config, DeletionPreview, GameStatus, Instance,
-    InstanceId, InvocationView, MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink,
-    Runtime, SignInStatus,
+    InstanceId, InvocationView, Loader, MachineOverrides, PendingSignIn, Plan, PrepareEvent,
+    ProgressSink, Runtime, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -142,8 +142,9 @@ async fn create_instance(
     state: tauri::State<'_, AppState>,
     name: String,
     version_id: String,
+    loader: Loader,
 ) -> Result<Instance, UiError> {
-    state.ash.create_instance(&name, &version_id).map_err(UiError::from)
+    state.ash.create_instance(&name, &version_id, loader).map_err(UiError::from)
 }
 
 #[tauri::command]

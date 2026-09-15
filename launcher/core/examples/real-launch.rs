@@ -19,7 +19,9 @@ use std::time::Duration;
 use ash_core::credentials::OsCredentialStore;
 use ash_core::http::{HttpPort, ReqwestHttp};
 use ash_core::process::{GameStatus, OsProcessPort};
-use ash_core::{Ash, Cancel, Config, PrepareEvent, ProgressSink, SignInStatus, VersionKind};
+use ash_core::{
+    Ash, Cancel, Config, Loader, PrepareEvent, ProgressSink, SignInStatus, VersionKind,
+};
 
 struct Printer;
 
@@ -105,9 +107,9 @@ async fn main() {
         Some(existing) if existing.version_id == version => existing,
         Some(existing) => {
             ash.delete_instance(&existing.id).expect("replacing the old one");
-            ash.create_instance("real-launch", &version).expect("instance")
+            ash.create_instance("real-launch", &version, Loader::Vanilla).expect("instance")
         }
-        None => ash.create_instance("real-launch", &version).expect("instance"),
+        None => ash.create_instance("real-launch", &version, Loader::Vanilla).expect("instance"),
     };
 
     // ---- prepare and launch ----

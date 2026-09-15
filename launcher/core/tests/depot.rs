@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::FakeProcessPort;
-use ash_core::{Ash, Cancel, Config, PrepareEvent, ProgressSink, VERSION_MANIFEST_URL};
+use ash_core::{Ash, Cancel, Config, Loader, PrepareEvent, ProgressSink, VERSION_MANIFEST_URL};
 use sha1::{Digest, Sha1};
 
 mod common;
@@ -151,7 +151,7 @@ fn fixture() -> Fixture {
 }
 
 async fn prepared(f: &Fixture) -> (ash_core::Plan, Arc<Recorder>) {
-    let instance = f.ash.create_instance("smp", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("smp", "1.21.4", Loader::Vanilla).unwrap();
     let sink = Recorder::new();
     let plan = f
         .ash
@@ -222,7 +222,7 @@ async fn every_download_comes_from_a_mojang_host() {
 #[tokio::test]
 async fn a_file_that_never_matches_its_hash_fails_after_one_retry() {
     let f = fixture_with(serving().route(CLIENT_URL, HttpResponse::ok(b"corrupted".to_vec())));
-    let instance = f.ash.create_instance("smp", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("smp", "1.21.4", Loader::Vanilla).unwrap();
     let sink = Recorder::new();
 
     let err = f
@@ -256,7 +256,7 @@ async fn a_corrupt_file_that_arrives_clean_on_the_retry_succeeds() {
 #[tokio::test]
 async fn a_tampered_asset_index_is_rejected_before_anything_is_planned_from_it() {
     let f = fixture_with(serving().route(ASSET_INDEX_URL, HttpResponse::ok(r#"{"objects":{}}"#)));
-    let instance = f.ash.create_instance("smp", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("smp", "1.21.4", Loader::Vanilla).unwrap();
 
     let err = f
         .ash
@@ -271,7 +271,7 @@ async fn a_tampered_asset_index_is_rejected_before_anything_is_planned_from_it()
 async fn version_metadata_that_does_not_match_what_was_asked_for_is_refused() {
     let wrong = version_json().replace(r#""id":"1.21.4""#, r#""id":"1.20.1""#);
     let f = fixture_with(serving().route(VERSION_URL, HttpResponse::ok(wrong)));
-    let instance = f.ash.create_instance("smp", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("smp", "1.21.4", Loader::Vanilla).unwrap();
 
     let err = f
         .ash
@@ -289,7 +289,7 @@ async fn version_metadata_that_does_not_match_what_was_asked_for_is_refused() {
 #[tokio::test]
 async fn an_interrupted_download_resumes_instead_of_restarting() {
     let f = fixture();
-    let instance = f.ash.create_instance("smp", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("smp", "1.21.4", Loader::Vanilla).unwrap();
 
     // Leave behind what a dropped connection would have: a partial file.
     let part = f.tmp.path().join("depot/versions/1.21.4/1.21.4.jar.part");
@@ -320,8 +320,8 @@ async fn an_interrupted_download_resumes_instead_of_restarting() {
 #[tokio::test]
 async fn two_instances_on_one_version_download_the_shared_content_once() {
     let f = fixture();
-    let first = f.ash.create_instance("one", "1.21.4").unwrap();
-    let second = f.ash.create_instance("two", "1.21.4").unwrap();
+    let first = f.ash.create_instance("one", "1.21.4", Loader::Vanilla).unwrap();
+    let second = f.ash.create_instance("two", "1.21.4", Loader::Vanilla).unwrap();
 
     f.ash.prepare_instance(&first.id, &ash_core::NullSink, &Cancel::new()).await.unwrap();
     let before = f.http.hits(CLIENT_URL);
@@ -383,7 +383,7 @@ async fn progress_is_typed_events_not_a_percentage() {
 #[tokio::test]
 async fn cancelling_before_any_download_stops_immediately() {
     let f = fixture();
-    let instance = f.ash.create_instance("smp", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("smp", "1.21.4", Loader::Vanilla).unwrap();
     let cancel = Cancel::new();
     cancel.cancel();
     let sink = Recorder::new();
@@ -399,7 +399,7 @@ async fn cancelling_before_any_download_stops_immediately() {
 #[tokio::test]
 async fn planning_does_not_download_anything() {
     let f = fixture();
-    let instance = f.ash.create_instance("smp", "1.21.4").unwrap();
+    let instance = f.ash.create_instance("smp", "1.21.4", Loader::Vanilla).unwrap();
 
     let plan = f.ash.plan_instance(&instance.id).await.unwrap();
 
@@ -411,7 +411,7 @@ async fn planning_does_not_download_anything() {
 #[tokio::test]
 async fn preparing_an_instance_on_a_version_mojang_no_longer_lists_says_so() {
     let f = fixture();
-    let instance = f.ash.create_instance("ancient", "1.2.5").unwrap();
+    let instance = f.ash.create_instance("ancient", "1.2.5", Loader::Vanilla).unwrap();
 
     let err = f
         .ash

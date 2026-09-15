@@ -14,8 +14,8 @@ use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::{
-    Ash, Cancel, Config, InstanceId, MachineOverrides, NullSink, Resolution, DEFAULT_MEMORY_MB,
-    VERSION_MANIFEST_URL,
+    Ash, Cancel, Config, InstanceId, Loader, MachineOverrides, NullSink, Resolution,
+    DEFAULT_MEMORY_MB, VERSION_MANIFEST_URL,
 };
 
 mod common;
@@ -82,7 +82,7 @@ impl Fixture {
     async fn ready(&self) -> InstanceId {
         self.ash.begin_sign_in().await.expect("device code");
         self.ash.poll_sign_in().await.expect("sign-in");
-        self.ash.create_instance("modern", VERSION).expect("instance").id
+        self.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance").id
     }
 
     async fn launch(&self, id: &InstanceId) -> Vec<String> {
@@ -348,7 +348,7 @@ async fn overrides_live_under_the_data_root_not_the_instance() {
 async fn two_instances_are_tuned_independently() {
     let f = fixture();
     let big = f.ready().await;
-    let small = f.ash.create_instance("small", VERSION).expect("instance").id;
+    let small = f.ash.create_instance("small", VERSION, Loader::Vanilla).expect("instance").id;
 
     f.ash
         .set_overrides(&big, MachineOverrides { memory_mb: Some(8192), ..Default::default() })
@@ -393,7 +393,7 @@ async fn deleting_an_instance_takes_its_machine_settings_with_it() {
     let orphan = f.tmp.path().join(format!("data/machine/{id}.json"));
     assert!(!orphan.exists(), "{} outlived its instance", orphan.display());
 
-    let replacement = f.ash.create_instance("modern", VERSION).expect("instance");
+    let replacement = f.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
     assert_eq!(replacement.id, id, "the test only means something if the id is reused");
     assert_eq!(f.ash.overrides(&id).expect("fresh").memory_mb, None);
 }
@@ -401,7 +401,8 @@ async fn deleting_an_instance_takes_its_machine_settings_with_it() {
 #[tokio::test]
 async fn settings_for_an_instance_that_does_not_exist_are_an_error() {
     let f = fixture();
-    let missing = f.ash.create_instance("temporary", VERSION).expect("instance").id;
+    let missing =
+        f.ash.create_instance("temporary", VERSION, Loader::Vanilla).expect("instance").id;
     f.ash.delete_instance(&missing).expect("delete");
 
     assert_eq!(f.ash.overrides(&missing).expect_err("gone").kind(), "instance_not_found");

@@ -21,6 +21,7 @@ mod error;
 mod gamelog;
 mod instance;
 mod launch;
+mod loader;
 mod natives;
 mod overrides;
 mod runtime;
@@ -39,6 +40,7 @@ pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use diagnostics::Diagnostics;
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
+pub use loader::Loader;
 pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
@@ -250,9 +252,21 @@ impl Ash {
     // rather than async for symmetry. The adapter puts them on Tauri's async
     // runtime so a large directory walk cannot stall the window.
 
-    /// Create an instance for a version target, with its own game directory.
-    pub fn create_instance(&self, name: &str, version_id: &str) -> Result<Instance, AshError> {
-        instance::create(&self.config.instances_root, name, version_id)
+    /// Create an instance for a version target and a loader, with its own
+    /// game directory.
+    ///
+    /// Both are arguments rather than one of them defaulted: an instance is
+    /// a version target paired with exactly one loader, and a creation call
+    /// that could leave the loader unsaid is how "vanilla" quietly becomes
+    /// the absence of a choice instead of one of them. Neither can be
+    /// changed afterwards.
+    pub fn create_instance(
+        &self,
+        name: &str,
+        version_id: &str,
+        loader: Loader,
+    ) -> Result<Instance, AshError> {
+        instance::create(&self.config.instances_root, name, version_id, loader)
     }
 
     /// Every instance, most recently played first.

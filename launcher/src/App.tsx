@@ -10,7 +10,10 @@ import {
   type DeletionPreview,
   type Instance,
   type InstanceId,
+  type Loader,
   type UiError,
+  LOADERS,
+  LOADER_LABELS,
 } from "./api";
 import { Accounts } from "./Accounts";
 import { Play } from "./Play";
@@ -104,9 +107,9 @@ export default function App() {
   );
 
   const create = useCallback(
-    async (name: string, versionId: string) => {
+    async (name: string, versionId: string, loader: Loader) => {
       try {
-        const made = await api.createInstance(name, versionId);
+        const made = await api.createInstance(name, versionId, loader);
         setCreating(false);
         await reloadInstances(made.id);
       } catch (e) {
@@ -292,6 +295,12 @@ function InstanceDetail(props: {
           <dd className="numeric">{instance.version_id}</dd>
         </div>
         <div>
+          <dt>Loader</dt>
+          {/* Shown, never edited: it was chosen when the instance was
+              created and there is no operation that changes it. */}
+          <dd>{LOADER_LABELS[instance.loader]}</dd>
+        </div>
+        <div>
           <dt>Last played</dt>
           <dd>{instance.last_played_ms ? describeAge(instance.last_played_ms) : "never"}</dd>
         </div>
@@ -330,11 +339,12 @@ function InstanceDetail(props: {
 function NewInstance(props: {
   catalogue: Catalogue | null;
   onCancel: () => void;
-  onCreate: (name: string, versionId: string) => void;
+  onCreate: (name: string, versionId: string, loader: Loader) => void;
 }) {
   const { catalogue } = props;
   const [name, setName] = useState("");
   const [versionId, setVersionId] = useState<string>("");
+  const [loader, setLoader] = useState<Loader>(LOADERS[0]);
   const [showSnapshots, setShowSnapshots] = useState(false);
 
   const pinned = useMemo(
@@ -385,6 +395,25 @@ function NewInstance(props: {
         </>
       )}
 
+      <h3 className="panel-title">Loader</h3>
+      <div className="chips">
+        {LOADERS.map((option) => (
+          <button
+            key={option}
+            className={`chip${option === loader ? " is-selected" : ""}`}
+            onClick={() => setLoader(option)}
+          >
+            {LOADER_LABELS[option]}
+          </button>
+        ))}
+      </div>
+      {/* Said before the choice rather than discovered after it: an
+          instance's loader and version are what its game directory is built
+          around, and neither can be changed later. */}
+      <p className="note muted">
+        The loader and the version are fixed once an instance is created.
+      </p>
+
       <div className="panel-head">
         <h3 className="panel-title">All versions</h3>
         <label className="toggle">
@@ -412,7 +441,11 @@ function NewInstance(props: {
       </select>
 
       <div className="actions">
-        <button className="button" disabled={!ready} onClick={() => props.onCreate(name, versionId)}>
+        <button
+          className="button"
+          disabled={!ready}
+          onClick={() => props.onCreate(name, versionId, loader)}
+        >
           Create
         </button>
         <button className="button" onClick={props.onCancel}>
