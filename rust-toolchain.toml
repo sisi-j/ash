@@ -1,0 +1,9 @@
+# Pinned so `cargo fmt` produces the same bytes here and in CI.
+#
+# rustfmt's output changes between releases. This repo spent a whole
+# normalisation commit on formatting, and a formatter that drifts would undo
+# that quietly, one unrelated pull request at a time. Bump this deliberately,
+# and run `cargo fmt --all` in the same commit as the bump.
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]

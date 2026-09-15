@@ -1,0 +1,63 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push supersedes the run it interrupted.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  rust:
+    # Windows, because that is what v1 ships on, and what ash's path
+    # handling, credential store and process spawning actually run against.
+    # macOS joins this matrix when Phase 5 does.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml decides the version. Installed up front so a
+      # missing toolchain fails here rather than inside a build step, and
+      # explicitly, because rustup has deprecated auto-installing it.
+      - run: rustup install --no-self-update
+
+      # Only the registry. A cached `target` for both the test and clippy
+      # profiles runs into the 10GB cache ceiling, and a cache that silently
+      # stops being written is worse than none.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # No secrets and no network: every test drives ash through its seam
+      # with fakes for HTTP, the credential store and process spawning.
+      - run: cargo test --workspace
+
+  typescript:
+    # Nothing here is platform-specific, so it runs where it is cheapest.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+      - run: npm ci
+        working-directory: launcher
+      - run: npx tsc --noEmit
+        working-directory: launcher
