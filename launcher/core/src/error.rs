@@ -216,12 +216,14 @@ impl AshError {
             // order to add an exclusion in their antivirus.
             AshError::VerificationFailed { path } => {
                 format!(
-                    "A downloaded file kept arriving corrupted: {path}. Check your connection,                      and any antivirus or proxy that might be altering downloads."
+                    "A downloaded file kept arriving corrupted: {path}. Check your connection, \
+                     and any antivirus or proxy that might be altering downloads."
                 )
             }
             AshError::FileVanished { path } => {
                 format!(
-                    "{path} was removed straight after ash downloaded it. Antivirus software                      usually does this; adding ash's folder as an exclusion will fix it."
+                    "{path} was removed straight after ash downloaded it. Antivirus software \
+                     usually does this; adding ash's folder as an exclusion will fix it."
                 )
             }
             AshError::Cancelled => "Cancelled.".into(),
@@ -405,5 +407,62 @@ mod tests {
         let path = "libraries/com/example/thing.jar";
         assert!(AshError::VerificationFailed { path: path.into() }.user_message().contains(path));
         assert!(AshError::FileVanished { path: path.into() }.user_message().contains(path));
+    }
+
+    #[test]
+    fn every_user_message_is_one_clean_line() {
+        // Two of these messages spent a release with a run of twenty-two
+        // spaces in the middle of the sentence, from a line continuation
+        // that lost its backslash. Nothing failed, because nothing looked.
+        let s = "x".to_string();
+        let every = [
+            AshError::Transport { url: s.clone(), detail: s.clone() },
+            AshError::UnexpectedStatus { url: s.clone(), status: 500 },
+            AshError::Malformed { url: s.clone(), detail: s.clone() },
+            AshError::Storage { detail: s.clone() },
+            AshError::OutOfSpace,
+            AshError::Credential { detail: s.clone() },
+            AshError::VerificationFailed { path: s.clone() },
+            AshError::FileVanished { path: s.clone() },
+            AshError::Cancelled,
+            AshError::InstanceNotFound { id: s.clone() },
+            AshError::InvalidInstanceName { detail: s.clone() },
+            AshError::UnknownVersion { version_id: s.clone() },
+            AshError::RuntimeUnavailable { component: s.clone(), platform: s.clone() },
+            AshError::NoSignInPending,
+            AshError::SignInExpired,
+            AshError::SignInDeclined,
+            AshError::SignInFailed { detail: s.clone() },
+            AshError::SessionExpired,
+            AshError::XboxNoAccount,
+            AshError::XboxBanned,
+            AshError::XboxRegionUnavailable,
+            AshError::XboxAdultVerificationRequired,
+            AshError::XboxChildAccount,
+            AshError::XboxOther { code: 1 },
+            AshError::NotAllowListed,
+            AshError::NotEntitled,
+            AshError::ProfileUnavailable,
+            AshError::NoAccountSelected,
+            AshError::AccountNotFound { profile_id: s.clone() },
+            AshError::InvalidSetting { detail: s.clone() },
+            AshError::LaunchUnsupported { version_id: s.clone(), detail: s.clone() },
+            AshError::LaunchFailed { detail: s.clone() },
+            AshError::AlreadyRunning { id: s.clone() },
+        ];
+
+        // The list has to be exhaustive to be worth anything, and the only
+        // thing that can say so is `kind`, which has one arm per variant.
+        let kinds: std::collections::BTreeSet<_> = every.iter().map(|e| e.kind()).collect();
+        assert_eq!(kinds.len(), every.len(), "a variant is listed twice, or one is missing");
+
+        for err in &every {
+            let m = err.user_message();
+            assert!(!m.is_empty(), "{} has no message", err.kind());
+            assert!(!m.contains("  "), "{} has a run of spaces: {m:?}", err.kind());
+            assert!(!m.contains('\n'), "{} spans lines: {m:?}", err.kind());
+            assert!(!m.contains('\t'), "{} has a tab: {m:?}", err.kind());
+            assert!(m.ends_with('.'), "{} does not end a sentence: {m:?}", err.kind());
+        }
     }
 }
