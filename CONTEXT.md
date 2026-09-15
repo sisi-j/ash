@@ -35,7 +35,7 @@ _Avoid_: user, profile, app profile
 ### Launcher
 
 **Instance**:
-A named, isolated game directory paired with exactly one version target and one loader.
+A named, isolated game directory paired with exactly one version target and exactly one loader. Both are chosen when it is created, and neither changes afterwards.
 _Avoid_: profile, installation, version, pack
 
 **Version target**:
@@ -43,8 +43,8 @@ A specific Minecraft version ash supports as a first-class build. Not a range �
 _Avoid_: version range, supported version, MC version
 
 **Loader**:
-The mod-loading layer that bootstraps the client into a version target: Fabric Loader on modern targets, Legacy Fabric Loader on 1.8.9.
-_Avoid_: Fabric (ambiguous — Loader, API and Loom are three different things), modloader
+The mod-loading layer an instance runs under: vanilla (no loader), Fabric, or Legacy Fabric. Fabric and Legacy Fabric run the same Fabric Loader artifact; what differs is the intermediary mappings and the API around it.
+_Avoid_: Fabric (ambiguous — Loader, API and Loom are three different things), modloader, Legacy Fabric Loader (there is no such artifact)
 
 **Depot**:
 The single content-addressed pool of downloaded jars, libraries and assets that every instance draws from.

@@ -1,5 +1,7 @@
 # Sodium and Lithium ship unmodified; our own optimisations target what they don't
 
+> **Superseded in part by [ADR-0013](0013-sodium-is-not-bundled.md).** Sodium is PolyForm Shield 1.0.0, not LGPL-3.0, so the reasoning below applies only to Lithium.
+
 Sodium and Lithium are LGPL-3.0. They ship as separate, unmodified, user-replaceable jars inside an instance so that ash's own code stays proprietary — shading their classes into our jar, patching their bytecode, or forking them would each pull us into the licence. ash's own render and tick work therefore targets territory they do not cover.
 
 ## Consequences
