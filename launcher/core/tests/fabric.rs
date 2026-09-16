@@ -117,6 +117,7 @@ fn pins() -> &'static [LoaderPin] {
         let library = |name: &'static str, jar: &'static [u8]| PinnedLibrary {
             name,
             repository: MAVEN,
+            mirror: None,
             sha1: leak(common::sha1(jar)),
             size: jar.len() as u64,
             natives: &[],

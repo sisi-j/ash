@@ -64,6 +64,9 @@ pub struct VersionSource {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Artifact {
     pub url: String,
+    /// A second source for the identical bytes, tried only when the first
+    /// cannot be reached. `None` for everything Mojang serves.
+    pub mirror: Option<String>,
     pub sha1: String,
     pub size: u64,
     /// Relative to the depot root.
@@ -239,13 +242,46 @@ fn write_atomically(depot_root: &Path, relative: &str, bytes: &[u8]) -> Result<(
 
 /// Fetch a file the depot needs, verify it, and store it.
 ///
-/// One automatic re-fetch on a hash mismatch, then a typed failure. A
-/// corrupted byte stream is usually transient; a second identical failure
-/// means something is actually wrong and pretending otherwise would loop.
+/// Tries the artifact's own source, then its mirror if it has one. See
+/// `docs/mirror.md` for why one exists at all.
 async fn fetch_verified<S: ProgressSink + ?Sized>(
     http: &dyn HttpPort,
     depot_root: &Path,
     artifact: &Artifact,
+    sink: &S,
+) -> Result<(), AshError> {
+    match fetch_from(http, depot_root, artifact, &artifact.url, sink).await {
+        // Only when the first source cannot be reached at all. A file that
+        // arrives and fails its hash is not a reachability problem, and
+        // asking somewhere else would turn a corrupt upstream artifact into
+        // a silent success - the same reasoning that keeps the offline
+        // metadata fallback honest.
+        Err(e) if not_answering(&e) => match artifact.mirror.as_deref() {
+            Some(mirror) => fetch_from(http, depot_root, artifact, mirror, sink).await,
+            None => Err(e),
+        },
+        other => other,
+    }
+}
+
+/// Whether this failure means "that source is not answering".
+///
+/// Matched on the variants rather than on `kind()`: those strings are the
+/// UI's contract, and renaming one should not quietly switch the mirror off.
+fn not_answering(e: &AshError) -> bool {
+    matches!(e, AshError::Transport { .. } | AshError::UnexpectedStatus { .. })
+}
+
+/// Fetch and verify from one particular source.
+///
+/// One automatic re-fetch on a hash mismatch, then a typed failure. A
+/// corrupted byte stream is usually transient; a second identical failure
+/// means something is actually wrong and pretending otherwise would loop.
+async fn fetch_from<S: ProgressSink + ?Sized>(
+    http: &dyn HttpPort,
+    depot_root: &Path,
+    artifact: &Artifact,
+    url: &str,
     sink: &S,
 ) -> Result<(), AshError> {
     let final_path = depot_root.join(&artifact.path);
@@ -258,7 +294,7 @@ async fn fetch_verified<S: ProgressSink + ?Sized>(
         let already = fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0);
         let resuming = already > 0 && already < artifact.size && attempt == 0;
 
-        let mut request = HttpRequest::get(&artifact.url);
+        let mut request = HttpRequest::get(url);
         if resuming {
             request = request.range_from(already);
             sink.emit(PrepareEvent::Resuming { path: artifact.path.clone(), from_bytes: already });
@@ -267,7 +303,7 @@ async fn fetch_verified<S: ProgressSink + ?Sized>(
         let response = http.send(request).await?;
         if !response.is_success() {
             return Err(AshError::UnexpectedStatus {
-                url: artifact.url.clone(),
+                url: url.to_owned(),
                 status: response.status,
             });
         }
@@ -392,6 +428,11 @@ pub(crate) async fn plan(
     }
 
     let mut artifacts: Vec<Artifact> = Vec::new();
+    // Empty for a vanilla instance, so the lookup below simply never hits.
+    let mirrors: std::collections::HashMap<String, &'static str> = match pin {
+        Some(pin) => pin.mirrors()?.into_iter().collect(),
+        None => std::collections::HashMap::new(),
+    };
 
     // A loader contributes a document of its own, which ash writes as a
     // child of the version target and merges here. Everything below this
@@ -403,6 +444,7 @@ pub(crate) async fn plan(
             for bundled in pin.bundled_mods {
                 artifacts.push(Artifact {
                     url: bundled.url()?,
+                    mirror: bundled.mirror.map(str::to_owned),
                     sha1: bundled.sha1.to_owned(),
                     size: bundled.size,
                     path: bundled.depot_path()?,
@@ -416,6 +458,7 @@ pub(crate) async fn plan(
     if let Some(client) = &metadata.downloads.client {
         artifacts.push(Artifact {
             url: client.url.clone(),
+            mirror: None,
             sha1: client.sha1.clone(),
             size: client.size,
             // Not `metadata.id`: after a loader merge that names a profile
@@ -433,6 +476,7 @@ pub(crate) async fn plan(
             if let Some(relative) = &artifact.path {
                 artifacts.push(Artifact {
                     url: artifact.url.clone(),
+                    mirror: mirrors.get(&library_path(relative)).map(|m| (*m).to_owned()),
                     sha1: artifact.sha1.clone(),
                     size: artifact.size,
                     path: library_path(relative),
@@ -443,6 +487,7 @@ pub(crate) async fn plan(
             if let Some(relative) = &native.path {
                 artifacts.push(Artifact {
                     url: native.url.clone(),
+                    mirror: mirrors.get(&library_path(relative)).map(|m| (*m).to_owned()),
                     sha1: native.sha1.clone(),
                     size: native.size,
                     path: library_path(relative),
@@ -457,6 +502,7 @@ pub(crate) async fn plan(
     if let Some(logging) = metadata.logging.as_ref().and_then(|l| l.client.as_ref()) {
         artifacts.push(Artifact {
             url: logging.file.url.clone(),
+            mirror: None,
             sha1: logging.file.sha1.clone(),
             size: logging.file.size,
             path: log_config_path(&logging.file.id),
@@ -472,6 +518,7 @@ pub(crate) async fn plan(
         for object in parsed.objects.values() {
             artifacts.push(Artifact {
                 url: version::asset_url(&object.hash),
+                mirror: None,
                 sha1: object.hash.clone(),
                 size: object.size,
                 path: version::asset_path(&object.hash),

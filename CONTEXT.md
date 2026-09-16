@@ -50,6 +50,10 @@ _Avoid_: Fabric (ambiguous — Loader, API and Loom are three different things),
 The JSON that says what a build is made of - its libraries, arguments, main class and client jar. Mojang publishes one per version target. A loader publishes a **loader profile**: a version document carrying only what the loader adds, which names the version target it inherits from and is merged onto it before anything is prepared or launched.
 _Avoid_: profile (unqualified - it means an instance or an ash account), manifest (that is Mojang's index of every version), version JSON
 
+**Mirror**:
+ash's own copy of third-party artifacts whose upstream has a single point of failure, fetched only when that upstream cannot be reached. A second copy, never a second authority: a mirrored file is verified against the same recorded hash as the original, so it can be wrong but it cannot be trusted instead. See `docs/mirror.md`.
+_Avoid_: cache (that is the depot), fallback repository, CDN
+
 **Depot**:
 The single content-addressed pool of downloaded jars, libraries and assets that every instance draws from.
 _Avoid_: store (reserved for the cosmetics storefront), cache, library folder

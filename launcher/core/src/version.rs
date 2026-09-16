@@ -186,6 +186,11 @@ pub struct DownloadRef {
     pub path: Option<String>,
 }
 
+// There is deliberately no `mirror` field here. A second URL to fetch from
+// is ash's own idea, and this type parses documents ash did not write - so a
+// field here would let a remote document name somewhere else for ash to go.
+// Mirrors come from the pin instead; see `LoaderPin::mirrors`.
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct AssetIndexRef {
     pub id: String,

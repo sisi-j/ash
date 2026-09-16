@@ -109,6 +109,13 @@ pub struct PinnedLibrary {
     pub name: &'static str,
     /// The Maven repository root it is served from, trailing slash included.
     pub repository: &'static str,
+    /// Where else the identical bytes can be had, if anywhere.
+    ///
+    /// Not a Maven root but the whole URL, because ash's mirror is a flat
+    /// store rather than a repository layout. `None` where the upstream is
+    /// one nobody worries about; see `docs/mirror.md` for which are
+    /// mirrored and why.
+    pub mirror: Option<&'static str>,
     pub sha1: &'static str,
     pub size: u64,
     /// The platform jars this library unpacks, if it is one that has to be.
@@ -128,6 +135,9 @@ pub struct PinnedLibrary {
 /// reads them straight out of the classpath and needs none of this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PinnedNative {
+    /// Where else the identical bytes can be had. See
+    /// [`PinnedLibrary::mirror`].
+    pub mirror: Option<&'static str>,
     /// The platform this jar is for.
     ///
     /// [`Os`] rather than the string Mojang's metadata uses, so a pin cannot
@@ -181,6 +191,31 @@ pub struct LoaderPin {
 }
 
 impl LoaderPin {
+    /// Every artifact this pin mirrors, by its path in the depot.
+    ///
+    /// Planning asks the pin rather than reading a second URL out of the
+    /// version document, because that document's type also parses metadata
+    /// ash did not write - and a field there would let somebody else's
+    /// document tell ash where to go. Here the answer can only come from
+    /// ash's own source.
+    pub(crate) fn mirrors(&self) -> Result<Vec<(String, &'static str)>, AshError> {
+        let mut out = Vec::new();
+        for library in self.libraries.iter().chain(self.bundled_mods) {
+            if library.natives.is_empty() {
+                if let Some(mirror) = library.mirror {
+                    out.push((library.depot_path()?, mirror));
+                }
+                continue;
+            }
+            for native in library.natives {
+                if let Some(mirror) = native.mirror {
+                    out.push((library.native_depot_path(native.classifier)?, mirror));
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// What the merged version document is called.
     ///
     /// The same shape both meta services use, so a depot stays legible to
@@ -193,6 +228,23 @@ impl LoaderPin {
 // ---- the pins ---------------------------------------------------------------
 
 const FABRIC_MAVEN: &str = "https://maven.fabricmc.net/";
+
+/// Where ash mirrors the artifacts it cannot afford to lose.
+///
+/// A flat store rather than a repository layout, so a mirrored artifact
+/// names its whole URL instead of deriving one. `+` becomes `-` in the file
+/// names because GitHub mangles some characters in release asset names, and
+/// a mirrored file that cannot be fetched under the name ash expects is a
+/// mirror that does not work.
+///
+/// A macro rather than a `const` because the base has to be concatenated at
+/// compile time, and `concat!` takes literals. Bumping the release means
+/// editing this one line. See `docs/mirror.md`.
+macro_rules! mirrored {
+    ($file:literal) => {
+        Some(concat!("https://github.com/sisi-j/ash/releases/download/mirror-2026-09-16/", $file))
+    };
+}
 
 /// Fabric Loader 0.19.5 on 1.21.11.
 ///
@@ -216,6 +268,7 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
         PinnedLibrary {
             name: "net.fabricmc:intermediary:1.21.11",
             repository: FABRIC_MAVEN,
+            mirror: None,
             sha1: "f1e2033afc8b637150c223b2bfd352d37544bc96",
             size: 797_685,
             natives: &[],
@@ -223,6 +276,7 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
         PinnedLibrary {
             name: "net.fabricmc:fabric-loader:0.19.5",
             repository: FABRIC_MAVEN,
+            mirror: None,
             sha1: "ff9e65cffca4a67f31523e1807fe0855940fcbfa",
             size: 1_984_980,
             natives: &[],
@@ -237,6 +291,10 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
     bundled_mods: &[PinnedLibrary {
         name: "net.fabricmc.fabric-api:fabric-api:0.141.6+1.21.11",
         repository: FABRIC_MAVEN,
+        // Not mirrored. `maven.fabricmc.net` is a well-resourced project
+        // with fallback hosts of its own; what ash mirrors is Legacy
+        // Fabric's single self-hosted server.
+        mirror: None,
         sha1: "c98467cbbaf4d197377266795ae015f4130d65b6",
         size: 2_426_039,
         natives: &[],
@@ -269,6 +327,7 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
         PinnedLibrary {
             name: "net.legacyfabric:intermediary:1.8.9",
             repository: LEGACY_MAVEN,
+            mirror: mirrored!("intermediary-1.8.9.jar"),
             sha1: "6622ac0b22cb62b24b6484e0fcec5436bf189161",
             size: 150_522,
             natives: &[],
@@ -276,6 +335,8 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
         PinnedLibrary {
             name: "net.fabricmc:fabric-loader:0.19.3",
             repository: FABRIC_MAVEN,
+            // Upstream Fabric's Maven, not Legacy Fabric's, so not mirrored.
+            mirror: None,
             sha1: "354dfaa02d0552e11867f85dff7cdbfaf813ba3e",
             size: 1_976_502,
             natives: &[],
@@ -289,6 +350,7 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
         PinnedLibrary {
             name: "org.lwjgl.lwjgl:lwjgl:2.9.4+legacyfabric.17",
             repository: LEGACY_MAVEN,
+            mirror: mirrored!("lwjgl-2.9.4-legacyfabric.17.jar"),
             sha1: "b0d3b134274c82aa401c90b42f0572063b1bf735",
             size: 1_081_524,
             natives: &[],
@@ -296,6 +358,7 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
         PinnedLibrary {
             name: "org.lwjgl.lwjgl:lwjgl_util:2.9.4+legacyfabric.17",
             repository: LEGACY_MAVEN,
+            mirror: mirrored!("lwjgl_util-2.9.4-legacyfabric.17.jar"),
             sha1: "60b2bc63267f55fda5295d470e61d9fc672fa14c",
             size: 180_575,
             natives: &[],
@@ -303,18 +366,23 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
         PinnedLibrary {
             name: "org.lwjgl.lwjgl:lwjgl-platform:2.9.4+legacyfabric.17",
             repository: LEGACY_MAVEN,
+            // The coordinate itself is not fetched, so it has no mirror -
+            // the platform jars below carry their own.
+            mirror: None,
             // No jar of its own - only the platform jars below, which is how
             // Mojang's 1.8.9 entry for the same coordinate is shaped.
             sha1: "",
             size: 0,
             natives: &[
                 PinnedNative {
+                    mirror: mirrored!("lwjgl-platform-2.9.4-legacyfabric.17-natives-windows.jar"),
                     os: Os::Windows,
                     classifier: "natives-windows",
                     sha1: "ef651faca2fc0fdf97ef53ed56bbe0881655a96e",
                     size: 2_491_132,
                 },
                 PinnedNative {
+                    mirror: mirrored!("lwjgl-platform-2.9.4-legacyfabric.17-natives-osx.jar"),
                     os: Os::MacOs,
                     classifier: "natives-osx",
                     sha1: "720009ad4fb3ebc510d2452e97dec3b0c6b4182f",
@@ -342,6 +410,7 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
     bundled_mods: &[PinnedLibrary {
         name: "net.legacyfabric.legacy-fabric-api:legacy-fabric-api:1.13.5+1.8.9",
         repository: LEGACY_MAVEN,
+        mirror: mirrored!("legacy-fabric-api-1.13.5-1.8.9.jar"),
         sha1: "4cc125464f3894bdad83eb5ad82c4ae0f290b344",
         size: 5_217,
         natives: &[],
@@ -550,6 +619,15 @@ impl PinnedLibrary {
     pub(crate) fn file_name(&self) -> Result<String, AshError> {
         let path = maven_path(self.name).ok_or_else(|| coordinate_error(self.name))?;
         path.rsplit('/').next().map(str::to_owned).ok_or_else(|| coordinate_error(self.name))
+    }
+
+    /// Where one of this library's platform jars lives, relative to the
+    /// depot root.
+    pub(crate) fn native_depot_path(&self, classifier: &str) -> Result<String, AshError> {
+        let coordinate = format!("{}:{}", self.name, classifier);
+        maven_path(&coordinate)
+            .map(|path| format!("libraries/{path}"))
+            .ok_or_else(|| coordinate_error(self.name))
     }
 
     /// The artifact id alone, which every version of this jar shares.

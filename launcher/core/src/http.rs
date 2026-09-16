@@ -200,6 +200,8 @@ pub struct FakeHttp {
     routes: Mutex<HashMap<String, VecDeque<HttpResponse>>>,
     /// URLs that fail before any server is reached.
     unreachable: Mutex<Vec<String>>,
+    /// Whole prefixes that do, which is what a host going away looks like.
+    unreachable_prefixes: Mutex<Vec<String>>,
     requested: Mutex<Vec<HttpRequest>>,
 }
 
@@ -225,10 +227,23 @@ impl FakeHttp {
         Arc::clone(self)
     }
 
+    /// Everything under a prefix is unreachable.
+    ///
+    /// What a repository going away actually looks like, and a different
+    /// thing from one URL failing: a test that listed a host's URLs one by
+    /// one would keep passing the day an artifact was added from the same
+    /// host and quietly left unmirrored.
+    pub fn host_unreachable(self: &Arc<Self>, prefix: impl Into<String>) -> Arc<Self> {
+        self.unreachable_prefixes.lock().unwrap().push(prefix.into());
+        Arc::clone(self)
+    }
+
     /// Nothing at all is reachable.
     pub fn offline() -> Arc<Self> {
         let fake = Self::new();
-        fake.unreachable.lock().unwrap().push(String::new());
+        // Every URL starts with the empty prefix, so "offline" is just the
+        // widest possible host being down rather than its own special case.
+        fake.unreachable_prefixes.lock().unwrap().push(String::new());
         fake
     }
 
@@ -290,7 +305,9 @@ impl HttpPort for FakeHttp {
         // An empty prefix matches everything, which is how `offline` works.
         let unreachable = {
             let patterns = self.unreachable.lock().unwrap();
-            patterns.iter().any(|p| p.is_empty() || same_endpoint(&url, p))
+            let prefixes = self.unreachable_prefixes.lock().unwrap();
+            patterns.iter().any(|p| same_endpoint(&url, p))
+                || prefixes.iter().any(|p| url.starts_with(p.as_str()))
         };
         if unreachable {
             return Err(AshError::Transport { url, detail: "no route to host".into() });

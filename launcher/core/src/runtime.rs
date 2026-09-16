@@ -187,6 +187,7 @@ pub(crate) async fn provision<S: ProgressSink + ?Sized>(
                 };
                 artifacts.push(Artifact {
                     url: downloads.raw.url.clone(),
+                    mirror: None,
                     sha1: downloads.raw.sha1.clone(),
                     size: downloads.raw.size,
                     path: path.clone(),

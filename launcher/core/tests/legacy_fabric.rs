@@ -29,9 +29,16 @@ const VERSION_URL: &str = "https://piston-meta.mojang.com/v1/packages/bb/1.8.9.j
 const CLIENT_URL: &str = "https://piston-data.mojang.com/v1/objects/dd/client.jar";
 const CLIENT_JAR: &[u8] = b"pretend this is the 1.8.9 client jar";
 
-const MAVEN: &str = "https://maven.test/";
+/// Upstream Fabric's Maven, which serves the loader and its own libraries.
+const FABRIC: &str = "https://fabric.test/";
+/// Legacy Fabric's single self-hosted repository - the one with a bus factor
+/// of one, and the reason the mirror exists.
+const LEGACY: &str = "https://legacy.test/";
+/// ash's mirror of everything [`LEGACY`] serves. Flat, like the real one.
+const MIRROR: &str = "https://mirror.test/";
+
 const DOCUMENT_URL: &str =
-    "https://maven.test/net/fabricmc/fabric-loader/9.9.3/fabric-loader-9.9.3.json";
+    "https://fabric.test/net/fabricmc/fabric-loader/9.9.3/fabric-loader-9.9.3.json";
 
 const KNOT: &str = "net.fabricmc.loader.impl.launch.knot.KnotClient";
 
@@ -77,7 +84,11 @@ const GAME_NATIVE_BODY: &[u8] = b"the game's own native library";
 
 // ---- fixtures ---------------------------------------------------------------
 
-fn maven_url(coordinate: &str) -> String {
+fn maven_url(repository: &str, coordinate: &str) -> String {
+    format!("{repository}{}", maven_path(coordinate))
+}
+
+fn maven_path(coordinate: &str) -> String {
     let mut parts = coordinate.split(':');
     let group = parts.next().expect("a group").replace('.', "/");
     let artifact = parts.next().expect("an artifact");
@@ -86,7 +97,20 @@ fn maven_url(coordinate: &str) -> String {
         Some(c) => format!("-{c}"),
         None => String::new(),
     };
-    format!("{MAVEN}{group}/{artifact}/{version}/{artifact}-{version}{classifier}.jar")
+    format!("{group}/{artifact}/{version}/{artifact}-{version}{classifier}.jar")
+}
+
+/// Where the mirror keeps one artifact.
+///
+/// Flat, and `+` becomes `-`, which is the rule ash's real mirror follows
+/// because GitHub mangles some characters in release asset names.
+fn mirror_url(coordinate: &str) -> String {
+    let file = maven_path(coordinate).rsplit('/').next().expect("a file name").to_owned();
+    format!("{MIRROR}{}", file.replace('+', "-"))
+}
+
+fn depot_relative(coordinate: &str) -> String {
+    format!("libraries/{}", maven_path(coordinate))
 }
 
 /// A real jar, because preparation unpacks these and a fixture it could not
@@ -124,7 +148,7 @@ fn document() -> String {
         r#"{{"version":2,"min_java_version":8,
           "libraries":{{
             "common":[
-              {{"name":"{ASM}","url":"{MAVEN}","sha1":"{asm_sha}","size":{asm_size}}}
+              {{"name":"{ASM}","url":"{FABRIC}","sha1":"{asm_sha}","size":{asm_size}}}
             ],
             "client":[]
           }},
@@ -140,9 +164,22 @@ fn pins() -> &'static [LoaderPin] {
 
     PINS.get_or_init(|| {
         let leak = |text: String| -> &'static str { Box::leak(text.into_boxed_str()) };
-        let library = |name: &'static str, jar: &'static [u8]| PinnedLibrary {
+        // Legacy Fabric's own artifacts: mirrored, because there is one
+        // copy of them in the world.
+        let mirrored = |name: &'static str, jar: &'static [u8]| PinnedLibrary {
             name,
-            repository: MAVEN,
+            repository: LEGACY,
+            mirror: Some(leak(mirror_url(name))),
+            sha1: leak(common::sha1(jar)),
+            size: jar.len() as u64,
+            natives: &[],
+        };
+        // Upstream Fabric's: not mirrored, and so a control for every test
+        // below that blocks Legacy Fabric's host.
+        let upstream = |name: &'static str, jar: &'static [u8]| PinnedLibrary {
+            name,
+            repository: FABRIC,
+            mirror: None,
             sha1: leak(common::sha1(jar)),
             size: jar.len() as u64,
             natives: &[],
@@ -150,6 +187,7 @@ fn pins() -> &'static [LoaderPin] {
 
         let document = document();
         let natives: &'static [PinnedNative] = Box::leak(Box::new([PinnedNative {
+            mirror: Some(leak(mirror_url(&format!("{FORK_PLATFORM}:natives-windows")))),
             os: ash_core::Os::Windows,
             classifier: "natives-windows",
             sha1: leak(common::sha1(fork_native())),
@@ -157,15 +195,22 @@ fn pins() -> &'static [LoaderPin] {
         }]));
 
         let libraries: &'static [PinnedLibrary] = Box::leak(Box::new([
-            library(INTERMEDIARY, INTERMEDIARY_JAR),
-            library(LOADER, LOADER_JAR),
-            library(FORK_LWJGL, FORK_LWJGL_JAR),
-            library(FORK_UTIL, FORK_UTIL_JAR),
+            mirrored(INTERMEDIARY, INTERMEDIARY_JAR),
+            upstream(LOADER, LOADER_JAR),
+            mirrored(FORK_LWJGL, FORK_LWJGL_JAR),
+            mirrored(FORK_UTIL, FORK_UTIL_JAR),
             // The coordinate names no jar of its own; only the platform jars
             // below, exactly as Mojang's own entry for it is shaped.
-            PinnedLibrary { name: FORK_PLATFORM, repository: MAVEN, sha1: "", size: 0, natives },
+            PinnedLibrary {
+                name: FORK_PLATFORM,
+                repository: LEGACY,
+                mirror: None,
+                sha1: "",
+                size: 0,
+                natives,
+            },
         ]));
-        let bundled: &'static [PinnedLibrary] = Box::leak(Box::new([library(API, API_JAR)]));
+        let bundled: &'static [PinnedLibrary] = Box::leak(Box::new([mirrored(API, API_JAR)]));
 
         let pins: &'static [LoaderPin] = Box::leak(Box::new([LoaderPin {
             loader: Loader::LegacyFabric,
@@ -245,17 +290,32 @@ fn serving() -> Arc<FakeHttp> {
             .route(VERSION_URL, HttpResponse::ok(version_json()))
             .route(CLIENT_URL, HttpResponse::ok(CLIENT_JAR))
             .route(DOCUMENT_URL, HttpResponse::ok(document()))
-            .route(maven_url(ASM), HttpResponse::ok(ASM_JAR))
-            .route(maven_url(INTERMEDIARY), HttpResponse::ok(INTERMEDIARY_JAR))
-            .route(maven_url(LOADER), HttpResponse::ok(LOADER_JAR))
-            .route(maven_url(FORK_LWJGL), HttpResponse::ok(FORK_LWJGL_JAR))
-            .route(maven_url(FORK_UTIL), HttpResponse::ok(FORK_UTIL_JAR))
+            .route(maven_url(FABRIC, ASM), HttpResponse::ok(ASM_JAR))
+            .route(maven_url(FABRIC, LOADER), HttpResponse::ok(LOADER_JAR))
+            .route(maven_url(LEGACY, INTERMEDIARY), HttpResponse::ok(INTERMEDIARY_JAR))
+            .route(maven_url(LEGACY, FORK_LWJGL), HttpResponse::ok(FORK_LWJGL_JAR))
+            .route(maven_url(LEGACY, FORK_UTIL), HttpResponse::ok(FORK_UTIL_JAR))
             .route(
-                maven_url(&format!("{FORK_PLATFORM}:natives-windows")),
+                maven_url(LEGACY, &format!("{FORK_PLATFORM}:natives-windows")),
                 HttpResponse::ok(fork_native().to_vec()),
             )
-            .route(maven_url(API), HttpResponse::ok(API_JAR)),
+            .route(maven_url(LEGACY, API), HttpResponse::ok(API_JAR)),
     ))
+}
+
+/// The same bytes, from ash's mirror.
+///
+/// Routed alongside upstream rather than instead of it, so every test that
+/// does not block a host proves ash still prefers the original.
+fn with_mirror(http: Arc<FakeHttp>) -> Arc<FakeHttp> {
+    http.route(mirror_url(INTERMEDIARY), HttpResponse::ok(INTERMEDIARY_JAR))
+        .route(mirror_url(FORK_LWJGL), HttpResponse::ok(FORK_LWJGL_JAR))
+        .route(mirror_url(FORK_UTIL), HttpResponse::ok(FORK_UTIL_JAR))
+        .route(
+            mirror_url(&format!("{FORK_PLATFORM}:natives-windows")),
+            HttpResponse::ok(fork_native().to_vec()),
+        )
+        .route(mirror_url(API), HttpResponse::ok(API_JAR))
 }
 
 fn with_the_games_lwjgl(http: Arc<FakeHttp>) -> Arc<FakeHttp> {
@@ -420,7 +480,7 @@ async fn the_merge_composes_with_the_pre_1_13_argument_format() {
 #[tokio::test]
 async fn loader_artifacts_are_verified_exactly_as_on_the_modern_target() {
     let http = serving().route_sequence(
-        maven_url(INTERMEDIARY),
+        maven_url(LEGACY, INTERMEDIARY),
         vec![
             HttpResponse::ok(b"not the intermediary".to_vec()),
             HttpResponse::ok(b"still not it".to_vec()),
@@ -528,4 +588,115 @@ fn both_version_targets_offer_the_loader_ash_pinned_for_them() {
     let message = err.user_message();
     assert!(message.contains(VERSION), "{message}");
     assert!(!message.contains('/'), "leaked a path or url: {message}");
+}
+
+// ---- the mirror ---------------------------------------------------------------
+
+#[tokio::test]
+async fn the_mirror_is_left_alone_while_the_original_answers() {
+    let f = fixture_with(with_mirror(serving()));
+    let id = f.modded().await;
+
+    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepared");
+
+    let requested = f.http.requested();
+    // Upstream stays the source of truth while it is up. Without this the
+    // test below could pass on a mirror ash was using all along.
+    assert!(
+        requested.iter().any(|url| url.starts_with(LEGACY)),
+        "the test proves nothing if upstream was never asked"
+    );
+    assert!(
+        !requested.iter().any(|url| url.starts_with(MIRROR)),
+        "ash went to the mirror while the original was answering"
+    );
+}
+
+#[tokio::test]
+async fn an_instance_prepares_and_launches_with_legacy_fabrics_repository_unreachable() {
+    // Blocked, not argued. The whole host is gone, which is what a single
+    // self-hosted repository with no published mirror looks like the day it
+    // goes away - not one URL failing.
+    let f = fixture_with(with_mirror(serving()).host_unreachable(LEGACY));
+    let id = f.modded().await;
+
+    let view = f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launches");
+
+    // Everything that repository serves is in the depot anyway.
+    for coordinate in [INTERMEDIARY, FORK_LWJGL, FORK_UTIL, API] {
+        assert!(
+            f.tmp.path().join("depot").join(depot_relative(coordinate)).is_file(),
+            "{coordinate} was not fetched from the mirror"
+        );
+    }
+    // Including the natives, which had to be unpacked from a mirrored jar.
+    let natives = f.tmp.path().join("depot/versions/fabric-loader-9.9.3-1.8.9/natives");
+    assert!(natives.join(FORK_NATIVE_FILE).is_file(), "the fork's natives are missing");
+    // And the game still starts through the loader.
+    assert!(view.args.contains(&KNOT.to_owned()));
+
+    let requested = f.http.requested();
+    assert!(
+        requested.iter().any(|url| url.starts_with(MIRROR)),
+        "the test proves nothing if the mirror was never asked"
+    );
+    // Upstream Fabric is a different host and is not mirrored, so a fetch
+    // from it here is the control: blocking one repository must not have
+    // quietly rerouted everything.
+    assert!(requested.iter().any(|url| url.starts_with(FABRIC)));
+}
+
+#[tokio::test]
+async fn a_corrupt_original_is_not_papered_over_by_the_mirror() {
+    // The mirror answers only when the original cannot be reached. An
+    // artifact that *arrives* and fails its hash is a different thing
+    // entirely, and quietly taking a good copy from somewhere else would
+    // turn a tampered-with upstream into a silent success - which is exactly
+    // the property that lets ash trust a second source at all.
+    let http = with_mirror(serving()).route_sequence(
+        maven_url(LEGACY, INTERMEDIARY),
+        vec![
+            HttpResponse::ok(b"not the intermediary".to_vec()),
+            HttpResponse::ok(b"still not it".to_vec()),
+        ],
+    );
+    let f = fixture_with(http);
+    let id = f.modded().await;
+
+    let err = f
+        .ash
+        .prepare_instance(&id, &NullSink, &Cancel::new())
+        .await
+        .expect_err("a corrupt original is refused rather than replaced");
+
+    assert_eq!(err.kind(), "verification_failed");
+    // The mirror has a perfectly good copy and was deliberately not asked.
+    assert!(
+        !f.http.requested().iter().any(|url| url == &mirror_url(INTERMEDIARY)),
+        "ash fell back to the mirror on a hash mismatch"
+    );
+}
+
+#[tokio::test]
+async fn a_mirrored_artifact_that_does_not_match_its_hash_is_rejected() {
+    // The mirror is a second copy, not a second authority: it is verified
+    // against the same pinned hash, so a mirror that had been tampered with
+    // - or had simply drifted - cannot put anything into the depot.
+    let http = with_mirror(serving())
+        .host_unreachable(LEGACY)
+        .route(mirror_url(INTERMEDIARY), HttpResponse::ok(b"not the intermediary".to_vec()));
+    let f = fixture_with(http);
+    let id = f.modded().await;
+
+    let err = f
+        .ash
+        .prepare_instance(&id, &NullSink, &Cancel::new())
+        .await
+        .expect_err("a mirrored artifact that does not match is refused");
+
+    assert_eq!(err.kind(), "verification_failed");
+    assert!(
+        !f.tmp.path().join("depot").join(depot_relative(INTERMEDIARY)).exists(),
+        "the bad bytes reached the depot"
+    );
 }
