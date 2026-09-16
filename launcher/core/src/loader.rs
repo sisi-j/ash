@@ -29,9 +29,12 @@
 //! sidecar request. Updating a pin is a deliberate act in a release, which is
 //! what ADR-0014 says it should be; see `docs/adr/0014-loader-metadata-pinned-not-fetched.md`.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::AshError;
+use crate::version::Os;
 
 /// The mod-loading layer an instance runs under.
 ///
@@ -51,6 +54,16 @@ pub enum Loader {
     Vanilla,
     /// Fabric Loader, on the modern version target.
     Fabric,
+    /// Fabric Loader again - the *same* upstream artifact, unmodified - on
+    /// 1.8.9. Legacy Fabric's own meta service serves
+    /// `net.fabricmc:fabric-loader`, not a fork of it; there is no "Legacy
+    /// Fabric Loader" artifact, and looking for one is looking for a file
+    /// that does not exist.
+    ///
+    /// Its own loader rather than a flag on [`Loader::Fabric`] because what
+    /// differs is most of what a pin names: the intermediary, the API, and
+    /// an LWJGL 2 fork that replaces the game's own.
+    LegacyFabric,
 }
 
 impl Loader {
@@ -58,7 +71,7 @@ impl Loader {
     ///
     /// Which of these a given version target can actually run is a different
     /// question, and [`loaders_for`] is the one that answers it.
-    pub const ALL: [Loader; 2] = [Loader::Vanilla, Loader::Fabric];
+    pub const ALL: [Loader; 3] = [Loader::Vanilla, Loader::Fabric, Loader::LegacyFabric];
 
     /// The machine name, matching how the loader is written to disk.
     ///
@@ -68,6 +81,7 @@ impl Loader {
         match self {
             Loader::Vanilla => "vanilla",
             Loader::Fabric => "fabric",
+            Loader::LegacyFabric => "legacy_fabric",
         }
     }
 }
@@ -95,6 +109,35 @@ pub struct PinnedLibrary {
     pub name: &'static str,
     /// The Maven repository root it is served from, trailing slash included.
     pub repository: &'static str,
+    pub sha1: &'static str,
+    pub size: u64,
+    /// The platform jars this library unpacks, if it is one that has to be.
+    ///
+    /// Empty for an ordinary jar, and then `sha1` and `size` describe the
+    /// one artifact the coordinate names. When it is not empty the
+    /// coordinate names no single jar at all - only these do - which is how
+    /// Mojang's own 1.8.9 metadata is shaped too.
+    pub natives: &'static [PinnedNative],
+}
+
+/// One platform's native jar for a library that has to be unpacked.
+///
+/// A 1.8.9-era library keeps its platform code in separate classifier jars
+/// rather than in the one the classpath names. LWJGL 2 loads those off
+/// `java.library.path`, so they have to become real files on disk; LWJGL 3
+/// reads them straight out of the classpath and needs none of this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PinnedNative {
+    /// The platform this jar is for.
+    ///
+    /// [`Os`] rather than the string Mojang's metadata uses, so a pin cannot
+    /// name a platform ash does not select for. `version.rs` leaves Linux
+    /// out deliberately - shipping it would mean shipping untested
+    /// native-library selection - and a `&str` here would let a pin carry
+    /// four megabytes of natives that nothing could ever unpack.
+    pub os: Os,
+    /// The Maven classifier carrying that platform's jar.
+    pub classifier: &'static str,
     pub sha1: &'static str,
     pub size: u64,
 }
@@ -175,12 +218,14 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
             repository: FABRIC_MAVEN,
             sha1: "f1e2033afc8b637150c223b2bfd352d37544bc96",
             size: 797_685,
+            natives: &[],
         },
         PinnedLibrary {
             name: "net.fabricmc:fabric-loader:0.19.5",
             repository: FABRIC_MAVEN,
             sha1: "ff9e65cffca4a67f31523e1807fe0855940fcbfa",
             size: 1_984_980,
+            natives: &[],
         },
     ],
     // Cosmetic, and the only JVM argument the loader wants. It exists to
@@ -194,6 +239,112 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
         repository: FABRIC_MAVEN,
         sha1: "c98467cbbaf4d197377266795ae015f4130d65b6",
         size: 2_426_039,
+        natives: &[],
+    }],
+};
+
+const LEGACY_MAVEN: &str = "https://maven.legacyfabric.net/";
+
+/// Fabric Loader 0.19.3 on 1.8.9, the Legacy Fabric way.
+///
+/// Every value here was read off `maven.legacyfabric.net` and
+/// `meta.legacyfabric.net` on 2026-09-15, because the published sources
+/// disagree with each other and none of them could be trusted alone - see
+/// `docs/research/0002-fabric-loader-and-the-client-toolchain.md` gap 6.
+///
+/// Note the loader's group: `net.fabricmc`. Legacy Fabric's own meta service
+/// serves upstream Fabric Loader unmodified, and 0.19.3 is the build it
+/// pairs with 1.8.9.
+const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
+    loader: Loader::LegacyFabric,
+    version_id: "1.8.9",
+    loader_version: "0.19.3",
+    document: PinnedFile {
+        url:
+            "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.19.3/fabric-loader-0.19.3.json",
+        sha1: "a1bef7916f48a65491f0430743e51c1f4161054e",
+        size: 4257,
+    },
+    libraries: &[
+        PinnedLibrary {
+            name: "net.legacyfabric:intermediary:1.8.9",
+            repository: LEGACY_MAVEN,
+            sha1: "6622ac0b22cb62b24b6484e0fcec5436bf189161",
+            size: 150_522,
+            natives: &[],
+        },
+        PinnedLibrary {
+            name: "net.fabricmc:fabric-loader:0.19.3",
+            repository: FABRIC_MAVEN,
+            sha1: "354dfaa02d0552e11867f85dff7cdbfaf813ba3e",
+            size: 1_976_502,
+            natives: &[],
+        },
+        // Legacy Fabric's LWJGL 2 fork, which replaces the game's own by
+        // naming the same `group:artifact` at a different version. This is
+        // not an optimisation: the fork exists to add arm64 natives, raise
+        // the macOS floor, dispatch calls from the main thread and fix a
+        // crash on Java 11+, and on Apple Silicon it is what makes 1.8.9 run
+        // at all.
+        PinnedLibrary {
+            name: "org.lwjgl.lwjgl:lwjgl:2.9.4+legacyfabric.17",
+            repository: LEGACY_MAVEN,
+            sha1: "b0d3b134274c82aa401c90b42f0572063b1bf735",
+            size: 1_081_524,
+            natives: &[],
+        },
+        PinnedLibrary {
+            name: "org.lwjgl.lwjgl:lwjgl_util:2.9.4+legacyfabric.17",
+            repository: LEGACY_MAVEN,
+            sha1: "60b2bc63267f55fda5295d470e61d9fc672fa14c",
+            size: 180_575,
+            natives: &[],
+        },
+        PinnedLibrary {
+            name: "org.lwjgl.lwjgl:lwjgl-platform:2.9.4+legacyfabric.17",
+            repository: LEGACY_MAVEN,
+            // No jar of its own - only the platform jars below, which is how
+            // Mojang's 1.8.9 entry for the same coordinate is shaped.
+            sha1: "",
+            size: 0,
+            natives: &[
+                PinnedNative {
+                    os: Os::Windows,
+                    classifier: "natives-windows",
+                    sha1: "ef651faca2fc0fdf97ef53ed56bbe0881655a96e",
+                    size: 2_491_132,
+                },
+                PinnedNative {
+                    os: Os::MacOs,
+                    classifier: "natives-osx",
+                    sha1: "720009ad4fb3ebc510d2452e97dec3b0c6b4182f",
+                    size: 1_599_360,
+                },
+                // The fork publishes a Linux jar too. It is deliberately not
+                // pinned: ash does not select natives for Linux, so it would
+                // be four megabytes nothing could ever unpack.
+            ],
+        },
+    ],
+    // Deliberately empty. Legacy Fabric's fork of the meta service comments
+    // the whole argument block out, `-DFabricMcEmu` included, above the note
+    // "Prevent pre-1.13 from launching in vanilla launcher for some
+    // reasons???". So a merged 1.8.9 profile has no structured arguments at
+    // all and inherits vanilla's `minecraftArguments` instead.
+    jvm_arguments: &[],
+    // Legacy Fabric API 1.13.5+1.8.9, Apache-2.0, shipped unmodified.
+    //
+    // Unlike Fabric API this is *not* a fat jar: it is a metadata-only
+    // aggregator - four entries, no classes - and its POM names 43 separate
+    // module artifacts. Which of those ash's client needs cannot be known
+    // until the client exists, so only the aggregator is pinned here and the
+    // modules are #21's to add.
+    bundled_mods: &[PinnedLibrary {
+        name: "net.legacyfabric.legacy-fabric-api:legacy-fabric-api:1.13.5+1.8.9",
+        repository: LEGACY_MAVEN,
+        sha1: "4cc125464f3894bdad83eb5ad82c4ae0f290b344",
+        size: 5_217,
+        natives: &[],
     }],
 };
 
@@ -203,7 +354,7 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
 /// same reason the depot and instance roots are: they are ash's own values,
 /// and a test that could not point them somewhere else would have to serve
 /// several megabytes of real third-party jars to exercise a modded prepare.
-pub const PINS: &[LoaderPin] = &[FABRIC_1_21_11];
+pub const PINS: &[LoaderPin] = &[FABRIC_1_21_11, LEGACY_FABRIC_1_8_9];
 
 /// The loader ash installs for a version target, if it has one pinned.
 ///
@@ -317,12 +468,29 @@ struct ProfileArguments {
 #[derive(Debug, Serialize)]
 struct ProfileLibrary {
     name: String,
+    /// Which classifier carries each platform's native jar.
+    ///
+    /// Its presence is what says "unpack this" - preparation does not check
+    /// a version anywhere, and must not start.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    natives: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extract: Option<ProfileExtract>,
     downloads: ProfileDownloads,
 }
 
 #[derive(Debug, Serialize)]
+struct ProfileExtract {
+    exclude: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct ProfileDownloads {
-    artifact: ProfileArtifact,
+    /// Absent on a library whose coordinate names no single jar.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    artifact: Option<ProfileArtifact>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    classifiers: BTreeMap<String, ProfileArtifact>,
 }
 
 #[derive(Debug, Serialize)]
@@ -419,12 +587,7 @@ pub(crate) fn synthesise_profile(
         libraries.push(profile_library(&library.name, &library.url, &library.sha1, library.size)?);
     }
     for library in pin.libraries {
-        libraries.push(profile_library(
-            library.name,
-            library.repository,
-            library.sha1,
-            library.size,
-        )?);
+        libraries.push(pinned_library(library)?);
     }
     for library in &parsed.libraries.client {
         libraries.push(profile_library(&library.name, &library.url, &library.sha1, library.size)?);
@@ -459,15 +622,55 @@ fn profile_library(
     let path = maven_path(name).ok_or_else(|| coordinate_error(name))?;
     Ok(ProfileLibrary {
         name: name.to_owned(),
+        natives: None,
+        extract: None,
         downloads: ProfileDownloads {
-            artifact: ProfileArtifact {
+            artifact: Some(ProfileArtifact {
                 url: format!("{repository}{path}"),
                 path,
                 sha1: sha1.to_owned(),
                 size,
-            },
+            }),
+            classifiers: BTreeMap::new(),
         },
     })
+}
+
+/// One entry for a library ash pinned, unpacked or not.
+fn pinned_library(library: &PinnedLibrary) -> Result<ProfileLibrary, AshError> {
+    let mut entry = profile_library(library.name, library.repository, library.sha1, library.size)?;
+    if library.natives.is_empty() {
+        return Ok(entry);
+    }
+
+    // The coordinate names no jar of its own, so the artifact that
+    // `profile_library` built for it would be a path nothing serves.
+    entry.downloads.artifact = None;
+
+    for native in library.natives {
+        let coordinate = format!("{}:{}", library.name, native.classifier);
+        let path = maven_path(&coordinate).ok_or_else(|| coordinate_error(library.name))?;
+        entry
+            .natives
+            .get_or_insert_with(BTreeMap::new)
+            .insert(native.os.natives_key().to_owned(), native.classifier.to_owned());
+        entry.downloads.classifiers.insert(
+            native.classifier.to_owned(),
+            ProfileArtifact {
+                url: format!("{}{path}", library.repository),
+                path,
+                sha1: native.sha1.to_owned(),
+                size: native.size,
+            },
+        );
+    }
+
+    // What both Mojang and Legacy Fabric exclude, and for the same reason:
+    // the signature and manifest in a native jar are not native libraries,
+    // and unpacking them next to the real ones is how a signed jar becomes
+    // one the JVM refuses.
+    entry.extract = Some(ProfileExtract { exclude: vec!["META-INF/".to_owned()] });
+    Ok(entry)
 }
 
 #[cfg(test)]
@@ -615,13 +818,42 @@ mod tests {
     }
 
     #[test]
-    fn a_version_target_with_no_pinned_loader_offers_only_vanilla() {
+    fn each_version_target_offers_only_the_loaders_ash_pinned_for_it() {
         assert_eq!(loaders_for(PINS, "1.21.11"), [Loader::Vanilla, Loader::Fabric]);
+        assert_eq!(loaders_for(PINS, "1.8.9"), [Loader::Vanilla, Loader::LegacyFabric]);
+        // A version target ash has tested nothing on runs vanilla only, so
+        // no instance can be created that could never launch.
         assert_eq!(loaders_for(PINS, "1.16.5"), [Loader::Vanilla]);
-        assert_eq!(loaders_for(PINS, "1.8.9"), [Loader::Vanilla]);
 
         assert!(is_supported(PINS, Loader::Vanilla, "1.16.5"), "vanilla runs on anything");
         assert!(!is_supported(PINS, Loader::Fabric, "1.16.5"));
+    }
+
+    #[test]
+    fn every_pinned_library_names_either_a_jar_or_its_platform_jars() {
+        // The two are alternatives, and which one a library is comes from
+        // `natives` being empty rather than from the hash being blank. A pin
+        // that said neither would put an artifact with no hash into a plan,
+        // and the depot's whole invariant is that there is no such thing.
+        let libraries = PINS.iter().flat_map(|pin| pin.libraries.iter().chain(pin.bundled_mods));
+        let mut checked = 0;
+        for library in libraries {
+            checked += 1;
+            if library.natives.is_empty() {
+                assert!(
+                    !library.sha1.is_empty(),
+                    "{} has neither a hash nor natives",
+                    library.name
+                );
+                assert!(library.size > 0, "{} has no size", library.name);
+            } else {
+                for native in library.natives {
+                    assert!(!native.sha1.is_empty(), "{} has a native with no hash", library.name);
+                    assert!(native.size > 0, "{} has a native with no size", library.name);
+                }
+            }
+        }
+        assert!(checked > 0, "the test proves nothing if ash pins no libraries");
     }
 
     #[test]

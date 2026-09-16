@@ -41,7 +41,7 @@ pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use diagnostics::Diagnostics;
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
-pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary};
+pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
 pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;

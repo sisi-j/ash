@@ -41,7 +41,7 @@ export type InstanceId = string;
  * here - ash pins the loaders it has tested per target and `loadersFor`
  * answers it, so a loader ash cannot install is never offered.
  */
-export type Loader = "vanilla" | "fabric";
+export type Loader = "vanilla" | "fabric" | "legacy_fabric";
 
 /**
  * What to call a loader in front of a player, never a version number.
@@ -53,6 +53,7 @@ export type Loader = "vanilla" | "fabric";
 export const LOADER_LABELS: Record<Loader, string> = {
   vanilla: "Vanilla",
   fabric: "Fabric",
+  legacy_fabric: "Legacy Fabric",
 };
 
 export type Instance = {

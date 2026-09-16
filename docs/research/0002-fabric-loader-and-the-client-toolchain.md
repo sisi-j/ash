@@ -46,7 +46,11 @@ Read this section before acting on anything below.
 
 5. **Whether ash's bundling of Sodium triggers PolyForm Shield's Noncompete clause.** §7 sets out the text and the reading. It is a reading, not a ruling, and the licensor is an individual (JellySquid) with no published interpretation, FAQ or exception process that I could find.
 
-6. **Legacy Fabric API's real current version for 1.8.9.** GitHub releases run to 1.16.1 (2026-03-28), but `maven.legacyfabric.net`'s `maven-metadata.xml` for `legacy-fabric-api` tops out at `1.13.5+1.8.9` with `lastUpdated 20260531140518`, and Legacy Fabric's own example mod pins `1.13.2+1.8.9` **[PRACTICE]**. Modrinth lists the project as updated 2026-09-09 with 1.8.9 in its game-version list **[PRACTICE]**. Three sources, three answers. Resolve empirically before pinning.
+6. ~~**Legacy Fabric API's real current version for 1.8.9.**~~ **Resolved 2026-09-15, while implementing #18.** The answer is **`1.13.5+1.8.9`**, which is what `maven.legacyfabric.net` actually serves - the repository ash downloads from, and so the only one of the three sources that can be right. GitHub's releases running to 1.16.1 are for other Minecraft versions; the example mod's `1.13.2+1.8.9` is simply older.
+
+    **And the artifact is not what this section assumed.** `legacy-fabric-api-1.13.5+1.8.9.jar` is **5,217 bytes: four entries, no classes, no nested `jars`** - a metadata-only aggregator. Its POM names **43 separate module dependencies**, each independently versioned (some `+1.8.9`, some `+1.12.2`, plus `-common` variants). Legacy Fabric API is modular where Fabric API is one 2.4MB fat jar, so "the same thing on 1.8.9" is not the same shape, and this document's talk of *"the API jar"* on this target is wrong.
+
+    ash pins the aggregator alone for now. Which modules the client actually needs cannot be known until the client exists, so pinning 43 hashes today would be guessing; that is #21's to settle. Confirmed in the same pass: Legacy Fabric's meta serves **upstream `net.fabricmc:fabric-loader:0.19.3`** for 1.8.9, and `maven.legacyfabric.net` accepts a literal `+` in a path unencoded, so no URL escaping is needed.
 
 ### Sources are thin, conflicting or out of date
 

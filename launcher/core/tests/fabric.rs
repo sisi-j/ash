@@ -119,6 +119,7 @@ fn pins() -> &'static [LoaderPin] {
             repository: MAVEN,
             sha1: leak(common::sha1(jar)),
             size: jar.len() as u64,
+            natives: &[],
         };
 
         let document = document();

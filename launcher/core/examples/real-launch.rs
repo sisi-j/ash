@@ -8,7 +8,8 @@
 //!
 //!     cargo run -p ash-core --example real-launch -- <client-id> [version] [loader]
 //!
-//! `loader` is `vanilla` (the default) or `fabric`. A modded run is the only
+//! `loader` is `vanilla` (the default), `fabric` on 1.21.11, or
+//! `legacy-fabric` on 1.8.9. A modded run is the only
 //! way to see the acceptance criteria that no fixture can stand in for: the
 //! game reaching its main menu with the loader running, and Fabric Loader and
 //! Fabric API appearing in the game's own mod list.
@@ -66,8 +67,9 @@ async fn main() {
     let loader = match args.next().as_deref() {
         None | Some("vanilla") => Loader::Vanilla,
         Some("fabric") => Loader::Fabric,
+        Some("legacy-fabric") => Loader::LegacyFabric,
         Some(other) => {
-            eprintln!("unknown loader {other}; expected vanilla or fabric");
+            eprintln!("unknown loader {other}; expected vanilla, fabric or legacy-fabric");
             std::process::exit(2);
         }
     };
