@@ -61,12 +61,14 @@ jobs:
       # run as part of the build.
       - uses: gradle/actions/wrapper-validation@v6
 
-      # 21 because that is what 1.21.11 runs on and what Loom expects for it.
-      # The 1.8.9 module #21 adds will still build here: a modern JDK emits
-      # Java 8 bytecode with `--release 8`, and only the game needs Java 8.
+      # The JDK that *builds*, which is not the JDK the game runs on. Fabric
+      # Loom 1.18 is compiled for Java 25 and refuses to resolve on anything
+      # older; the game on 1.21.11 wants 21 and on 1.8.9 wants 8, and the
+      # launcher provisions those itself. `--release` in each module decides
+      # what bytecode comes out, so one modern JDK builds both targets.
       - uses: actions/setup-java@v6
         with:
-          java-version: 21
+          java-version: 25
           distribution: temurin
 
       - uses: gradle/actions/setup-gradle@v6

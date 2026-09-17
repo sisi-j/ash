@@ -21,10 +21,16 @@ Why three modules rather than a source preprocessor spanning both:
 ./gradlew build
 ```
 
-Needs a JDK 21 or newer on `JAVA_HOME` — a modern JDK emits the Java 8
-bytecode the shared module wants via `--release 8`; only the *game* on 1.8.9
-runs on Java 8. The first build downloads Minecraft and Mojang's mappings and
-takes a couple of minutes; later ones are seconds.
+Needs a JDK **25 or newer** on `JAVA_HOME`: Fabric Loom 1.18 is compiled for
+Java 25 and will not resolve on anything older.
+
+That is the JDK that *builds*, which is a different thing from the JDK the
+game runs on — 1.21.11 wants Java 21 and 1.8.9 wants Java 8, and the launcher
+provisions those itself. `--release` in each module decides what bytecode
+comes out, so one modern JDK builds both targets.
+
+The first build downloads Minecraft and Mojang's mappings and takes a couple
+of minutes; later ones are seconds.
 
 `build` compiles both modules, runs the shared module's unit tests and the
 target module's loader tests, and runs `checkNoGameTypes`. CI runs exactly this
