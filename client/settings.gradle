@@ -1,0 +1,23 @@
+// ash's client: one module that cannot see the game, and one per version
+// target that adapts the game to it. See
+// `docs/adr/0015-two-client-projects-over-a-shared-module.md`.
+
+pluginManagement {
+    repositories {
+        // Loom lives here rather than on the plugin portal.
+        maven {
+            name = 'Fabric'
+            url = uri('https://maven.fabricmc.net/')
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'ash-client'
+
+include 'shared'
+// Named for the version target rather than "modern", because "modern" is a
+// word that rots: 1.21.11 is the last obfuscated release and 26.x is already
+// out. The directory says which build it is and always will.
+include 'target-1.21.11'

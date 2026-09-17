@@ -382,6 +382,18 @@ impl Ash {
                     &bundled.file_name()?,
                 )?;
             }
+
+            // ash's own client last, so a damaged installation is not
+            // reported before the things that can be re-downloaded have been.
+            if let Some(file_name) = pin.client_jar {
+                instance::install_client(
+                    &self.config.instances_root,
+                    id,
+                    &self.config.client_root,
+                    file_name,
+                    pin.version_id,
+                )?;
+            }
         }
 
         // An instance with every game file and no JRE is not prepared. The

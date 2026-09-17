@@ -1,0 +1,80 @@
+// The 1.21.11 half of ash's client: everything that has to name a Minecraft
+// type or a Fabric API one. Keep it thin - each class here should be a line or
+// two over the game's own API, because nothing but a human will read it. The
+// logic belongs in `:shared`, where a test can reach it.
+
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+}
+
+version = mod_version
+group = maven_group
+
+base {
+    // A fixed name, with no version in it. The launcher looks this jar up by
+    // name to place it in an instance, and the two ship in one installer, so a
+    // version here would be a second place to change on every release - and
+    // nothing would catch getting it wrong until a player's game came up with
+    // no client in it. What version of ash is running is a question
+    // `fabric.mod.json` answers, in the game's own mod list.
+    archivesName = "ash-client-${minecraft_version}"
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    // Mojang's own names: Fabric's recommendation for new mods, and what the
+    // game itself uses from 26.1 onwards, so a later move is close to a no-op.
+    // Loom fetches them at build time. They may not be redistributed complete
+    // and unmodified, so nothing is committed - see ADR-0015.
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
+    // Compiled against, and folded into the jar below.
+    implementation project(':shared')
+
+    // Fabric Loader JUnit: the loader, stood up inside the test JVM. It needs
+    // a game jar on the class path and so cannot live in the shared module -
+    // see `client/README.md`. Here the game is already there, which is what
+    // makes it free.
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation "net.fabricmc:fabric-loader-junit:${loader_version}"
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // The version the build expanded into `fabric.mod.json`, so the test can
+    // say the expansion happened rather than repeating the literal.
+    systemProperty 'ash.test.version', version
+}
+
+// 1.21.11 runs on Java 21, and the launcher provisions that runtime for it.
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+}
+
+processResources {
+    // Written into `fabric.mod.json` rather than repeated there, so what the
+    // client declares it needs cannot drift from what it was built against.
+    inputs.property 'version', version
+    inputs.property 'minecraft_version', minecraft_version
+    inputs.property 'loader_version', loader_version
+
+    filesMatching('fabric.mod.json') {
+        expand version: version,
+                minecraft_version: minecraft_version,
+                loader_version: loader_version
+    }
+}
+
+tasks.named('jar') {
+    // Fabric Loader loads one jar. The shared module's classes go inside this
+    // one; a library jar sitting beside it would simply not be there.
+    from project(':shared').sourceSets.main.output
+}
+
+// The version lives in `fabric.mod.json`, not in the file name - see
+// `archivesName` above.
+tasks.withType(AbstractArchiveTask).configureEach {
+    archiveVersion = ''
+}

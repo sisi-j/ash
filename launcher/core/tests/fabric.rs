@@ -50,6 +50,14 @@ const INTERMEDIARY: &str = "net.fabricmc:intermediary:1.21.11";
 const LOADER: &str = "net.fabricmc:fabric-loader:9.9.9";
 const API: &str = "net.fabricmc.fabric-api:fabric-api:0.1.0+1.21.11";
 
+/// ash's own client, as the installer leaves it beside the executable.
+///
+/// Never routed, deliberately. This jar does not come over the network at
+/// all, so a `FakeHttp` that has no route for it is part of the proof: if
+/// preparing ever tried to fetch ash's client, the fake would panic.
+const ASH_CLIENT: &str = "ash-client-1.21.11.jar";
+const ASH_CLIENT_JAR: &[u8] = b"pretend this is ash's own client";
+
 const ASM_JAR: &[u8] = b"pretend this is asm 9.10.1";
 const MIXIN_JAR: &[u8] = b"pretend this is sponge-mixin";
 const INTERMEDIARY_JAR: &[u8] = b"pretend this is the intermediary";
@@ -141,6 +149,7 @@ fn pins() -> &'static [LoaderPin] {
             },
             libraries,
             jvm_arguments: &["-DFabricMcEmu= net.minecraft.client.main.Main "],
+            client_jar: Some(ASH_CLIENT),
             bundled_mods: bundled,
         }]));
         pins
@@ -194,19 +203,32 @@ fn serving() -> Arc<FakeHttp> {
 struct Fixture {
     ash: Ash,
     http: Arc<FakeHttp>,
+    process: Arc<FakeProcessPort>,
     tmp: tempfile::TempDir,
+}
+
+/// Put ash's own client where an installed ash would have it.
+///
+/// The installer's job in real life, and the fixture's here. Preparing a
+/// modded instance without it is its own test below.
+fn install_ash_client(client_root: &std::path::Path) {
+    std::fs::create_dir_all(client_root).expect("the client root");
+    std::fs::write(client_root.join(ASH_CLIENT), ASH_CLIENT_JAR).expect("ash's client");
 }
 
 fn fixture_with(http: Arc<FakeHttp>) -> Fixture {
     let tmp = tempfile::tempdir().expect("temp dir");
+    let config = Config { loaders: pins(), ..Config::rooted_at(tmp.path()) };
+    install_ash_client(&config.client_root);
+    let process = FakeProcessPort::new();
     let ash = Ash::new(
-        Config { loaders: pins(), ..Config::rooted_at(tmp.path()) },
+        config,
         Arc::clone(&http) as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
-        FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        Arc::clone(&process) as Arc<dyn ProcessPort>,
         "test-client",
     );
-    Fixture { ash, http, tmp }
+    Fixture { ash, http, process, tmp }
 }
 
 fn fixture() -> Fixture {
@@ -290,13 +312,146 @@ async fn preparing_a_modded_instance_leaves_the_rest_of_the_game_directory_alone
     let f = fixture();
     let id = f.modded().await;
     let game = f.ash.game_directory(&id);
+    // Everything a player would be upset to lose, in and around the directory
+    // ash is about to write two jars into.
     std::fs::write(game.join("mods").join("mine.jar"), b"a mod the player supplied").unwrap();
     std::fs::create_dir_all(game.join("saves").join("My World")).unwrap();
+    std::fs::create_dir_all(game.join("resourcepacks")).unwrap();
+    std::fs::write(game.join("resourcepacks").join("pack.zip"), b"a pack").unwrap();
+    std::fs::create_dir_all(game.join("screenshots")).unwrap();
+    std::fs::write(game.join("screenshots").join("shot.png"), b"a screenshot").unwrap();
+    std::fs::write(game.join("options.txt"), b"the player's settings").unwrap();
 
     f.prepare(&id).await;
 
-    assert!(game.join("mods").join("mine.jar").is_file(), "a player's own mod was removed");
+    // Present *and* unchanged: a file ash had overwritten with something else
+    // would still pass an `is_file` check.
+    let unchanged = |relative: &str, expected: &[u8]| {
+        assert_eq!(
+            std::fs::read(game.join(relative)).ok().as_deref(),
+            Some(expected),
+            "{relative} was changed or removed"
+        );
+    };
+    unchanged("mods/mine.jar", b"a mod the player supplied");
+    unchanged("resourcepacks/pack.zip", b"a pack");
+    unchanged("screenshots/shot.png", b"a screenshot");
+    unchanged("options.txt", b"the player's settings");
     assert!(game.join("saves").join("My World").is_dir(), "a world was touched");
+}
+
+// ---- ash's own client -------------------------------------------------------
+
+#[tokio::test]
+async fn ashs_own_client_lands_where_the_loader_looks() {
+    let f = fixture();
+    let id = f.modded().await;
+
+    f.prepare(&id).await;
+
+    let installed = f.ash.game_directory(&id).join("mods").join(ASH_CLIENT);
+    assert_eq!(
+        std::fs::read(&installed).ok().as_deref(),
+        Some(ASH_CLIENT_JAR),
+        "ash's client is not in the instance, or is not the one that shipped"
+    );
+    // It came off disk, not off the network. `serving` has no route for it, so
+    // a fetch would have panicked - but saying so here is what stops a route
+    // being added later without anyone weighing what it would mean.
+    assert!(
+        !f.http.requested().iter().any(|url| url.contains("ash-client")),
+        "ash's own client was fetched; it ships in the installer"
+    );
+}
+
+#[tokio::test]
+async fn a_vanilla_instance_gets_no_ash_client() {
+    let f = fixture();
+    f.ash.begin_sign_in().await.expect("device code");
+    f.ash.poll_sign_in().await.expect("sign-in");
+    let plain = f.ash.create_instance("plain", VERSION, Loader::Vanilla).expect("instance").id;
+    // The vanilla library a modded merge would have replaced.
+    f.http.route(VANILLA_ASM_URL, HttpResponse::ok(VANILLA_ASM_JAR));
+    // The test proves nothing if there was no client to install in the first
+    // place - it would pass just as well against a fixture that never wrote
+    // one.
+    assert!(f.ash.config().client_root.join(ASH_CLIENT).is_file());
+
+    f.prepare(&plain).await;
+
+    assert!(
+        !f.ash.game_directory(&plain).join("mods").join(ASH_CLIENT).exists(),
+        "a vanilla instance was given the ash client"
+    );
+}
+
+#[tokio::test]
+async fn an_ash_update_replaces_the_client_rather_than_sitting_beside_it() {
+    let f = fixture();
+    let id = f.modded().await;
+    let mods = f.ash.game_directory(&id).join("mods");
+
+    // What the previous ash release left behind.
+    std::fs::create_dir_all(&mods).unwrap();
+    std::fs::write(mods.join(ASH_CLIENT), b"an older ash client").unwrap();
+
+    f.prepare(&id).await;
+
+    assert_eq!(
+        std::fs::read(mods.join(ASH_CLIENT)).ok().as_deref(),
+        Some(ASH_CLIENT_JAR),
+        "the previous client is still in place"
+    );
+    // A loader refuses to start when two files claim one mod id, and the fixed
+    // file name is the whole reason there can only ever be one.
+    let ash_jars: Vec<String> = std::fs::read_dir(&mods)
+        .unwrap()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| name.starts_with("ash-client"))
+        .collect();
+    assert_eq!(ash_jars, vec![ASH_CLIENT.to_owned()]);
+}
+
+#[tokio::test]
+async fn an_installation_missing_ashs_client_is_refused_rather_than_prepared_without_it() {
+    let f = fixture();
+    let id = f.modded().await;
+    // Exactly what a damaged installation looks like from here.
+    std::fs::remove_file(f.ash.config().client_root.join(ASH_CLIENT)).unwrap();
+
+    let err = f
+        .ash
+        .prepare_instance(&id, &NullSink, &Cancel::new())
+        .await
+        .expect_err("a modded instance with no client is refused");
+
+    assert_eq!(err.kind(), "client_missing");
+    // ash's problem, said as ash's problem, with nowhere for the player to go
+    // hunting through their own setup.
+    let message = err.user_message();
+    assert!(message.contains("ash"), "{message}");
+    assert!(!message.contains('/') && !message.contains('\\'), "leaked a path: {message}");
+    assert!(!err.is_retryable(), "retrying will not put the file back");
+}
+
+#[tokio::test]
+async fn a_missing_client_stops_the_launch_rather_than_starting_a_game_without_one() {
+    let f = fixture();
+    let id = f.modded().await;
+    f.prepare(&id).await;
+    // Removed after a good prepare, so the instance is otherwise ready and the
+    // only thing wrong with it is the thing being tested.
+    std::fs::remove_file(f.ash.config().client_root.join(ASH_CLIENT)).unwrap();
+
+    let err = f
+        .ash
+        .launch(&id, &NullSink, &Cancel::new())
+        .await
+        .expect_err("ash refuses rather than starting a game with no client in it");
+
+    assert_eq!(err.kind(), "client_missing");
+    assert!(f.process.spawned().is_empty(), "the game was started anyway");
 }
 
 #[tokio::test]

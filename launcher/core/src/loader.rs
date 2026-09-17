@@ -181,6 +181,20 @@ pub struct LoaderPin {
     /// cosmetic argument, and Legacy Fabric's fork of the same service
     /// deliberately emits no argument block at all.
     pub jvm_arguments: &'static [&'static str],
+    /// ash's own client for this version target: the jar's file name, or
+    /// `None` where ash has not built one yet.
+    ///
+    /// A file name and not a URL or a hash, because this one is not
+    /// downloaded. It ships inside the installer so that the launcher and the
+    /// client can never be version-skewed, which also means there is nothing
+    /// to verify: the bytes arrived the same way ash's own executable did.
+    ///
+    /// The name carries no version. A version in it would be a second place
+    /// to change on every release, and nothing would catch getting it wrong
+    /// until a player's game came up with no client in it. Which version is
+    /// running is a question the mod list answers, from the jar's own
+    /// metadata.
+    pub client_jar: Option<&'static str>,
     /// Third-party mods ash ships inside an instance, unmodified.
     ///
     /// Fetched into the depot and verified like any library - two instances
@@ -287,6 +301,7 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
     // command line (discord, nvidia hybrid gpu, ..)", and the leading and
     // trailing spaces inside the value are Fabric's, not a typo.
     jvm_arguments: &["-DFabricMcEmu= net.minecraft.client.main.Main "],
+    client_jar: Some("ash-client-1.21.11.jar"),
     // Fabric API, Apache-2.0, shipped unmodified.
     bundled_mods: &[PinnedLibrary {
         name: "net.fabricmc.fabric-api:fabric-api:0.141.6+1.21.11",
@@ -402,6 +417,10 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
     jvm_arguments: &[],
     // Legacy Fabric API 1.13.5+1.8.9, Apache-2.0, shipped unmodified.
     //
+    // No ash client on this target yet; #21 builds the 1.8.9 module and
+    // fills this in. Preparing a Legacy Fabric instance meanwhile gets a
+    // loader and an API and no ash client, which is what is true.
+    client_jar: None,
     // Unlike Fabric API this is *not* a fat jar: it is a metadata-only
     // aggregator - four entries, no classes - and its POM names 43 separate
     // module artifacts. Which of those ash's client needs cannot be known

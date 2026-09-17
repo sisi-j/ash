@@ -413,15 +413,39 @@ async fn reveal_game_directory(
     })
 }
 
-fn ash_state() -> Ash {
+fn ash_state(client_root: std::path::PathBuf) -> Ash {
     let base = dirs_next_data_dir().join("ash");
     Ash::new(
-        Config::rooted_at(base),
+        Config { client_root, ..Config::rooted_at(base) },
         Arc::new(ReqwestHttp::new()),
         Arc::new(OsCredentialStore::new()),
         Arc::new(OsProcessPort::new()),
         CLIENT_ID,
     )
+}
+
+/// Where the installer put ash's own client jars.
+///
+/// Part of the installation rather than of ash's storage, which is why it is
+/// the one root `Config::rooted_at` cannot work out: the jars ship inside the
+/// installer so that the launcher and the client can never be version-skewed.
+/// Resolving it is the adapter's job, like every other path.
+fn client_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    app.path()
+        .resource_dir()
+        // Resolving the resource directory only fails on a broken
+        // installation. The executable's own directory is where the installer
+        // puts resources on Windows anyway, so this is the same answer by
+        // another route - and unlike a path relative to the working directory
+        // it cannot be steered by wherever ash happened to be started from,
+        // which would let a jar dropped there be loaded into the game.
+        .or_else(|_| std::env::current_exe().map(|exe| exe.with_file_name("")))
+        .map(|dir| dir.join("client"))
+        // Both failing at once is a machine ash cannot run on. It surfaces as
+        // ash-core's typed "client missing" the first time a modded instance
+        // is prepared, which is a better moment to tell the player than a
+        // panic before the window opens.
+        .unwrap_or_default()
 }
 
 /// Resolving this is the adapter's job, not the library's - `ash-core` never
@@ -439,7 +463,15 @@ fn dirs_next_data_dir() -> std::path::PathBuf {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(AppState { ash: Arc::new(ash_state()), preparing: Mutex::new(HashMap::new()) })
+        // In `setup` rather than on the builder, because the client jars live
+        // in the installation and only an `AppHandle` knows where that is.
+        .setup(|app| {
+            app.manage(AppState {
+                ash: Arc::new(ash_state(client_dir(app.handle()))),
+                preparing: Mutex::new(HashMap::new()),
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             catalogue,
             refresh_catalogue,

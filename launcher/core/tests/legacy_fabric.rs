@@ -224,6 +224,9 @@ fn pins() -> &'static [LoaderPin] {
             libraries,
             // Legacy Fabric emits no argument block at all.
             jvm_arguments: &[],
+            // #21 builds the 1.8.9 module; until then a Legacy Fabric
+            // instance gets a loader and an API and no ash client.
+            client_jar: None,
             bundled_mods: bundled,
         }]));
         pins

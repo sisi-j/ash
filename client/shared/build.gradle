@@ -1,0 +1,105 @@
+// Everything here has to compile without the game, and be readable by someone
+// who has never seen Minecraft's API. See
+// `docs/adr/0015-two-client-projects-over-a-shared-module.md`.
+
+plugins {
+    id 'java-library'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Nothing from the game and nothing from either API, deliberately. An
+    // empty compile classpath is the first half of the rule; `checkNoGameTypes`
+    // below is the half that survives someone adding a line here.
+    //
+    // Plain JUnit, not Fabric Loader JUnit. Fabric ships that tier because
+    // mods rely on Mixin and on registries that only exist once the loader is
+    // up - and it will not start without a game jar on the class path, which
+    // is the one thing this module may never have. See `client/README.md`.
+    // The target modules have the game, and that is where that tier lives.
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Java 8 bytecode, because the 1.8.9 target module will consume this module
+// and the game there runs on Java 8. So: no records, no sealed types, no
+// switch expressions, no `var` in lambda parameters, no `List.of`.
+tasks.named('compileJava') {
+    options.release = 8
+}
+
+// Tests are never shipped and never consumed by the 1.8.9 module, so holding
+// them to Java 8 would buy nothing and cost every modern assertion.
+tasks.named('compileTestJava') {
+    options.release = 21
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+// ---- the rule, enforced -----------------------------------------------------
+
+// What this module may not name. Minecraft first, then *both* APIs: their
+// surfaces diverge in their own right - `KeyMappingHelper` against
+// `KeyBindingHelper` - so a shared module that names either one is already
+// broken. `com.mojang` is here because Brigadier, Blaze3D and authlib are
+// Minecraft types in everything but their package name.
+def forbiddenPackages = [
+        'net/minecraft/',
+        'com/mojang/',
+        'net/fabricmc/fabric/api/',
+        'net/legacyfabric/',
+]
+
+// Tests as well as shipped code. Nothing on the test class path could name
+// a game type today - there is no game on it - but a module that acquired one
+// for its tests has acquired the dependency, whatever the jar ends up holding.
+def compiledClasses = sourceSets.main.output.classesDirs + sourceSets.test.output.classesDirs
+
+tasks.register('checkNoGameTypes') {
+    group = 'verification'
+    description = 'Fails if the shared module names a Minecraft or Fabric API type.'
+    inputs.files(compiledClasses)
+    dependsOn tasks.named('testClasses')
+
+    doLast {
+        def offences = []
+        def scanned = 0
+
+        compiledClasses.asFileTree.matching { include '**/*.class' }.each { file ->
+            scanned++
+            // Compiled bytecode rather than import statements. The constant
+            // pool names every type the class actually touches, so this also
+            // catches a fully qualified name written inline - and, because the
+            // pool holds string literals too, a class named for reflection.
+            def pool = new String(file.bytes, 'ISO-8859-1')
+            forbiddenPackages.each { pkg ->
+                if (pool.contains(pkg) || pool.contains(pkg.replace('/', '.'))) {
+                    offences << "${file.name} names ${pkg.replace('/', '.')}"
+                }
+            }
+        }
+
+        // The check proves nothing if there was nothing to check, and an empty
+        // output directory is exactly what a renamed source set or a broken
+        // wiring would leave behind.
+        if (scanned == 0) {
+            throw new GradleException(
+                    'no compiled classes to check - this check proved nothing')
+        }
+        if (!offences.isEmpty()) {
+            throw new GradleException(
+                    'the shared module may not see the game (ADR-0015):\n  '
+                            + offences.join('\n  '))
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'checkNoGameTypes'
+}

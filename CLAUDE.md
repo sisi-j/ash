@@ -6,8 +6,14 @@ From the repo root:
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo fmt --all`
 - `cd launcher && npx tsc --noEmit`
+- `cd client && ./gradlew build` - compiles both client modules, runs the
+  shared module's unit tests, and checks that it still cannot see the game
 
 Tests run in milliseconds; the cost is compilation. `target/debug` grows past 10GB and is safe to delete.
+
+The client build is the slow one: its first run downloads Minecraft and
+Mojang's mappings. Nothing in the Rust workspace depends on it - see
+`client/README.md` for why that is deliberate.
 
 ## Coding standards
 

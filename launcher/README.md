@@ -16,6 +16,19 @@ npm install     # once
 npm run tauri dev
 ```
 
+## The client
+
+`client/` builds the jar the launcher places into a modded instance. The
+launcher does not need it to compile or to test, but an installer does:
+
+```
+cd client && ./gradlew build
+cd ../launcher && npm run build:installer
+```
+
+`npm run tauri build` on its own produces an installer with no client in it.
+`build:installer` is the one that carries it - see `client/README.md`.
+
 ## Testing
 
 ```

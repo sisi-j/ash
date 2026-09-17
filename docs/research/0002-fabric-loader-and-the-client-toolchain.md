@@ -620,6 +620,8 @@ tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.Client
 
 **Can meaningful logic be unit-tested without launching the game? Only the logic that does not touch the game.** Fabric Loader JUnit lets you *load* the loader inside a JUnit JVM, which gets you registries and entrypoints; it does not get you a window, a render pass, a HUD or an input device. There is no headless harness for rendering, and none for Windows or macOS CI at all (§4).
 
+**And it needs a game jar on the class path, which rules it out for a module that has none.** Established 2026-09-16 while implementing #20: the listener constructs `Knot` and `Knot.init` requires at least one game provider. `fabric.skipMcProvider` disables the embedded Minecraft one and Knot then fails outright with `No game providers present on the class path!` **[PRACTICE]**. So this tier belongs to the per-target modules; the shared module's tests are plain JUnit, which is all its content needs.
+
 **So Phase 1's fakes-and-ports approach translates — but only if you build the seam first.** This is not a stylistic preference; it is the only path to a testable client. The shape:
 
 - Features live in the shared module and depend only on ports (`HudSurface`, `InputSource`, `PlayerStats`, `CameraControl`).

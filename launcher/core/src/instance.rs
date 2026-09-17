@@ -247,6 +247,18 @@ pub(crate) fn mark_played(instances_root: &Path, id: &InstanceId) -> Result<Inst
     Ok(instance)
 }
 
+/// The one directory a loader reads, made if it is not there yet.
+///
+/// Both installs below go through this. What they do *not* share is the
+/// failure they report on the way out - "installing a bundled mod" and
+/// "installing ash's client" send a reader to different places - so the copy
+/// itself stays with each of them rather than becoming a parameter.
+fn mods_dir(instances_root: &Path, id: &InstanceId) -> Result<PathBuf, AshError> {
+    let mods = game_dir(instances_root, id).join("mods");
+    fs::create_dir_all(&mods).map_err(storage_err("creating the mods directory"))?;
+    Ok(mods)
+}
+
 /// Put a bundled mod where the loader will find it.
 ///
 /// Copied out of the depot rather than fetched again: the depot already has
@@ -268,8 +280,7 @@ pub(crate) fn install_bundled_mod(
     artifact: &str,
     file_name: &str,
 ) -> Result<(), AshError> {
-    let mods = game_dir(instances_root, id).join("mods");
-    fs::create_dir_all(&mods).map_err(storage_err("creating the mods directory"))?;
+    let mods = mods_dir(instances_root, id)?;
 
     let prefix = format!("{artifact}-");
     for entry in fs::read_dir(&mods).into_iter().flatten().flatten() {
@@ -284,6 +295,38 @@ pub(crate) fn install_bundled_mod(
     fs::copy(source, mods.join(file_name))
         .map(|_| ())
         .map_err(storage_err("installing a bundled mod"))
+}
+
+/// Put ash's own client where the loader will find it.
+///
+/// Copied out of the installation rather than the depot, because this jar is
+/// not downloaded: it ships inside the installer so that the launcher and the
+/// client can never be version-skewed. There is correspondingly nothing to
+/// verify - the bytes arrived the same way ash's own executable did.
+///
+/// A missing one is refused rather than skipped. Preparing without it would
+/// produce a modded instance with a loader, an API and no ash client, which
+/// starts perfectly well and is not the thing the player asked for.
+///
+/// The file name is fixed per version target, so an ash update overwrites the
+/// previous client rather than leaving it beside the new one - a loader
+/// refuses to start when two files claim one mod id.
+pub(crate) fn install_client(
+    instances_root: &Path,
+    id: &InstanceId,
+    client_root: &Path,
+    file_name: &str,
+    version_id: &str,
+) -> Result<(), AshError> {
+    let source = client_root.join(file_name);
+    if !source.is_file() {
+        return Err(AshError::ClientMissing { version_id: version_id.to_owned() });
+    }
+
+    let mods = mods_dir(instances_root, id)?;
+    fs::copy(&source, mods.join(file_name))
+        .map(|_| ())
+        .map_err(storage_err("installing ash's client"))
 }
 
 fn dir_entry_names(dir: &Path) -> Vec<String> {

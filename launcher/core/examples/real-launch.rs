@@ -11,8 +11,14 @@
 //! `loader` is `vanilla` (the default), `fabric` on 1.21.11, or
 //! `legacy-fabric` on 1.8.9. A modded run is the only
 //! way to see the acceptance criteria that no fixture can stand in for: the
-//! game reaching its main menu with the loader running, and Fabric Loader and
-//! Fabric API appearing in the game's own mod list.
+//! game reaching its main menu with the loader running, ash's own client and
+//! Fabric API appearing in the game's own mod list, and ash's marker on the
+//! screen.
+//!
+//! Run `./gradlew build` in `client/` first for a `fabric` run: the client
+//! jar this installs comes from that build output, not from an installed ash.
+//! Without it the run stops with "ash's own client is missing", which is the
+//! same refusal a player would get.
 //!
 //! It uses ash's real data directory and the real OS credential store, so
 //! this is the product rather than a simulation of it, and a sign-in here is
@@ -75,7 +81,7 @@ async fn main() {
     };
 
     let ash = Ash::new(
-        Config::rooted_at(data_dir()),
+        Config { client_root: built_client_dir(), ..Config::rooted_at(data_dir()) },
         Arc::new(ReqwestHttp::new()) as Arc<dyn HttpPort>,
         Arc::new(OsCredentialStore::new()),
         Arc::new(OsProcessPort::new()),
@@ -187,6 +193,16 @@ async fn main() {
         println!("  {line}");
     }
     ash.stop_game(&instance.id);
+}
+
+/// The client jars, as the client build leaves them.
+///
+/// On a real machine these are part of the installation and the adapter finds
+/// them beside the executable. This example is run from the repo, so it points
+/// at what `./gradlew build` produced - which also means a modded run here
+/// always uses the client you just built rather than one copied by hand.
+fn built_client_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../client/target-1.21.11/build/libs")
 }
 
 /// The same directory the Tauri adapter picks, so this shares one depot with

@@ -119,6 +119,17 @@ pub enum AshError {
     #[error("ash has no {} loader pinned for {version_id}", loader.name())]
     LoaderUnavailable { loader: crate::Loader, version_id: String },
 
+    /// ash's own client jar is not in this installation.
+    ///
+    /// Its own variant because nothing the player can do inside ash fixes it.
+    /// The client ships in the installer, so a missing one means the
+    /// installation is damaged or something removed the file - and the answer
+    /// is to install ash again, not to retry. Preparing anyway would start a
+    /// modded game with no client in it, which looks to a player exactly like
+    /// ash being broken, only later and with no explanation.
+    #[error("ash's own client for {version_id} is missing from this installation")]
+    ClientMissing { version_id: String },
+
     // ---- launching ----
     #[error("ash cannot build a command line for {version_id}: {detail}")]
     LaunchUnsupported { version_id: String, detail: String },
@@ -193,6 +204,7 @@ impl AshError {
             AshError::AccountNotFound { .. } => "account_not_found",
             AshError::InvalidSetting { .. } => "invalid_setting",
             AshError::LoaderUnavailable { .. } => "loader_unavailable",
+            AshError::ClientMissing { .. } => "client_missing",
             AshError::LaunchUnsupported { .. } => "launch_unsupported",
             AshError::LaunchFailed { .. } => "launch_failed",
             AshError::AlreadyRunning { .. } => "already_running",
@@ -317,6 +329,13 @@ impl AshError {
             // is not a secret.
             AshError::LoaderUnavailable { version_id, .. } => {
                 format!("ash doesn't support that loader on {version_id} yet.")
+            }
+            AshError::ClientMissing { .. } => {
+                // ash's problem, described as ash's problem. A player sent
+                // looking through their own game directory for a file the
+                // installer was supposed to put there will not find it.
+                "ash's own client is missing from this installation. Reinstalling ash will fix it."
+                    .into()
             }
             AshError::LaunchUnsupported { version_id, .. } => {
                 format!("ash can't launch {version_id} yet.")
@@ -460,15 +479,18 @@ mod tests {
             AshError::NoAccountSelected,
             AshError::AccountNotFound { profile_id: s.clone() },
             AshError::InvalidSetting { detail: s.clone() },
+            AshError::LoaderUnavailable { loader: crate::Loader::Fabric, version_id: s.clone() },
+            AshError::ClientMissing { version_id: s.clone() },
             AshError::LaunchUnsupported { version_id: s.clone(), detail: s.clone() },
             AshError::LaunchFailed { detail: s.clone() },
             AshError::AlreadyRunning { id: s.clone() },
         ];
 
-        // The list has to be exhaustive to be worth anything, and the only
-        // thing that can say so is `kind`, which has one arm per variant.
+        // This says the list has no variant in it twice. It cannot say the
+        // list is complete - see `every_variant_is_sampled_above` below, which
+        // is what does.
         let kinds: std::collections::BTreeSet<_> = every.iter().map(|e| e.kind()).collect();
-        assert_eq!(kinds.len(), every.len(), "a variant is listed twice, or one is missing");
+        assert_eq!(kinds.len(), every.len(), "a variant is listed twice");
 
         for err in &every {
             let m = err.user_message();
@@ -477,6 +499,55 @@ mod tests {
             assert!(!m.contains('\n'), "{} spans lines: {m:?}", err.kind());
             assert!(!m.contains('\t'), "{} has a tab: {m:?}", err.kind());
             assert!(m.ends_with('.'), "{} does not end a sentence: {m:?}", err.kind());
+        }
+    }
+
+    /// Nothing calls this, and that is the point.
+    ///
+    /// Adding a variant to [`AshError`] makes this match non-exhaustive and
+    /// stops the tests compiling, which sends whoever added it to the list in
+    /// [`every_user_message_is_one_clean_line`] above. Comparing that list's
+    /// length against its own set of kinds catches a variant written twice and
+    /// can never catch one left out - and one left out is exactly how two
+    /// messages shipped with a run of spaces in the middle of them.
+    #[allow(dead_code)]
+    fn every_variant_is_sampled_above(e: &AshError) {
+        match e {
+            AshError::Transport { .. }
+            | AshError::UnexpectedStatus { .. }
+            | AshError::Malformed { .. }
+            | AshError::Storage { .. }
+            | AshError::OutOfSpace
+            | AshError::Credential { .. }
+            | AshError::VerificationFailed { .. }
+            | AshError::FileVanished { .. }
+            | AshError::Cancelled
+            | AshError::InstanceNotFound { .. }
+            | AshError::InvalidInstanceName { .. }
+            | AshError::UnknownVersion { .. }
+            | AshError::RuntimeUnavailable { .. }
+            | AshError::NoSignInPending
+            | AshError::SignInExpired
+            | AshError::SignInDeclined
+            | AshError::SignInFailed { .. }
+            | AshError::SessionExpired
+            | AshError::XboxNoAccount
+            | AshError::XboxBanned
+            | AshError::XboxRegionUnavailable
+            | AshError::XboxAdultVerificationRequired
+            | AshError::XboxChildAccount
+            | AshError::XboxOther { .. }
+            | AshError::NotAllowListed
+            | AshError::NotEntitled
+            | AshError::ProfileUnavailable
+            | AshError::NoAccountSelected
+            | AshError::AccountNotFound { .. }
+            | AshError::InvalidSetting { .. }
+            | AshError::LoaderUnavailable { .. }
+            | AshError::ClientMissing { .. }
+            | AshError::LaunchUnsupported { .. }
+            | AshError::LaunchFailed { .. }
+            | AshError::AlreadyRunning { .. } => {}
         }
     }
 }

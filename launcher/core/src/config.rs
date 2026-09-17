@@ -29,28 +29,40 @@ pub struct Config {
     /// Defaults to [`loader::PINS`]; nothing but a test has reason to
     /// change it.
     pub loaders: &'static [LoaderPin],
+    /// Where the ash client jars that shipped with this build live.
+    ///
+    /// The odd one out: the other roots are ash's own storage and this one is
+    /// part of the installation. The client ships inside the installer so
+    /// that the launcher and the client can never be version-skewed, which
+    /// means it sits beside the executable rather than under the data base -
+    /// so the adapter points this at the installed resources, and
+    /// [`Config::rooted_at`]'s guess is only good enough for a test that puts
+    /// everything in one temporary directory.
+    pub client_root: PathBuf,
 }
 
 impl Config {
-    pub fn new(
-        depot_root: impl Into<PathBuf>,
-        instances_root: impl Into<PathBuf>,
-        data_root: impl Into<PathBuf>,
-    ) -> Self {
-        Self {
-            depot_root: depot_root.into(),
-            instances_root: instances_root.into(),
-            data_root: data_root.into(),
-            loaders: loader::PINS,
-        }
-    }
-
     /// The layout ash uses on a real machine, given a base directory.
     ///
     /// Choosing that base is the caller's job - on Windows it is the app data
     /// directory, and under test it is a `tempfile::TempDir`.
+    ///
+    /// [`Config::client_root`] is the exception and is only a placeholder
+    /// here: on a real machine the client jars are part of the installation,
+    /// not of ash's storage, so the adapter overwrites it.
+    /// The only constructor, deliberately. Four roots as positional
+    /// arguments is four paths that can be swapped and still compile, and
+    /// every field here is public - so a caller wanting a different layout
+    /// names the field it is changing: `Config { depot_root: elsewhere,
+    /// ..Config::rooted_at(base) }`, which is what the tests already do.
     pub fn rooted_at(base: impl AsRef<Path>) -> Self {
         let base = base.as_ref();
-        Self::new(base.join("depot"), base.join("instances"), base.join("data"))
+        Self {
+            depot_root: base.join("depot"),
+            instances_root: base.join("instances"),
+            data_root: base.join("data"),
+            loaders: loader::PINS,
+            client_root: base.join("client"),
+        }
     }
 }

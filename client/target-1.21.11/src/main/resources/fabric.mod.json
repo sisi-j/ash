@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "ash",
+  "version": "${version}",
+  "name": "ash",
+  "description": "ash's in-game client. Presentation only: nothing it does changes what the server sees.",
+  "contact": {
+    "homepage": "https://github.com/sisi-j/ash",
+    "sources": "https://github.com/sisi-j/ash"
+  },
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.ashlauncher.client.v1_21_11.AshClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../client/target-1.21.11/build/libs/ash-client-1.21.11.jar": "client/"
+    }
+  }
+}

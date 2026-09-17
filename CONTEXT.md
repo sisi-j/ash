@@ -11,7 +11,7 @@ The desktop application that manages accounts and instances, downloads game file
 _Avoid_: app, client, desktop client
 
 **Client**:
-The game-side mod layer ash injects into Minecraft. The other senses always get qualified — "the vanilla client", "an API client".
+The game-side mod layer ash injects into Minecraft. The other senses always get qualified — "the vanilla client", "an API client". It ships inside the installer rather than being downloaded, so the launcher and the client can never be version-skewed — which is what tells it apart from a bundled mod.
 _Avoid_: mod, ash mod, Minecraft client
 
 **Backend**:
