@@ -8,7 +8,7 @@ the API repository over twelve months. The cadence is real and current; the
 exposure is that there is exactly one copy of everything ash's 1.8.9 support
 needs.
 
-What ash needs is small — about 5.5MB — so mirroring converts a
+What ash needs is small — about 5.6MB — so mirroring converts a
 project-dormancy risk into nothing. It is cheap now and impossible later,
 which is the whole argument.
 
@@ -33,7 +33,17 @@ stored as `lwjgl-2.9.4-legacyfabric.17.jar`.
 | `lwjgl-platform-2.9.4-legacyfabric.17-natives-windows.jar` | the same, `natives-windows` |
 | `lwjgl-platform-2.9.4-legacyfabric.17-natives-osx.jar` | the same, `natives-osx` |
 | `legacy-fabric-api-1.13.5-1.8.9.jar` | `net.legacyfabric.legacy-fabric-api:legacy-fabric-api:1.13.5+1.8.9` |
+| `legacy-fabric-api-base-common-1.2.2.jar` | `…:legacy-fabric-api-base-common:1.2.2` |
+| `legacy-fabric-rendering-api-v1-1.0.1-1.8.9.jar` | `…:legacy-fabric-rendering-api-v1:1.0.1+1.8.9` |
+| `legacy-fabric-rendering-api-v1-common-1.0.1.jar` | `…:legacy-fabric-rendering-api-v1-common:1.0.1` |
 | `NOTICE.md` | attribution, see below |
+
+**Three of the API's 44 modules, not all of them.** `legacy-fabric-api` is a
+metadata-only aggregator that declares no dependency on any module, so ash
+ships the aggregator plus exactly the modules its client uses — and mirrors
+exactly those. `client/target-1.8.9/build.gradle` compiles against the same
+list, so a fifth module cannot get into the client without being pinned, and
+`loader.rs` has a test that a pinned one is mirrored.
 
 **Upstream Fabric's own artifacts are deliberately not mirrored.** The loader
 jar and the loader's launcher metadata come from `maven.fabricmc.net`, a
@@ -78,10 +88,26 @@ is the condition on which two of these three may be redistributed at all.
 
 ## Refreshing it
 
-Needed when a pin in `loader.rs` moves to a new version. The pins are the
-source of truth: the script below verifies every downloaded byte against a
-hash already in `loader.rs` and refuses to proceed otherwise, so update the
-pins first.
+Two different jobs, and they are not the same job.
+
+**Adding an artifact** — ash's client starts using another API module, say.
+Nothing already mirrored changes, so nothing an existing ash build fetches
+moves: upload the new files into the release that is already there, update
+`NOTICE.md` in place, and leave the tag and the `mirrored!` base URL alone.
+Steps 1–4 below, then:
+
+```
+gh release upload mirror-2026-09-16 <output-directory>/*.jar
+gh release upload mirror-2026-09-16 <output-directory>/NOTICE.md --clobber
+```
+
+**Moving a pin to a new version** — the bytes behind a coordinate change, and
+an ash build already out there still needs the old ones. That takes a new
+dated release, steps 1–7 in full.
+
+Either way the pins are the source of truth: the script below verifies every
+downloaded byte against a hash already in `loader.rs` and refuses to proceed
+otherwise, so update the pins first.
 
 1. Update the pin in `launcher/core/src/loader.rs`, including its hash and
    size.
@@ -99,7 +125,8 @@ pins first.
    did not match. A run that fails leaves no publishable file behind.
 4. Copy `NOTICE.md` from the previous release into the output directory and
    update it for anything that changed.
-5. Publish, with today's date as the tag:
+5. Publish. Adding an artifact uploads into the existing release, as above.
+   A version bump takes a new release, with today's date as the tag:
 
    ```
    gh release create mirror-YYYY-MM-DD \
@@ -120,6 +147,10 @@ python scripts/refresh-mirror.py <tmp>   # hashes upstream against the pins
 gh release view mirror-2026-09-16 --json assets \
   --jq '.assets[] | "\(.name)\t\(.size)"'
 ```
+
+The listing should have one line per row of the table above. A pinned
+artifact missing from it is a mirror that does not work, and nothing in the
+Rust tests can tell you — they never touch the network.
 
 The sizes should match what `loader.rs` pins. To check the mirror itself
 rather than upstream, fetch an asset and hash it:

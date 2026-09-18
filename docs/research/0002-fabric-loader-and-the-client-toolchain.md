@@ -427,7 +427,19 @@ Two things to notice:
 
 `legacy-looming`'s branches run `dev/1.0` … `dev/1.16`; published versions top out at **1.16.1**. There is **no `dev/1.17`** and no `1.17.x` release. Upstream Loom is on `dev/1.17` with 1.18 alphas **[PRACTICE]**.
 
-So the concrete answer is: **you cannot use Loom 1.17 on the 1.8.9 side today.** You pin Loom 1.16 there. And that is the single hardest constraint on a one-build-two-targets design, because Gradle resolves the plugin classpath once per build.
+So the concrete answer is: **you cannot use Loom 1.17 on the 1.8.9 side today.** You pin Loom 1.16 there. ~~And that is the single hardest constraint on a one-build-two-targets design, because Gradle resolves the plugin classpath once per build.~~
+
+**Corrected 2026-09-17, while implementing #21: it is not a constraint at all.** The second sentence does not follow from the first, because Loom's own modularisation — noted two paragraphs above — means the two sides apply *different artifacts*. `target-1.21.11` applies `fabric-loom` 1.18.2; `target-1.8.9` applies `net.fabricmc.fabric-loom-remap` 1.16.3 alongside `legacy-looming` 1.16.1. There is no version for Gradle to resolve between them, so both sit on one plugin classpath and one `./gradlew build` produces both jars. Verified by building both **[PRACTICE]**, and each project reports its own Loom at configure time:
+
+```
+> Configure project :target-1.8.9
+Fabric Loom: 1.16.3
+Legacy Looming: 1.16.1
+> Configure project :target-1.21.11
+Fabric Loom: 1.18.2
+```
+
+`legacy-looming` is still capped at 1.16.1, so the 1.8.9 side is still pinned back. What is gone is the claim that pinning it back costs the modern side anything.
 
 ### Can one Gradle multi-project build produce both target jars?
 

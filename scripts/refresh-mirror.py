@@ -35,6 +35,12 @@ ARTIFACTS = [
     ("org.lwjgl.lwjgl:lwjgl-platform:2.9.4+legacyfabric.17", "natives-windows"),
     ("org.lwjgl.lwjgl:lwjgl-platform:2.9.4+legacyfabric.17", "natives-osx"),
     ("net.legacyfabric.legacy-fabric-api:legacy-fabric-api:1.13.5+1.8.9", None),
+    # The API modules ash's client uses. The aggregator above is metadata only
+    # and declares no dependency on any of them, so each one ash ships is named
+    # here exactly as it is named in `loader.rs`.
+    ("net.legacyfabric.legacy-fabric-api:legacy-fabric-api-base-common:1.2.2", None),
+    ("net.legacyfabric.legacy-fabric-api:legacy-fabric-rendering-api-v1:1.0.1+1.8.9", None),
+    ("net.legacyfabric.legacy-fabric-api:legacy-fabric-rendering-api-v1-common:1.0.1", None),
 ]
 
 

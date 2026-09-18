@@ -15,6 +15,11 @@ target/
 build/
 out/
 *.class
+# Eclipse and the VS Code Java extension compile into `bin/` beside the
+# Gradle output. The `*.class` rule hides most of it and left the processed
+# resources behind, which is how a `fabric.mod.json` nearly got committed
+# twice over.
+bin/
 
 # --- Secrets & local config ---
 .env

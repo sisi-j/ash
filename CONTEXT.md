@@ -73,7 +73,7 @@ The record the client writes saying which features loaded and which degraded. Wr
 _Avoid_: health check, status file, diagnostics
 
 **Bundled mod**:
-A third-party mod ash ships unmodified inside an instance — currently Fabric API on modern targets and Legacy Fabric API on 1.8.9. The two are not the same shape: Fabric API is one jar, while Legacy Fabric API is a metadata-only aggregator in front of dozens of separately versioned module jars, and ash pins only the aggregator so far.
+A third-party mod ash ships unmodified inside an instance — currently Fabric API on modern targets and Legacy Fabric API on 1.8.9. The two are not the same shape: Fabric API is one jar, while Legacy Fabric API is a metadata-only aggregator in front of 44 separately versioned module jars, none of which declares a dependency on any other. ash ships the aggregator plus exactly the modules its client calls into — three of the 44 today — so a feature that reaches for a fourth means pinning and mirroring it.
 _Avoid_: dependency, vendored mod
 
 **Third-party mod**:

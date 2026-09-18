@@ -5,12 +5,20 @@ module that cannot see the game.
 
 | | |
 | --- | --- |
-| `shared/` | Pure logic and the version seam. Cannot name a Minecraft type or a Fabric API type, and `checkNoGameTypes` fails the build if it does. Java 8 bytecode, because the 1.8.9 module will consume it. |
-| `target-1.21.11/` | The 1.21.11 adapter. Mojang mappings, Fabric Loader, Fabric API. Produces `ash-client-1.21.11.jar`, which is what the installer ships. |
+| `shared/` | Pure logic and the version seam. Cannot name a Minecraft type or a Fabric API type, and `checkNoGameTypes` fails the build if it does. Java 8 bytecode, because the 1.8.9 module consumes it. |
+| `target-1.21.11/` | The 1.21.11 adapter. Loom 1.18, Mojang mappings, Fabric Loader, Fabric API. Produces `ash-client-1.21.11.jar`. |
+| `target-1.8.9/` | The 1.8.9 adapter. Loom 1.16 plus `legacy-looming`, Legacy Yarn, Legacy Fabric API. Produces `ash-client-1.8.9.jar`. |
 
-A second target module for 1.8.9 lands in #21. The modules are named for the
-version target rather than "modern" and "legacy", because those words rot —
-1.21.11 is the *last obfuscated* release and 26.x is already out.
+The modules are named for the version target rather than "modern" and
+"legacy", because those words rot — 1.21.11 is the *last obfuscated* release
+and 26.x is already out.
+
+**Two Looms, one build.** `legacy-looming` is capped at 1.16.1 and has to match
+the Loom it companions, while the modern side is on 1.18.2. That costs nothing,
+because Loom is modularised: `fabric-loom` and `net.fabricmc.fabric-loom-remap`
+are different artifacts, so Gradle has no version to resolve between them and
+both sit on one plugin classpath. Each project prints its own at configure
+time. A third target on a third Loom would be the same story.
 
 Why three modules rather than a source preprocessor spanning both:
 `docs/adr/0015-two-client-projects-over-a-shared-module.md`.
@@ -32,9 +40,8 @@ comes out, so one modern JDK builds both targets.
 The first build downloads Minecraft and Mojang's mappings and takes a couple
 of minutes; later ones are seconds.
 
-`build` compiles both modules, runs the shared module's unit tests and the
-target module's loader tests, and runs `checkNoGameTypes`. CI runs exactly this
-on every push.
+`build` compiles all three modules, runs their tests, and runs
+`checkNoGameTypes`. CI runs exactly this on every push.
 
 ## The rule, and what enforces it
 
@@ -74,13 +81,25 @@ dependency fails there rather than in a game that comes up without ash in it.
 That is the acceptance criterion "it appears in the game's own mod list",
 proved as far as it can be without a game.
 
+**On 1.8.9 that tier does not work either**, and this one is not by choice. The
+loader starts, and then its Minecraft game provider cannot classify a 1.8.9 dev
+jar: `Minecraft game provider couldn't locate the game!`, with
+`fabric.gameJarPath` and `fabric.gameVersion` both pointed straight at it.
+
+That rules out the tier, not testing. `FabricModJsonTest` reads the processed
+manifest itself and asserts the two things most worth catching — a `${version}`
+that never expanded, and an entrypoint naming a class that has since moved.
+Weaker than asking the loader, because it is a second reading rather than the
+loader's own; better than nothing, which is what "that tier does not work"
+would otherwise buy. The rest waits for a real game, which #22 automates.
+
 ## How the jar reaches a player
 
-`target-1.21.11` builds `ash-client-1.21.11.jar` — a fixed name with no
-version in it. The launcher looks it up by that name to place it in an
-instance's `mods` directory, and the two ship in one installer, so a version
-in the file name would be a second place to change on every release with
-nothing to catch getting it wrong. Which version is running is a question
+Each target module builds `ash-client-<version target>.jar` — a fixed name with
+no version in it. The launcher looks it up by that name to place it in an
+instance's `mods` directory, and the two ship in one installer, so a version in
+the file name would be a second place to change on every release with nothing
+to catch getting it wrong. Which version is running is a question
 `fabric.mod.json` answers, in the game's own mod list.
 
 The installer picks the jar up through `launcher/src-tauri/tauri.bundle.conf.json`:
@@ -104,7 +123,15 @@ real-launch -- <client-id> 1.21.11 fabric` reads the jar straight out of
 ## What has to stay in step
 
 `gradle.properties` names the Minecraft version, the Fabric Loader version and
-the Fabric API version. All three are also pinned by the launcher in
+the API version, per target. Every one is also pinned by the launcher in
 `launcher/core/src/loader.rs`, and they have to agree: the launcher installs
 the loader and the API that the client then declares it depends on. Moving one
 means moving both.
+
+On 1.8.9 that goes one level further. Legacy Fabric API is 44 separately
+versioned modules behind a metadata-only aggregator, every one of their POMs is
+empty, and the launcher ships only the modules ash uses — so
+`target-1.8.9/build.gradle` compiles against exactly the list `loader.rs` pins.
+Reaching for a class from a module ash does not ship fails the build rather
+than failing in a player's game. Adding one means adding it in both places and
+mirroring it; `launcher/core/src/loader.rs` has a test for the mirroring half.

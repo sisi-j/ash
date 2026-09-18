@@ -68,11 +68,25 @@ const ASM: &str = "org.ow2.asm:asm:9.10.1";
 const INTERMEDIARY: &str = "net.legacyfabric:intermediary:1.8.9";
 const LOADER: &str = "net.fabricmc:fabric-loader:9.9.3";
 const API: &str = "net.legacyfabric.legacy-fabric-api:legacy-fabric-api:9.9.9+1.8.9";
+/// One of the API's modules. The aggregator above is metadata only, so a
+/// module is what actually carries the code ash's client calls - and there
+/// being two bundled mods here rather than one is what stops a test passing
+/// against an install that only ever handled the first.
+const API_MODULE: &str =
+    "net.legacyfabric.legacy-fabric-api:legacy-fabric-rendering-api-v1-common:9.9.9";
 
 const ASM_JAR: &[u8] = b"pretend this is asm";
 const INTERMEDIARY_JAR: &[u8] = b"pretend this is the legacy intermediary";
 const LOADER_JAR: &[u8] = b"pretend this is fabric loader";
 const API_JAR: &[u8] = b"pretend this is the legacy api aggregator";
+const API_MODULE_JAR: &[u8] = b"pretend this is the rendering api module";
+
+/// ash's own client for this target, as the installer leaves it on disk.
+///
+/// Never routed. This jar ships with the launcher and is never downloaded, so
+/// a `FakeHttp` with no route for it is part of the proof.
+const ASH_CLIENT: &str = "ash-client-1.8.9.jar";
+const ASH_CLIENT_JAR: &[u8] = b"pretend this is ash's own 1.8.9 client";
 const FORK_LWJGL_JAR: &[u8] = b"pretend this is the lwjgl fork";
 const FORK_UTIL_JAR: &[u8] = b"pretend this is lwjgl_util";
 
@@ -104,9 +118,15 @@ fn maven_path(coordinate: &str) -> String {
 ///
 /// Flat, and `+` becomes `-`, which is the rule ash's real mirror follows
 /// because GitHub mangles some characters in release asset names.
+/// The file name a coordinate's jar is installed under, worked out here
+/// rather than asked of ash - if the two ever disagree, the assertion should
+/// fail rather than follow along.
+fn file_name(coordinate: &str) -> String {
+    maven_path(coordinate).rsplit('/').next().expect("a file name").to_owned()
+}
+
 fn mirror_url(coordinate: &str) -> String {
-    let file = maven_path(coordinate).rsplit('/').next().expect("a file name").to_owned();
-    format!("{MIRROR}{}", file.replace('+', "-"))
+    format!("{MIRROR}{}", file_name(coordinate).replace('+', "-"))
 }
 
 fn depot_relative(coordinate: &str) -> String {
@@ -210,7 +230,8 @@ fn pins() -> &'static [LoaderPin] {
                 natives,
             },
         ]));
-        let bundled: &'static [PinnedLibrary] = Box::leak(Box::new([mirrored(API, API_JAR)]));
+        let bundled: &'static [PinnedLibrary] =
+            Box::leak(Box::new([mirrored(API, API_JAR), mirrored(API_MODULE, API_MODULE_JAR)]));
 
         let pins: &'static [LoaderPin] = Box::leak(Box::new([LoaderPin {
             loader: Loader::LegacyFabric,
@@ -224,9 +245,7 @@ fn pins() -> &'static [LoaderPin] {
             libraries,
             // Legacy Fabric emits no argument block at all.
             jvm_arguments: &[],
-            // #21 builds the 1.8.9 module; until then a Legacy Fabric
-            // instance gets a loader and an API and no ash client.
-            client_jar: None,
+            client_jar: Some(ASH_CLIENT),
             bundled_mods: bundled,
         }]));
         pins
@@ -302,7 +321,8 @@ fn serving() -> Arc<FakeHttp> {
                 maven_url(LEGACY, &format!("{FORK_PLATFORM}:natives-windows")),
                 HttpResponse::ok(fork_native().to_vec()),
             )
-            .route(maven_url(LEGACY, API), HttpResponse::ok(API_JAR)),
+            .route(maven_url(LEGACY, API), HttpResponse::ok(API_JAR))
+            .route(maven_url(LEGACY, API_MODULE), HttpResponse::ok(API_MODULE_JAR)),
     ))
 }
 
@@ -319,6 +339,7 @@ fn with_mirror(http: Arc<FakeHttp>) -> Arc<FakeHttp> {
             HttpResponse::ok(fork_native().to_vec()),
         )
         .route(mirror_url(API), HttpResponse::ok(API_JAR))
+        .route(mirror_url(API_MODULE), HttpResponse::ok(API_MODULE_JAR))
 }
 
 fn with_the_games_lwjgl(http: Arc<FakeHttp>) -> Arc<FakeHttp> {
@@ -333,10 +354,19 @@ struct Fixture {
     tmp: tempfile::TempDir,
 }
 
+/// Put ash's own client where an installed ash would have it. The
+/// installer's job in real life, and the fixture's here.
+fn install_ash_client(client_root: &std::path::Path) {
+    std::fs::create_dir_all(client_root).expect("the client root");
+    std::fs::write(client_root.join(ASH_CLIENT), ASH_CLIENT_JAR).expect("ash's client");
+}
+
 fn fixture_with(http: Arc<FakeHttp>) -> Fixture {
     let tmp = tempfile::tempdir().expect("temp dir");
+    let config = Config { loaders: pins(), ..Config::rooted_at(tmp.path()) };
+    install_ash_client(&config.client_root);
     let ash = Ash::new(
-        Config { loaders: pins(), ..Config::rooted_at(tmp.path()) },
+        config,
         Arc::clone(&http) as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
         FakeProcessPort::new() as Arc<dyn ProcessPort>,
@@ -625,8 +655,10 @@ async fn an_instance_prepares_and_launches_with_legacy_fabrics_repository_unreac
 
     let view = f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launches");
 
-    // Everything that repository serves is in the depot anyway.
-    for coordinate in [INTERMEDIARY, FORK_LWJGL, FORK_UTIL, API] {
+    // Everything that repository serves is in the depot anyway - the API's
+    // modules included, which is most of what a 1.8.9 instance now needs from
+    // it and all of what ash's own client calls into.
+    for coordinate in [INTERMEDIARY, FORK_LWJGL, FORK_UTIL, API, API_MODULE] {
         assert!(
             f.tmp.path().join("depot").join(depot_relative(coordinate)).is_file(),
             "{coordinate} was not fetched from the mirror"
@@ -701,5 +733,55 @@ async fn a_mirrored_artifact_that_does_not_match_its_hash_is_rejected() {
     assert!(
         !f.tmp.path().join("depot").join(depot_relative(INTERMEDIARY)).exists(),
         "the bad bytes reached the depot"
+    );
+}
+
+// ---- ash's own client -------------------------------------------------------
+
+#[tokio::test]
+async fn ashs_own_client_and_everything_it_calls_land_in_the_instance() {
+    let f = fixture_with(serving());
+    let id = f.modded().await;
+
+    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepared");
+
+    let mods = f.ash.game_directory(&id).join("mods");
+    assert_eq!(
+        std::fs::read(mods.join(ASH_CLIENT)).ok().as_deref(),
+        Some(ASH_CLIENT_JAR),
+        "ash's client is not in the instance, or is not the one that shipped"
+    );
+    // And the API beside it. The aggregator alone would put "Legacy Fabric
+    // API" in the mod list and nothing on the class path: it is four entries
+    // and no classes, so the module is what ash's client actually calls into.
+    // A loader that cannot resolve a declared dependency refuses to start.
+    assert!(mods.join(file_name(API)).is_file(), "the API aggregator is missing");
+    assert!(mods.join(file_name(API_MODULE)).is_file(), "the API module is missing");
+
+    // None of it came over the network. `serving` has no route for ash's own
+    // client, so a fetch would have panicked rather than failed quietly.
+    assert!(
+        !f.http.requested().iter().any(|url| url.contains("ash-client")),
+        "ash's own client was fetched; it ships in the installer"
+    );
+}
+
+#[tokio::test]
+async fn the_client_survives_legacy_fabrics_repository_being_unreachable() {
+    // The client itself never depended on that host - it ships in the
+    // installer - but everything it calls into does, and a client whose API
+    // is missing is a game that will not start rather than a game without a
+    // marker.
+    let f = fixture_with(with_mirror(serving()).host_unreachable(LEGACY));
+    let id = f.modded().await;
+
+    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepared");
+
+    let mods = f.ash.game_directory(&id).join("mods");
+    assert!(mods.join(ASH_CLIENT).is_file(), "ash's client is missing");
+    assert!(mods.join(file_name(API_MODULE)).is_file(), "the API module is missing");
+    assert!(
+        f.http.requested().iter().any(|url| url.starts_with(MIRROR)),
+        "the test proves nothing if the mirror was never asked"
     );
 }

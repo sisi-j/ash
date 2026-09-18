@@ -204,7 +204,57 @@ pub struct LoaderPin {
     pub bundled_mods: &'static [PinnedLibrary],
 }
 
+/// One file a pin names, with the library-or-natives distinction already
+/// settled.
+///
+/// A library that unpacks natives names no jar of its own - only its platform
+/// jars do - so "the artifacts a pin names" is not "the libraries a pin
+/// names". Everything that walks a pin needs that distinction and none of
+/// them should have to rediscover it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PinnedArtifact {
+    /// The library it came from, for its coordinate and its repository.
+    pub(crate) library: &'static PinnedLibrary,
+    /// The Maven classifier, on a platform jar. `None` for an ordinary one.
+    pub(crate) classifier: Option<&'static str>,
+    /// Where else these bytes can be had, if anywhere.
+    pub(crate) mirror: Option<&'static str>,
+}
+
+impl PinnedArtifact {
+    /// Where this file lives, relative to the depot root.
+    pub(crate) fn depot_path(&self) -> Result<String, AshError> {
+        match self.classifier {
+            Some(classifier) => self.library.native_depot_path(classifier),
+            None => self.library.depot_path(),
+        }
+    }
+}
+
 impl LoaderPin {
+    /// Every file this pin names, platform jars flattened out.
+    ///
+    /// A `Vec` rather than an iterator because the borrow is `'static` and
+    /// the list is a handful of entries built once per plan - the allocation
+    /// costs less than the lifetime it would otherwise take to avoid it.
+    pub(crate) fn artifacts(&self) -> Vec<PinnedArtifact> {
+        let mut out = Vec::new();
+        for library in self.libraries.iter().chain(self.bundled_mods) {
+            if library.natives.is_empty() {
+                out.push(PinnedArtifact { library, classifier: None, mirror: library.mirror });
+                continue;
+            }
+            for native in library.natives {
+                out.push(PinnedArtifact {
+                    library,
+                    classifier: Some(native.classifier),
+                    mirror: native.mirror,
+                });
+            }
+        }
+        out
+    }
+
     /// Every artifact this pin mirrors, by its path in the depot.
     ///
     /// Planning asks the pin rather than reading a second URL out of the
@@ -214,17 +264,9 @@ impl LoaderPin {
     /// ash's own source.
     pub(crate) fn mirrors(&self) -> Result<Vec<(String, &'static str)>, AshError> {
         let mut out = Vec::new();
-        for library in self.libraries.iter().chain(self.bundled_mods) {
-            if library.natives.is_empty() {
-                if let Some(mirror) = library.mirror {
-                    out.push((library.depot_path()?, mirror));
-                }
-                continue;
-            }
-            for native in library.natives {
-                if let Some(mirror) = native.mirror {
-                    out.push((library.native_depot_path(native.classifier)?, mirror));
-                }
+        for artifact in self.artifacts() {
+            if let Some(mirror) = artifact.mirror {
+                out.push((artifact.depot_path()?, mirror));
             }
         }
         Ok(out)
@@ -415,25 +457,70 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
     // reasons???". So a merged 1.8.9 profile has no structured arguments at
     // all and inherits vanilla's `minecraftArguments` instead.
     jvm_arguments: &[],
+    client_jar: Some("ash-client-1.8.9.jar"),
     // Legacy Fabric API 1.13.5+1.8.9, Apache-2.0, shipped unmodified.
-    //
-    // No ash client on this target yet; #21 builds the 1.8.9 module and
-    // fills this in. Preparing a Legacy Fabric instance meanwhile gets a
-    // loader and an API and no ash client, which is what is true.
-    client_jar: None,
-    // Unlike Fabric API this is *not* a fat jar: it is a metadata-only
-    // aggregator - four entries, no classes - and its POM names 43 separate
-    // module artifacts. Which of those ash's client needs cannot be known
-    // until the client exists, so only the aggregator is pinned here and the
-    // modules are #21's to add.
-    bundled_mods: &[PinnedLibrary {
-        name: "net.legacyfabric.legacy-fabric-api:legacy-fabric-api:1.13.5+1.8.9",
-        repository: LEGACY_MAVEN,
-        mirror: mirrored!("legacy-fabric-api-1.13.5-1.8.9.jar"),
-        sha1: "4cc125464f3894bdad83eb5ad82c4ae0f290b344",
-        size: 5_217,
-        natives: &[],
-    }],
+    bundled_mods: &[
+        // The aggregator first. Unlike Fabric API it is *not* a fat jar: four
+        // entries, no classes. It declares no dependency on any module either -
+        // its `depends` is `minecraft` and `fabricloader` and nothing else - so
+        // shipping it alongside a chosen few modules is not a half-installed API,
+        // it is the whole of what this artifact is. It is here because it is what
+        // puts "Legacy Fabric API" in the game's mod list, where a player looks.
+        PinnedLibrary {
+            name: "net.legacyfabric.legacy-fabric-api:legacy-fabric-api:1.13.5+1.8.9",
+            repository: LEGACY_MAVEN,
+            mirror: mirrored!("legacy-fabric-api-1.13.5-1.8.9.jar"),
+            sha1: "4cc125464f3894bdad83eb5ad82c4ae0f290b344",
+            size: 5_217,
+            natives: &[],
+        },
+        // And the three modules ash's client actually uses. Legacy Fabric API
+        // is 44 separately versioned modules behind that front, and every one
+        // of their POMs is empty - nothing declares a dependency on anything -
+        // so each is named here or it is simply not there at runtime.
+        //
+        // The `-common` split is real rather than packaging noise: the
+        // `-common` jar holds the API types and the `+1.8.9` jar holds the
+        // mixins that fire them, so neither half works alone. What each is
+        // here for:
+        //
+        //   api-base-common          `Event`, which `HudRenderCallback.EVENT` is
+        //   rendering-api-v1-common  `HudRenderCallback` itself
+        //   rendering-api-v1         `InGameHudMixin`, which fires it
+        //
+        // `legacy-fabric-api-base` is deliberately not among them. Its only
+        // class is `api/util/Location`, nothing ash ships names it, and the
+        // client builds without it - so shipping it would be one more thing
+        // to mirror and keep current for no reason.
+        //
+        // Only these three. `client/target-1.8.9/build.gradle` compiles
+        // against exactly the same list, so a class from a module ash does not
+        // ship cannot get into the client without the build failing first.
+        PinnedLibrary {
+            name: "net.legacyfabric.legacy-fabric-api:legacy-fabric-api-base-common:1.2.2",
+            repository: LEGACY_MAVEN,
+            mirror: mirrored!("legacy-fabric-api-base-common-1.2.2.jar"),
+            sha1: "a5e1d9a2f20238e3a219e9178236113e98b6d6f1",
+            size: 21_031,
+            natives: &[],
+        },
+        PinnedLibrary {
+            name: "net.legacyfabric.legacy-fabric-api:legacy-fabric-rendering-api-v1:1.0.1+1.8.9",
+            repository: LEGACY_MAVEN,
+            mirror: mirrored!("legacy-fabric-rendering-api-v1-1.0.1-1.8.9.jar"),
+            sha1: "4b700b1cc56b846e67367ea07bbfc40aed45a0ab",
+            size: 20_674,
+            natives: &[],
+        },
+        PinnedLibrary {
+            name: "net.legacyfabric.legacy-fabric-api:legacy-fabric-rendering-api-v1-common:1.0.1",
+            repository: LEGACY_MAVEN,
+            mirror: mirrored!("legacy-fabric-rendering-api-v1-common-1.0.1.jar"),
+            sha1: "92755559eb446afb6ce4118da99954969b75226c",
+            size: 18_238,
+            natives: &[],
+        },
+    ],
 };
 
 /// Every loader ash ships a pin for.
@@ -951,6 +1038,48 @@ mod tests {
             }
         }
         assert!(checked > 0, "the test proves nothing if ash pins no libraries");
+    }
+
+    #[test]
+    fn everything_pinned_at_the_one_self_hosted_repository_is_mirrored() {
+        // The whole argument of `docs/mirror.md`: `maven.legacyfabric.net` is
+        // a single self-hosted server with no published mirror, so an
+        // artifact pinned there and not mirrored is one that stops a 1.8.9
+        // instance preparing the day that server goes away. Adding an API
+        // module is exactly when that gets forgotten, so this is checked
+        // rather than remembered.
+        //
+        // What this cannot say is that the mirror actually holds the file -
+        // no test here touches the network. `docs/mirror.md` has the check
+        // that does.
+        let mut checked = 0;
+        for artifact in PINS.iter().flat_map(LoaderPin::artifacts) {
+            if artifact.library.repository != LEGACY_MAVEN {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                artifact.mirror.is_some(),
+                "{}{} is not mirrored",
+                artifact.library.name,
+                artifact.classifier.map(|c| format!(":{c}")).unwrap_or_default()
+            );
+        }
+        assert!(checked > 0, "the test proves nothing if ash pins nothing there");
+    }
+
+    #[test]
+    fn no_two_pins_ship_the_same_client_jar() {
+        // The jar's name is the whole of how a version target's client is
+        // found, so two pins naming one file would quietly install the wrong
+        // client on one of them - a 1.8.9 instance with the 1.21.11 client in
+        // it, which the loader would refuse and the player could not explain.
+        let mut named: Vec<&str> = PINS.iter().filter_map(|pin| pin.client_jar).collect();
+        assert!(!named.is_empty(), "the test proves nothing if ash ships no client");
+        let shipped = named.len();
+        named.sort_unstable();
+        named.dedup();
+        assert_eq!(named.len(), shipped, "two version targets name one client jar");
     }
 
     #[test]

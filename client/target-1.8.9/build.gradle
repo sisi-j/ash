@@ -1,0 +1,113 @@
+// The 1.8.9 half of ash's client. Same shape as `target-1.21.11`, different
+// everything else: Legacy Yarn instead of Mojang's names, an API whose modules
+// are versioned separately, and a Loom pinned back to what `legacy-looming`
+// companions.
+
+plugins {
+    // Upstream Loom, not a fork - `legacy-looming` is a companion plugin that
+    // teaches it about Legacy Fabric's intermediary, Legacy Yarn and the
+    // legacy run configs. The two versions have to match.
+    id 'net.fabricmc.fabric-loom-remap' version "${loom_version_1_8_9}"
+    id 'legacy-looming' version "${legacy_looming_version}"
+}
+
+version = mod_version
+group = maven_group
+
+base {
+    // No version in the name, for the reason `target-1.21.11` gives.
+    archivesName = "ash-client-${minecraft_version_1_8_9}"
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version_1_8_9}"
+    // Legacy Yarn, because Mojang publishes no mappings for 1.8.9 at all.
+    // Nothing of this reaches the shared module, so the two mapping families
+    // never have to be reconciled - see ADR-0015.
+    mappings(legacy.yarn(minecraft_version_1_8_9, legacy_yarn_build))
+    modImplementation "net.fabricmc:fabric-loader:${loader_version_1_8_9}"
+
+    // The API modules ash's client uses, named one by one rather than taking
+    // the aggregator. Legacy Fabric API is 44 separately versioned modules
+    // behind a metadata-only front, and the launcher ships only the ones the
+    // client needs - so compiling against the whole of it would let a class
+    // in here that no player's instance would have.
+    // Each module names no dependencies of its own - the POMs are empty - so
+    // every one ash uses is listed here, `-common` halves included. The split
+    // is real rather than packaging noise: the `-common` jar holds the API
+    // types and the `+1.8.9` jar the mixins that fire them, and neither half
+    // works alone.
+    //
+    //   api-base-common          `Event`, which `HudRenderCallback.EVENT` is
+    //   rendering-api-v1-common  `HudRenderCallback` itself
+    //   rendering-api-v1         `InGameHudMixin`, which fires it
+    //
+    // `legacy-fabric-api-base` is deliberately absent: its only class is
+    // `api/util/Location`, and nothing ash ships names it. The same list is
+    // pinned in `launcher/core/src/loader.rs`, so a module reached for here
+    // and not shipped there fails the build rather than a player's game.
+    ['legacy-fabric-api-base-common',
+     'legacy-fabric-rendering-api-v1',
+     'legacy-fabric-rendering-api-v1-common'].each { module ->
+        modImplementation(legacy.apiModule(module, legacy_fabric_api_version))
+    }
+
+    implementation project(':shared')
+
+    // Plain JUnit. The Fabric Loader JUnit tier the modern target uses does not
+    // run here - see the note below - but what it would catch most often needs
+    // neither the loader nor a game.
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Java 8 bytecode, and here it is the game's own requirement rather than a
+// courtesy to another module: 1.8.9 runs on Java 8, and the launcher
+// provisions Java 8 for it.
+tasks.named('compileJava') {
+    options.release = 8
+}
+
+// Tests are not shipped and never reach the game - they run on the build's own
+// JDK - so holding them to Java 8 would only cost every assertion written after
+// it. Same split as the shared module.
+tasks.named('compileTestJava') {
+    options.release = 21
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // The version the build expanded into `fabric.mod.json`, so the test can
+    // say the expansion happened rather than repeating the literal.
+    systemProperty 'ash.test.version', version
+}
+
+// There is deliberately no Fabric Loader JUnit tier here, unlike on the modern
+// target. The loader starts, and then its Minecraft game provider cannot locate
+// a 1.8.9 dev jar: `Minecraft game provider couldn't locate the game!`, with
+// `fabric.gameJarPath` and `fabric.gameVersion` both pointed at it explicitly.
+// So the tests above read the manifest themselves rather than asking the loader
+// what it made of it, which is weaker; the rest waits for a real game, which is
+// what #22 automates.
+
+processResources {
+    inputs.property 'version', version
+    inputs.property 'minecraft_version_1_8_9', minecraft_version_1_8_9
+    inputs.property 'loader_version_1_8_9', loader_version_1_8_9
+
+    filesMatching('fabric.mod.json') {
+        expand version: version,
+                minecraft_version: minecraft_version_1_8_9,
+                loader_version: loader_version_1_8_9
+    }
+}
+
+tasks.named('jar') {
+    // One jar, as on the other target.
+    from project(':shared').sourceSets.main.output
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    archiveVersion = ''
+}
