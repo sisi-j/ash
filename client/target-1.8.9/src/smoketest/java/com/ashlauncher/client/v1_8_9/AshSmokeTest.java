@@ -81,7 +81,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         // the loader's own log.
         System.out.println("ash smoke test: " + describeMods());
 
-        if (!FabricLoader.getInstance().isModLoaded("ash")) {
+        if (!FabricLoader.getInstance().isModLoaded("ash-MUTATED-TO-PROVE-THIS-FAILS")) {
             fail("the client started without ash in it, which is the one thing this is for");
             return;
         }
