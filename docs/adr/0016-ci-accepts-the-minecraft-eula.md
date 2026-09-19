@@ -17,14 +17,16 @@ Enable client game tests, and record the acceptance here rather than let it live
 ## Consequences
 
 - Every CI run accepts the Minecraft EULA on behalf of the repository owner. Anyone forking or running this build is doing the same, and this ADR is where they can find that out.
-- CI gets slower: client game tests need a full game launch per target. **Measured 2026-09-19 on `ubuntu-latest`, across four runs of the finished job:**
+- CI gets slower: client game tests need a full game launch per target. **Measured 2026-09-19 on `ubuntu-latest`:**
 
-  | Step | |
-  | --- | --- |
-  | `:target-1.21.11:runClientGameTest` | 55–65 seconds |
-  | `x11-xserver-utils`, which only the 1.8.9 tier needs | 9 seconds |
-  | `:target-1.8.9:runSmokeTest` | 11 seconds |
-  | the whole job, both targets, including checkout, JDK and Gradle | 86 seconds |
+  | Step | | Runs measured |
+  | --- | --- | --- |
+  | `:target-1.21.11:runClientGameTest` | 55–65 seconds | five |
+  | `x11-xserver-utils`, which only the 1.8.9 tier needs | 9–10 seconds | two |
+  | `:target-1.8.9:runSmokeTest` | 11–13 seconds | two |
+  | the whole job, both targets, including checkout, JDK and Gradle | 86–100 seconds | two |
+
+  The counts are in the table because an earlier revision of it said "across four runs of the finished job", and that was not true of any row but the first: the finished job with both tiers in it had run twice.
 
   The 1.8.9 tier costs a fifth of the modern one and proves less, in the same proportion: no ticking, no screenshot, no framework. Together they are still about the wall time of the compile-only `client` job and a sixth of the Rust job, which is cheap enough that whether to run them on every push does not arise.
 

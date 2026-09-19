@@ -91,7 +91,21 @@ manifest itself and asserts the two things most worth catching — a `${version}
 that never expanded, and an entrypoint naming a class that has since moved.
 Weaker than asking the loader, because it is a second reading rather than the
 loader's own; better than nothing, which is what "that tier does not work"
-would otherwise buy. The rest waits for a real game, which #22 automates.
+would otherwise buy.
+
+**The rest is a real game, and #22 automated it.** On 1.21.11 that is Fabric's
+own client game tests (`src/gametest`), which launch a vanilla client, wait
+twenty ticks, assert ash is loaded and keep a screenshot. On 1.8.9 no such
+framework exists - none of Legacy Fabric API's 44 modules is a gametest module
+- so `src/smoketest` is ash's miniature of it: a vanilla client, launched the
+same way, that prints its mod list, says whether ash is in it and shuts itself
+down. Neither test mod declares a dependency on `ash`, deliberately: with one,
+the loader would refuse to start when ash was missing and the assertion would
+never be the thing that noticed.
+
+Both run in CI on Linux only, and that is a capability rather than a
+preference - see `docs/adr/0016-ci-accepts-the-minecraft-eula.md`, which also
+records what they cost and what a headless runner does and does not provide.
 
 ## How the jar reaches a player
 

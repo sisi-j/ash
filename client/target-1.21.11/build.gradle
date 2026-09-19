@@ -53,7 +53,7 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 21
 }
 
-// Fabric's client game tests: a real client, launched, driven and asked
+// Fabric's client game tests: a real vanilla client, launched, driven and asked
 // whether ash loaded. This is the tier ADR-0017 leans on - it is what catches
 // a mixin that has stopped matching - and `eula = true` is a literal
 // acceptance of the Minecraft EULA on behalf of whoever runs this build. That

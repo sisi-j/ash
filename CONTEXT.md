@@ -76,6 +76,10 @@ _Avoid_: health check, status file, diagnostics
 A third-party mod ash ships unmodified inside an instance — currently Fabric API on modern targets and Legacy Fabric API on 1.8.9. The two are not the same shape: Fabric API is one jar, while Legacy Fabric API is a metadata-only aggregator in front of 44 separately versioned module jars, none of which declares a dependency on any other. ash ships the aggregator plus exactly the modules its client calls into — three of the 44 today — so a feature that reaches for a fourth means pinning and mirroring it.
 _Avoid_: dependency, vendored mod
 
+**Client game test**:
+The tier that launches a real vanilla client with ash in it and asserts what loaded — the only one that can catch a mixin which has stopped matching its target. Fabric provides the framework on modern targets; on 1.8.9 there is none, and ash's hand-rolled stand-in is a **smoke test**, named differently because it proves less: no ticking, no world, no screenshot. Both are Linux-only in CI.
+_Avoid_: integration test, e2e test, game test (that is Minecraft's server-side framework, a different tier)
+
 **Third-party mod**:
 A mod the player supplies themselves, loaded only when they opt in.
 _Avoid_: mod (unqualified), external mod, custom mod

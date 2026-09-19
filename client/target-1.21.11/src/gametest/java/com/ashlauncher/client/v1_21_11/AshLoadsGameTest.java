@@ -5,7 +5,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
- * A real Minecraft client, launched, with ash in it.
+ * A real vanilla client, launched, with ash in it.
  *
  * <p>Every other tier stops short of this one. The unit tests never start the
  * game; the manifest tests only read what the build wrote. This is the tier
@@ -30,12 +30,13 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext context) {
-        // Far enough in that the client is ticking rather than merely started.
+        // Far enough in that the vanilla client is ticking rather than merely
+        // started.
         context.waitTicks(20);
 
         if (!FabricLoader.getInstance().isModLoaded("ash")) {
             throw new AssertionError(
-                    "the client started without ash in it, which is the one thing this tier is for");
+                    "the vanilla client started without ash in it, which is the one thing this tier is for");
         }
 
         // Kept as a CI artifact. When something does go wrong in here, the

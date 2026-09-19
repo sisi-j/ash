@@ -14,6 +14,8 @@ These are the conventions that are not obvious from the code and not enforced by
 
 **Tests drive the product through `Ash`.** No test touches the network, the credential store, or spawns a JVM.
 
+*Scoped 2026-09-19, while implementing #22.* That rule is about the Rust workspace, where `Ash` is the seam and a spawned JVM would mean the fakes had been reached around. It never governed the client's own build: the tier that launches a real vanilla client on each version target in CI both touches the network and spawns a JVM, on purpose, because there is no other way to find out whether a mixin still matches its target. See ADR-0016.
+
 ## Secrets
 
 **Redaction is structural, never a filter at the point of output.** A type that can carry a token does not derive `Serialize` — see `Invocation` — and the shape that crosses to the UI is redacted by construction — see `InvocationView`. Where a secret has to sit in a struct beside ordinary fields, `Debug` is written by hand — see `Session`. A redaction pass that scans strings on the way out protects only the sites someone remembered to route through it.

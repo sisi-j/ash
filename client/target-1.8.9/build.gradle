@@ -31,13 +31,16 @@ sourceSets {
 
 loom {
     runs {
-        // A real 1.8.9 client, launched with ash and the smoke test in it.
-        // Loom wraps this in `xvfb-run` on Linux, which is what makes it a CI
-        // job rather than something only a human with a screen can do.
+        // A real 1.8.9 vanilla client, launched with ash and the smoke test
+        // in it. Loom wraps this in `xvfb-run` on Linux, which is what makes it
+        // a CI job rather than something only a human with a screen can do.
         //
-        // Every run of this accepts the Minecraft EULA, exactly as the modern
-        // target's client game tests do - see
-        // `docs/adr/0016-ci-accepts-the-minecraft-eula.md`.
+        // Unlike the modern target, this tier accepts nothing. Fabric's
+        // `eula = true` belongs to its client game test framework, which does
+        // not exist here, and a plain Loom `client()` run neither writes an
+        // `eula.txt` nor asks for one. ADR-0016's acceptance is real and it is
+        // the modern target's - an earlier revision of this comment claimed
+        // the two tiers were alike in that, and they are not.
         smokeTest {
             client()
             configName = 'ash smoke test (1.8.9)'

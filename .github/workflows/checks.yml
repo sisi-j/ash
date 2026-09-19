@@ -91,7 +91,7 @@ jobs:
           if-no-files-found: error
 
   client-game-test:
-    # The tier ADR-0017 leans on: a real Minecraft client on each version
+    # The tier ADR-0017 leans on: a real vanilla client on each version
     # target, launched, asked whether ash is in it. Its own job rather than a
     # step in `client`, because
     # it downloads the game's assets and starts a JVM with a window in it -
@@ -107,6 +107,11 @@ jobs:
     # this repository. That is deliberate and recorded:
     # `docs/adr/0016-ci-accepts-the-minecraft-eula.md`.
     runs-on: ubuntu-latest
+    # Both tiers launch a game and wait for it to say something. A client that
+    # comes up but never reaches the code that would stop it does not fail -
+    # it sits there, and the default is GitHub's six hours. The smoke test has
+    # its own 180-second watchdog, but that only runs if its mod loaded at all.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: gradle/actions/wrapper-validation@v6
@@ -116,19 +121,16 @@ jobs:
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v6
 
-      # Fabric's own client game tests. Drives a real client and asks it
-      # whether ash is there.
+      # Fabric's own client game tests. Drives a real vanilla client and asks
+      # it whether ash is there.
       - run: ./gradlew :target-1.21.11:runClientGameTest
         working-directory: client
 
-      # LWJGL 2 decides whether it can set a display mode by looking for an
-      # executable named `xrandr` on PATH - `LinuxDisplay.isXrandrSupported`
-      # returns false before it ever asks the X server - and falls back to
-      # XF86VidMode, which Xvfb does not implement. The runner image ships
-      # Xvfb but not `x11-xserver-utils`, so without this the 1.8.9 client
-      # crashes in `initializeGame` with "No display mode extension is
-      # available". LWJGL 3 asks GLFW instead, which is why the modern target
-      # never needed it.
+      # LWJGL 2 looks for an `xrandr` executable on PATH and gives up on
+      # display modes when it finds none, so without this the 1.8.9 client
+      # crashes on a runner that has Xvfb but not `x11-xserver-utils`. Why
+      # that is, and why the modern target needs none of it, is in
+      # `docs/adr/0016-ci-accepts-the-minecraft-eula.md`.
       #
       # `!cancelled()` rather than the default, here and on the step below,
       # because steps stop at the first failure and these are two independent
@@ -139,17 +141,19 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends x11-xserver-utils
 
       # 1.8.9 has no such framework - Legacy Fabric API ships no gametest
-      # module at all - so this is ash's own miniature of it: a real client,
-      # launched the same way, that reports and then shuts itself down.
+      # module at all - so this is ash's own miniature of it: a real vanilla
+      # client, launched the same way, that reports and then shuts itself down.
       # Separately timed, because the two are not the same tier and a single
       # number would hide that.
       - if: ${{ !cancelled() }}
         run: ./gradlew :target-1.8.9:runSmokeTest
         working-directory: client
 
-      # Kept whether they passed or failed. When a client test goes wrong, the
+      # Kept whether they passed or failed. When one of these goes wrong, the
       # difference between a stack trace and a picture of the screen is most of
-      # the diagnosis.
+      # the diagnosis. Worth knowing: on 1.8.9 the log is nearly empty, because
+      # Log4j rejects most of Fabric's logging config on that game version -
+      # which is why the smoke test prints its own mod list to standard out.
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -158,6 +162,40 @@ jobs:
             client/target-1.21.11/build/run/clientGameTest/screenshots/
             client/target-1.21.11/build/run/clientGameTest/logs/
             client/target-1.8.9/build/run/smoketest/logs/
+          if-no-files-found: ignore
+
+  # EXPERIMENT, to be removed: does this tier run on a Windows runner?
+  #
+  # ADR-0016 has said since it was written that this is unverified on Windows.
+  # #22 then asserted it was "expected not to work" because Loom wraps a client
+  # run in `xvfb-run` on Linux and nowhere else - which is not an argument: a
+  # `windows-latest` runner has a desktop and wants no framebuffer, so the
+  # absence of xvfb tells us nothing. The real question is whether the runner
+  # offers an OpenGL 2.0+ context, and nothing had asked it. This asks it.
+  #
+  # Windows is where ash actually ships, so the answer decides whether the
+  # safety net ADR-0017 depends on covers the platform its users are on.
+  client-game-test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: actions/setup-java@v6
+        with:
+          java-version: 25
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew :target-1.21.11:runClientGameTest
+        shell: bash
+        working-directory: client
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: client-game-test-windows
+          path: |
+            client/target-1.21.11/build/run/clientGameTest/screenshots/
+            client/target-1.21.11/build/run/clientGameTest/logs/
           if-no-files-found: ignore
 
   typescript:

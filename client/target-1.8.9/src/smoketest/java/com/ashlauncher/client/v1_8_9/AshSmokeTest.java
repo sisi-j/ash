@@ -16,13 +16,13 @@ import net.minecraft.client.MinecraftClient;
  * <p>Legacy Fabric API ships no gametest module at all — none of its 44
  * modules is one — so the tier `target-1.21.11` gets from
  * `fabric-client-gametest-api-v1` does not exist here. What does exist is a
- * real client that Loom can launch headless. This is the smallest thing that
+ * real vanilla client that Loom can launch headless. This is the smallest thing that
  * turns that into a test: wait for the game to put a screen up, say whether
  * ash is in it, and shut the game down so the run has an exit code.
  *
  * <p>It proves less than the modern tier and is meant to. There is no ticking,
  * no world, no screenshot and no way to drive input — only "a real 1.8.9
- * client, with ash installed, reached its menu instead of crashing". That is
+ * vanilla client, with ash installed, reached its menu instead of crashing". That is
  * the failure worth catching first, and it is the one that will start
  * happening when #24 puts a mixin on this target.
  *
@@ -46,7 +46,7 @@ public final class AshSmokeTest implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        // A daemon thread, because this has to watch the client rather than
+        // A daemon thread, because this has to watch the vanilla client rather
         // block the thread that is starting it.
         Thread watcher = new Thread(AshSmokeTest::watch, "ash-smoke-test");
         watcher.setDaemon(true);
@@ -59,7 +59,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         while (System.currentTimeMillis() < deadline) {
             MinecraftClient client = MinecraftClient.getInstance();
             // A screen means the game is past its loading and drawing
-            // something - the title screen, on a client with no world.
+            // something - the title screen, on a vanilla client with no world.
             if (client != null && client.currentScreen != null) {
                 report(client);
                 return;
@@ -67,7 +67,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             sleep();
         }
 
-        fail("the client never put a screen up within " + (TIMEOUT_MS / 1000L) + " seconds");
+        fail("the vanilla client never put a screen up within " + (TIMEOUT_MS / 1000L) + " seconds");
     }
 
     private static void report(MinecraftClient client) {
@@ -82,7 +82,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         System.out.println("ash smoke test: " + describeMods());
 
         if (!FabricLoader.getInstance().isModLoaded("ash")) {
-            fail("the client started without ash in it, which is the one thing this is for");
+            fail("the vanilla client started without ash in it, which is the one thing this is for");
             return;
         }
 
@@ -116,7 +116,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             Thread.sleep(POLL_MS);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            fail("interrupted while waiting for the client");
+            fail("interrupted while waiting for the vanilla client");
         }
     }
 }
