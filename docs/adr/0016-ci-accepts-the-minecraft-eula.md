@@ -37,9 +37,19 @@ Enable client game tests, and record the acceptance here rather than let it live
 
   *Corrected: an earlier revision said the only complaint was a non-fatal `X11: Standard cursor shape unavailable`. That was written from the parts of the log that were read rather than from the log.* A headless runner with no sound card, no account and no network to Mojang also loses the narrator (`Unable to load library 'flite'`), Realms (`Failed to fetch user properties`, `Couldn't connect to realms`) and sound (`Error starting SoundSystem. Turning off sounds & music`). All are non-fatal and none is ash's, but "the only complaint" was not true, and a tier whose value is that it notices things should not have its own record overstated.
 
-  On **Windows** it remains unverified and is expected not to work: Loom wraps a client run in `xvfb-run` on Linux and nowhere else, and there is no equivalent for a Windows or macOS runner. So this tier is a Linux-runner capability, while ash itself ships on Windows. That is a gap between where the client is tested and where it runs, and it is the reason the manual acceptance pass does not go away.
+  On **Windows** it does not work, and this is measured rather than argued. A throwaway `windows-latest` job ran the modern target's client game test on 2026-09-19 (run 35448761991). The client started, loaded all 52 mods, set its user, registered Indigo, and logged:
 
-  ADR-0017 keeps its safety net, so it is not reopened.
+  ```
+  [14:28:23] [Render thread/INFO] (Minecraft) Backend library: LWJGL version 3.3.3-snapshot
+  ```
+
+  Then nothing, for 28 minutes, until the job's 30-minute timeout killed it. On Linux the very next line, one second later, is `Using optional rendering extensions: GL_ARB_buffer_storage, GL_KHR_debug, ...` — the line that says a GL context was obtained. On the Windows runner it never arrives. The runner has a desktop and no GPU, and Microsoft's generic driver offers OpenGL 1.1 where this client wants 3.2 core.
+
+  **It hangs rather than failing**, which is worse than a crash: without a `timeout-minutes` it would have burned GitHub's six-hour default. That is why `client-game-test` carries one.
+
+  *An earlier revision of this bullet said Windows was "expected not to work" because Loom wraps a client run in `xvfb-run` on Linux and nowhere else. That was an inference, and a bad one — a Windows runner has a desktop and wants no framebuffer, so the absence of xvfb said nothing about it. The real blocker is the GL context, and it took one throwaway job to find out. #22 said finding out was most of the ticket.*
+
+  So this tier is a Linux-runner capability, while ash itself ships on Windows. That is a gap between where the client is tested and where it runs, and it is the reason the manual acceptance pass does not go away.
 - **What a GPU-less runner actually needs is not the same on both targets, and the difference is LWJGL.** The modern client came up on `ubuntu-latest` unassisted. The 1.8.9 client crashed in `initializeGame` with `No display mode extension is available`, which reads exactly like a runner refusing the job and is not. LWJGL 2 decides whether it can set a display mode in `LinuxDisplay.isXrandrSupported`, and that method looks for an executable named `xrandr` on `PATH` and returns false before it ever asks the X server:
 
   ```java
