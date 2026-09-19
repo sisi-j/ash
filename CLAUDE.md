@@ -9,6 +9,13 @@ From the repo root:
 - `cd client && ./gradlew build` - compiles both client modules, runs the
   shared module's unit tests, and checks that it still cannot see the game
 
+The two that launch a real game are not part of `build`, run on Linux only,
+and take about a minute and a half between them:
+
+- `cd client && ./gradlew :target-1.21.11:runClientGameTest`
+- `cd client && ./gradlew :target-1.8.9:runSmokeTest` - needs an `xrandr`
+  executable on PATH, which is `x11-xserver-utils` on a Debian runner
+
 Tests run in milliseconds; the cost is compilation. `target/debug` grows past 10GB and is safe to delete.
 
 The client build is the slow one: its first run downloads Minecraft and
