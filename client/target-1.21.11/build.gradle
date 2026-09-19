@@ -53,6 +53,21 @@ tasks.withType(JavaCompile).configureEach {
     options.release = 21
 }
 
+// Fabric's client game tests: a real client, launched, driven and asked
+// whether ash loaded. This is the tier ADR-0017 leans on - it is what catches
+// a mixin that has stopped matching - and `eula = true` is a literal
+// acceptance of the Minecraft EULA on behalf of whoever runs this build. That
+// is a decision, not a template line: see
+// `docs/adr/0016-ci-accepts-the-minecraft-eula.md`.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'ash-client-gametest'
+        enableClientGameTests = true
+        eula = true
+    }
+}
+
 processResources {
     // Written into `fabric.mod.json` rather than repeated there, so what the
     // client declares it needs cannot drift from what it was built against.

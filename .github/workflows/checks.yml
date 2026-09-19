@@ -90,6 +90,46 @@ jobs:
           path: client/*/build/libs/*.jar
           if-no-files-found: error
 
+  client-game-test:
+    # The tier ADR-0017 leans on: a real Minecraft client, launched, asked
+    # whether ash is in it. Its own job rather than a step in `client`, because
+    # it downloads the game's assets and starts a JVM with a window in it -
+    # orders of magnitude slower than compiling, and the fast signal should stay
+    # fast.
+    #
+    # Linux is not a preference here. Loom wraps a client run in `xvfb-run` on
+    # Linux and nowhere else, and there is no equivalent for a Windows or macOS
+    # runner - so this tier is a Linux-runner capability, whatever the rest of
+    # ash ships on.
+    #
+    # Every run of this accepts the Minecraft EULA on behalf of whoever owns
+    # this repository. That is deliberate and recorded:
+    # `docs/adr/0016-ci-accepts-the-minecraft-eula.md`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: actions/setup-java@v6
+        with:
+          java-version: 25
+          distribution: temurin
+      - uses: gradle/actions/setup-gradle@v6
+
+      - run: ./gradlew :target-1.21.11:runClientGameTest
+        working-directory: client
+
+      # Kept whether it passed or failed. When a client test goes wrong, the
+      # difference between a stack trace and a picture of the screen is most of
+      # the diagnosis.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: client-game-test-1.21.11
+          path: |
+            client/target-1.21.11/build/run/clientGameTest/screenshots/
+            client/target-1.21.11/build/run/clientGameTest/logs/
+          if-no-files-found: ignore
+
   typescript:
     # Nothing here is platform-specific, so it runs where it is cheapest.
     runs-on: ubuntu-latest

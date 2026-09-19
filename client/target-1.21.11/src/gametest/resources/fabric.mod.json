@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "ash-client-gametest",
+  "version": "1.0.0",
+  "name": "ash client game tests",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": [
+      "com.ashlauncher.client.v1_21_11.AshLoadsGameTest"
+    ]
+  },
+  "depends": {
+    "ash": "*"
+  }
+}
