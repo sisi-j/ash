@@ -50,6 +50,8 @@ Enable client game tests, and record the acceptance here rather than let it live
   *An earlier revision of this bullet said Windows was "expected not to work" because Loom wraps a client run in `xvfb-run` on Linux and nowhere else. That was an inference, and a bad one — a Windows runner has a desktop and wants no framebuffer, so the absence of xvfb said nothing about it. The real blocker is the GL context, and it took one throwaway job to find out. #22 said finding out was most of the ticket.*
 
   So this tier is a Linux-runner capability, while ash itself ships on Windows. That is a gap between where the client is tested and where it runs, and it is the reason the manual acceptance pass does not go away.
+
+  **ADR-0017 is not reopened, and the reason is narrower than "the tests run".** It names one failure mode — a mixin that has stopped matching its target — and that is decided by bytecode and mappings when the class loads, not by the operating system. A mixin that stops matching stops matching on Linux too, so the tier catches the thing the decision depends on. What it cannot catch is a Windows-specific runtime failure, which that decision was never about. ADR-0017 records that boundary itself.
 - **What a GPU-less runner actually needs is not the same on both targets, and the difference is LWJGL.** The modern client came up on `ubuntu-latest` unassisted. The 1.8.9 client crashed in `initializeGame` with `No display mode extension is available`, which reads exactly like a runner refusing the job and is not. LWJGL 2 decides whether it can set a display mode in `LinuxDisplay.isXrandrSupported`, and that method looks for an executable named `xrandr` on `PATH` and returns false before it ever asks the X server:
 
   ```java
