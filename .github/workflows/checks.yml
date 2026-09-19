@@ -129,14 +129,22 @@ jobs:
       # crashes in `initializeGame` with "No display mode extension is
       # available". LWJGL 3 asks GLFW instead, which is why the modern target
       # never needed it.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends x11-xserver-utils
+      #
+      # `!cancelled()` rather than the default, here and on the step below,
+      # because steps stop at the first failure and these are two independent
+      # questions. Without it a modern-target failure skips the 1.8.9 tier
+      # entirely and the run cannot say whether 1.8.9 was fine - which cost a
+      # round trip to find out during #22, in run 35447474438.
+      - if: ${{ !cancelled() }}
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends x11-xserver-utils
 
       # 1.8.9 has no such framework - Legacy Fabric API ships no gametest
       # module at all - so this is ash's own miniature of it: a real client,
       # launched the same way, that reports and then shuts itself down.
       # Separately timed, because the two are not the same tier and a single
       # number would hide that.
-      - run: ./gradlew :target-1.8.9:runSmokeTest
+      - if: ${{ !cancelled() }}
+        run: ./gradlew :target-1.8.9:runSmokeTest
         working-directory: client
 
       # Kept whether they passed or failed. When a client test goes wrong, the
