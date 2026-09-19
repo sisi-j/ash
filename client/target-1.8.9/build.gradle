@@ -43,6 +43,12 @@ loom {
             configName = 'ash smoke test (1.8.9)'
             source 'smoketest'
             runDir 'build/run/smoketest'
+
+            // LWJGL 2 names the display-mode extension it settled on only
+            // when this is set. On a machine with a screen that line is
+            // noise; on a headless runner it is the whole diagnosis, and
+            // this tier only ever runs headless.
+            property 'org.lwjgl.util.Debug', 'true'
         }
     }
 }

@@ -121,6 +121,16 @@ jobs:
       - run: ./gradlew :target-1.21.11:runClientGameTest
         working-directory: client
 
+      # LWJGL 2 decides whether it can set a display mode by looking for an
+      # executable named `xrandr` on PATH - `LinuxDisplay.isXrandrSupported`
+      # returns false before it ever asks the X server - and falls back to
+      # XF86VidMode, which Xvfb does not implement. The runner image ships
+      # Xvfb but not `x11-xserver-utils`, so without this the 1.8.9 client
+      # crashes in `initializeGame` with "No display mode extension is
+      # available". LWJGL 3 asks GLFW instead, which is why the modern target
+      # never needed it.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends x11-xserver-utils
+
       # 1.8.9 has no such framework - Legacy Fabric API ships no gametest
       # module at all - so this is ash's own miniature of it: a real client,
       # launched the same way, that reports and then shuts itself down.
