@@ -1,7 +1,12 @@
 package com.ashlauncher.client.v1_8_9;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.MinecraftClient;
 
 /**
@@ -20,6 +25,14 @@ import net.minecraft.client.MinecraftClient;
  * client, with ash installed, reached its menu instead of crashing". That is
  * the failure worth catching first, and it is the one that will start
  * happening when #24 puts a mixin on this target.
+ *
+ *
+ * <p>Its manifest names no dependency on `ash`, which looks like an omission
+ * and is not. With `depends` on `ash`, the loader would refuse to start when
+ * ash was missing and this assertion would never run - the loader would be
+ * doing the catching and the test would be along for the ride. Without it, the
+ * game starts either way and the line below is what decides, which is the only
+ * arrangement in which it means anything.
  *
  * <p>Never shipped: this lives in its own source set and its own mod, and
  * nothing in `src/main` knows it exists.
@@ -58,6 +71,16 @@ public final class AshSmokeTest implements ClientModInitializer {
     }
 
     private static void report(MinecraftClient client) {
+        // Printed rather than logged, and that is not a style choice. On this
+        // target Log4j rejects most of Fabric's logging config on startup -
+        // `Error processing element Queue: CLASS_NOT_FOUND`, then every
+        // appender reference left with an invalid level - so INFO goes
+        // nowhere and the log file CI uploads holds three ERROR lines and
+        // nothing else. Standard out is the only record this tier has, so the
+        // evidence goes there: the same mod list the modern target gets from
+        // the loader's own log.
+        System.out.println("ash smoke test: " + describeMods());
+
         if (!FabricLoader.getInstance().isModLoaded("ash")) {
             fail("the client started without ash in it, which is the one thing this is for");
             return;
@@ -67,6 +90,17 @@ public final class AshSmokeTest implements ClientModInitializer {
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
+    }
+
+    /** The loaded mods, by id and version, in a line CI can be grepped for. */
+    private static String describeMods() {
+        Collection<ModContainer> mods = FabricLoader.getInstance().getAllMods();
+        List<String> names = new ArrayList<>(mods.size());
+        for (ModContainer mod : mods) {
+            names.add(mod.getMetadata().getId() + " " + mod.getMetadata().getVersion());
+        }
+        Collections.sort(names);
+        return mods.size() + " mods loaded: " + String.join(", ", names);
     }
 
     private static void fail(String why) {

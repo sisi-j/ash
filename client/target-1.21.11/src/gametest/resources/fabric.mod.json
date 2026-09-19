@@ -8,8 +8,5 @@
     "fabric-client-gametest": [
       "com.ashlauncher.client.v1_21_11.AshLoadsGameTest"
     ]
-  },
-  "depends": {
-    "ash": "*"
   }
 }

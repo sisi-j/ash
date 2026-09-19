@@ -9,8 +9,5 @@
     "client": [
       "com.ashlauncher.client.v1_8_9.AshSmokeTest"
     ]
-  },
-  "depends": {
-    "ash": "*"
   }
 }
