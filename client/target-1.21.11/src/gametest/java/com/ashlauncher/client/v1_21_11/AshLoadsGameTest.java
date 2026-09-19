@@ -33,7 +33,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // Far enough in that the client is ticking rather than merely started.
         context.waitTicks(20);
 
-        if (!FabricLoader.getInstance().isModLoaded("ash-MUTATED-TO-PROVE-THIS-FAILS")) {
+        if (!FabricLoader.getInstance().isModLoaded("ash")) {
             throw new AssertionError(
                     "the client started without ash in it, which is the one thing this tier is for");
         }
