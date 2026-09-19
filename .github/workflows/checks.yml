@@ -91,8 +91,9 @@ jobs:
           if-no-files-found: error
 
   client-game-test:
-    # The tier ADR-0017 leans on: a real Minecraft client, launched, asked
-    # whether ash is in it. Its own job rather than a step in `client`, because
+    # The tier ADR-0017 leans on: a real Minecraft client on each version
+    # target, launched, asked whether ash is in it. Its own job rather than a
+    # step in `client`, because
     # it downloads the game's assets and starts a JVM with a window in it -
     # orders of magnitude slower than compiling, and the fast signal should stay
     # fast.
@@ -115,19 +116,30 @@ jobs:
           distribution: temurin
       - uses: gradle/actions/setup-gradle@v6
 
+      # Fabric's own client game tests. Drives a real client and asks it
+      # whether ash is there.
       - run: ./gradlew :target-1.21.11:runClientGameTest
         working-directory: client
 
-      # Kept whether it passed or failed. When a client test goes wrong, the
+      # 1.8.9 has no such framework - Legacy Fabric API ships no gametest
+      # module at all - so this is ash's own miniature of it: a real client,
+      # launched the same way, that reports and then shuts itself down.
+      # Separately timed, because the two are not the same tier and a single
+      # number would hide that.
+      - run: ./gradlew :target-1.8.9:runSmokeTest
+        working-directory: client
+
+      # Kept whether they passed or failed. When a client test goes wrong, the
       # difference between a stack trace and a picture of the screen is most of
       # the diagnosis.
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: client-game-test-1.21.11
+          name: client-game-test
           path: |
             client/target-1.21.11/build/run/clientGameTest/screenshots/
             client/target-1.21.11/build/run/clientGameTest/logs/
+            client/target-1.8.9/build/run/smoketest/logs/
           if-no-files-found: ignore
 
   typescript:

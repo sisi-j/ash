@@ -19,6 +19,34 @@ base {
     archivesName = "ash-client-${minecraft_version_1_8_9}"
 }
 
+// A source set of its own for the smoke test, so nothing test-shaped can reach
+// the jar a player installs. It sees everything `main` sees, plus `main`
+// itself.
+sourceSets {
+    smoketest {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+loom {
+    runs {
+        // A real 1.8.9 client, launched with ash and the smoke test in it.
+        // Loom wraps this in `xvfb-run` on Linux, which is what makes it a CI
+        // job rather than something only a human with a screen can do.
+        //
+        // Every run of this accepts the Minecraft EULA, exactly as the modern
+        // target's client game tests do - see
+        // `docs/adr/0016-ci-accepts-the-minecraft-eula.md`.
+        smokeTest {
+            client()
+            configName = 'ash smoke test (1.8.9)'
+            source 'smoketest'
+            runDir 'build/run/smoketest'
+        }
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version_1_8_9}"
     // Legacy Yarn, because Mojang publishes no mappings for 1.8.9 at all.
@@ -74,6 +102,11 @@ tasks.named('compileJava') {
 // it. Same split as the shared module.
 tasks.named('compileTestJava') {
     options.release = 21
+}
+
+// The smoke test does run inside the game, so it is held to the game's Java.
+tasks.named('compileSmoketestJava') {
+    options.release = 8
 }
 
 tasks.named('test') {
