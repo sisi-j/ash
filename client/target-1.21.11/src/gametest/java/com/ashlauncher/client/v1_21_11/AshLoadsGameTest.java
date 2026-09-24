@@ -78,43 +78,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // checks `haveTime()`); and under the framework's lockstep ticking it
         // was 40 ticks behind. A dedicated server does not pause when empty,
         // so its levels tick and the chunks load whatever the schedule.
-        Thread watchdog = stackDumpAfter(90_000L);
         try (TestDedicatedServerContext server = context.worldBuilder().createServer();
                 TestServerConnection connection = server.connect()) {
-            watchdog.interrupt();
             connection.getClientWorld().waitForChunksRender();
             context.waitTicks(40);
             context.takeScreenshot("ash-in-world");
         }
-    }
-
-    /**
-     * DIAGNOSTIC, to be removed: if the world has not loaded by then, print
-     * what the server, its world-generation workers and the render thread are
-     * doing. The first run of this step stalled at "Preparing spawn area: 16%"
-     * for a minute with nothing in the log to say why.
-     */
-    private static Thread stackDumpAfter(long millis) {
-        Thread watchdog = new Thread(() -> {
-            try {
-                Thread.sleep(millis);
-            } catch (InterruptedException loaded) {
-                return;
-            }
-            System.out.println("ash diagnostic: world not loaded after " + millis / 1000L + "s, thread stacks follow");
-            Thread.getAllStackTraces().forEach((thread, stack) -> {
-                String name = thread.getName();
-                if (name.startsWith("Server thread") || name.startsWith("Worker-Main")
-                        || name.startsWith("Render thread") || name.startsWith("Test thread")) {
-                    System.out.println("ash diagnostic: \"" + name + "\" " + thread.getState());
-                    for (int i = 0; i < Math.min(stack.length, 30); i++) {
-                        System.out.println("ash diagnostic:     at " + stack[i]);
-                    }
-                }
-            });
-        }, "ash-world-watchdog");
-        watchdog.setDaemon(true);
-        watchdog.start();
-        return watchdog;
     }
 }

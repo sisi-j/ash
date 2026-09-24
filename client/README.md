@@ -96,7 +96,9 @@ would otherwise buy.
 **The rest is a real game, and #22 automated it.** On 1.21.11 that is Fabric's
 own client game tests (`src/gametest`): a vanilla client that asserts ash is
 loaded and wrote `config/ash.properties`, screenshots the title screen, then
-creates a world, waits for its chunks to render and screenshots that. On 1.8.9
+joins a dedicated server, waits for its chunks to render and screenshots that.
+A dedicated server rather than a singleplayer world because the latter cannot
+finish loading under the framework on a CI runner - ADR-0016 has the chain. On 1.8.9
 no such framework exists - none of Legacy Fabric API's 44 modules is a gametest
 module - so `src/smoketest` is ash's miniature of it: a vanilla client that
 prints its mod list, makes the same two assertions, starts a flat world, lets
