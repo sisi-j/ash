@@ -44,9 +44,16 @@ class FpsReadoutTest {
 
     /**
      * Everything vanilla anchors to the bottom of the screen, on both targets:
-     * the hotbar and the status bars above it, and the chat above those - ten
-     * lines of nine when it is not focused, its bottom 48 above the screen's
-     * on 1.8.9 and 40 on 1.21.11. The higher of the two, rounded up.
+     * the hotbar and the status bars above it, and the chat above those - 90
+     * high when it is not focused, its bottom 48 above the screen's on 1.8.9
+     * and 40 on 1.21.11. The higher of the two.
+     *
+     * <p>Open chat is not in this and could not honestly be. It is 180 high at
+     * the default setting (1.8.9's {@code ChatHud.getHeight}: 160 times the
+     * setting, plus 20), so at this smallest GUI - which is what a 1280 by
+     * 720 window gets at auto scale - a full 20 lines of it on 1.8.9 reaches
+     * row 12, the readout's drop shadow. One row, while the player is typing,
+     * on the smallest GUI either target draws. Clear everywhere else.
      */
     private static final int BOTTOM_ANCHORED_HUD_TOP = SMALLEST_GUI_HEIGHT - 48 - 90;
 
@@ -90,10 +97,10 @@ class FpsReadoutTest {
 
     @Test
     void it_is_hidden_with_the_rest_of_the_hud() {
-        // F1, usually for a screenshot. On 1.8.9 the game never asks ash to
-        // draw at all while the HUD is hidden; on 1.21.11 Fabric's `addLast`
-        // does not inherit the HUD's render condition and asks anyway. The
-        // readout has to answer the same on both, so it answers here.
+        // F1, usually for a screenshot. 1.21.11's registry asks ash to draw
+        // under F1 anyway - `addLast` inherits no render condition - and 1.8.9
+        // asks too while a menu is open. The readout has to answer the same on
+        // both, so the answer lives here rather than in either game.
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize().withHudHidden();
 
         new FpsReadout(() -> 144, true).draw(surface);
@@ -103,8 +110,9 @@ class FpsReadoutTest {
 
     @Test
     void it_is_opaque() {
-        // A zero alpha draws nothing on either target - a readout that is
-        // switched on and invisible.
+        // At zero alpha 1.21.11 draws nothing - a readout switched on and
+        // invisible - and 1.8.9 draws it opaque, so it would not even fail the
+        // same way on both.
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
         new FpsReadout(() -> 144, true).draw(surface);

@@ -22,7 +22,7 @@ public final class FakeHudSurface implements HudSurface {
     private final int lineHeight;
     private final List<Text> drawn = new ArrayList<>();
     private boolean debugScreenShown;
-    private boolean hidden;
+    private boolean hudHidden;
 
     public FakeHudSurface(int height, int lineHeight) {
         this.height = height;
@@ -42,7 +42,7 @@ public final class FakeHudSurface implements HudSurface {
 
     /** The same surface with the player having hidden the HUD. */
     public FakeHudSurface withHudHidden() {
-        hidden = true;
+        hudHidden = true;
         return this;
     }
 
@@ -79,7 +79,7 @@ public final class FakeHudSurface implements HudSurface {
     }
 
     @Override
-    public boolean hidden() {
-        return hidden;
+    public boolean hudHidden() {
+        return hudHidden;
     }
 }

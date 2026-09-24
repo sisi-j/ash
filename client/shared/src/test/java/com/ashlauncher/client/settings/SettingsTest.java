@@ -97,6 +97,9 @@ class SettingsTest {
 
         Settings settings = Settings.load(configDir);
 
+        // Every setting at its default, as the reported problem says - not
+        // `false` from the line that happened to come before the bad one.
+        assertTrue(settings.fpsReadoutEnabled(), "a setting read before the bad line survived it");
         assertEquals(1, settings.problems().size(), "problems: " + settings.problems());
         assertEquals(mine, Files.readString(file), "a file ash could not read was written to anyway");
     }

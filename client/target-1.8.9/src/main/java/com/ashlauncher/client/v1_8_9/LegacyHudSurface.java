@@ -48,11 +48,10 @@ final class LegacyHudSurface implements HudSurface {
     }
 
     @Override
-    public boolean hidden() {
-        // Always false in practice: the game does not fire the HUD callback
-        // while the HUD is hidden. Answered anyway, because the modern target
-        // does fire it, and the decision belongs to the shared module rather
-        // than to whichever target happens to skip the call.
+    public boolean hudHidden() {
+        // The game does fire the HUD callback under F1, while a screen is
+        // open - it draws the vanilla HUD behind menus even then. What ash
+        // does about that is the shared module's decision, not this line's.
         return minecraft.options.hudHidden;
     }
 }

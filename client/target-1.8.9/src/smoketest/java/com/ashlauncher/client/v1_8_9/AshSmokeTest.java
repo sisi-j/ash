@@ -8,10 +8,16 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.util.ScreenshotUtils;
+import net.minecraft.world.level.LevelGeneratorType;
+import net.minecraft.world.level.LevelInfo;
 
 /**
  * ash's own miniature of Fabric's client game tests, for the target that has
@@ -20,16 +26,22 @@ import net.minecraft.client.MinecraftClient;
  * <p>Legacy Fabric API ships no gametest module at all — none of its 44
  * modules is one — so the tier `target-1.21.11` gets from
  * `fabric-client-gametest-api-v1` does not exist here. What does exist is a
- * real vanilla client that Loom can launch headless. This is the smallest thing that
- * turns that into a test: wait for the game to put a screen up, say whether
- * ash is in it, and shut the game down so the run has an exit code.
+ * real vanilla client that Loom can launch headless. This turns that into a
+ * test: wait for the title screen, say whether ash is in it, walk into a flat
+ * world, let the HUD draw, keep a picture, and shut the game down so the run
+ * has an exit code.
  *
- * <p>It proves less than the modern tier and is meant to. There is no ticking,
- * no world, no screenshot and no way to drive input — only "a real 1.8.9
- * vanilla client, with ash installed, reached its menu instead of crashing". That is
- * the failure worth catching first, and it is the one that will start
- * happening when #24 puts a mixin on this target.
+ * <p>The world is the point. ash's HUD is drawn only in one, and the player -
+ * whose movement tick is where toggle sprint's mixin lands - exists only in
+ * one. A test that stopped at the title screen would pass with every line of
+ * ash's in-game code broken, which is what this one did until the FPS readout
+ * made that visible.
  *
+ * <p>It still proves less than the modern tier and is meant to. There is no
+ * way to drive input and no assertion on what was drawn - the screenshot is
+ * for a human, and what this proves by itself is "a real 1.8.9 vanilla client,
+ * with ash installed, drew ash's HUD in a world for three seconds without
+ * crashing".
  *
  * <p>Its manifest names no dependency on `ash`, which looks like an omission
  * and is not. With `depends` on `ash`, the loader would refuse to start when
@@ -43,38 +55,52 @@ import net.minecraft.client.MinecraftClient;
  */
 public final class AshSmokeTest implements ClientModInitializer {
 
-    /** Generous. A cold CI runner starting a JVM and a game is not quick. */
-    private static final long TIMEOUT_MS = 180_000L;
+    /** Per step, and generous. A cold CI runner starting a game is not quick. */
+    private static final long STEP_TIMEOUT_MS = 180_000L;
 
     private static final long POLL_MS = 250L;
+
+    /** Long enough for the HUD to have drawn many frames, and the frame counter to tick over. */
+    private static final long IN_WORLD_MS = 3_000L;
 
     @Override
     public void onInitializeClient() {
         // A daemon thread, because this has to watch the vanilla client rather
-        // block the thread that is starting it.
-        Thread watcher = new Thread(AshSmokeTest::watch, "ash-smoke-test");
+        // than block the thread that is starting it.
+        Thread watcher = new Thread(AshSmokeTest::run, "ash-smoke-test");
         watcher.setDaemon(true);
         watcher.start();
     }
 
-    private static void watch() {
-        long deadline = System.currentTimeMillis() + TIMEOUT_MS;
+    private static void run() {
+        // A screen means the game is past its loading and drawing something -
+        // the title screen, on a vanilla client with no world.
+        MinecraftClient client = await("put its title screen up", () -> {
+            MinecraftClient c = MinecraftClient.getInstance();
+            return c != null && c.currentScreen != null ? c : null;
+        });
 
-        while (System.currentTimeMillis() < deadline) {
-            MinecraftClient client = MinecraftClient.getInstance();
-            // A screen means the game is past its loading and drawing
-            // something - the title screen, on a vanilla client with no world.
-            if (client != null && client.currentScreen != null) {
-                report(client);
-                return;
-            }
-            sleep();
-        }
+        checkAshLoaded();
 
-        fail("the vanilla client never put a screen up within " + (TIMEOUT_MS / 1000L) + " seconds");
+        // Flat, because generation is the slow part of starting a world and a
+        // software-GL runner is slow enough already. On the client thread,
+        // because that is the only thread the game will start a world from.
+        client.submit(() -> client.startIntegratedServer("ash-smoke-test", "ash smoke test",
+                new LevelInfo(0L, LevelInfo.GameMode.SURVIVAL, false, false, LevelGeneratorType.FLAT)));
+        await("join a world", () ->
+                client.world != null && client.player != null && client.currentScreen == null ? client : null);
+
+        pause(IN_WORLD_MS);
+        screenshot(client, "ash-in-world.png");
+
+        System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings"
+                + " and drew its HUD in a world");
+        // The clean way out: this asks the game to stop, so the run task exits
+        // zero and Gradle reports a pass.
+        client.scheduleStop();
     }
 
-    private static void report(MinecraftClient client) {
+    private static void checkAshLoaded() {
         // Printed rather than logged, and that is not a style choice. On this
         // target Log4j rejects most of Fabric's logging config on startup -
         // `Error processing element Queue: CLASS_NOT_FOUND`, then every
@@ -87,7 +113,6 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         if (!FabricLoader.getInstance().isModLoaded("ash")) {
             fail("the vanilla client started without ash in it, which is the one thing this is for");
-            return;
         }
 
         // Written while the client initialised, so a real game directory has
@@ -103,13 +128,44 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
         if (!written.contains("fps-readout.enabled=")) {
             fail("ash.properties has no FPS readout setting: " + written);
-            return;
         }
+    }
 
-        System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded and wrote its settings");
-        // The clean way out: this asks the game to stop, so the run task exits
-        // zero and Gradle reports a pass.
-        client.scheduleStop();
+    /**
+     * Saves what is on screen, on the render thread because that is where the
+     * framebuffer is. Into the run directory's {@code screenshots}, which CI
+     * keeps.
+     */
+    private static void screenshot(MinecraftClient client, String name) {
+        try {
+            client.submit(() -> ScreenshotUtils.saveScreenshot(
+                    client.runDirectory, name, client.width, client.height, client.getFramebuffer()))
+                    .get(STEP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            fail("interrupted while taking a screenshot");
+        } catch (ExecutionException | TimeoutException failed) {
+            fail("could not take a screenshot in the world (" + failed + ")");
+        }
+    }
+
+    /** Polls until {@code check} answers something, or fails the run. */
+    private static <T> T await(String what, Check<T> check) {
+        long deadline = System.currentTimeMillis() + STEP_TIMEOUT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            T answer = check.answer();
+            if (answer != null) {
+                return answer;
+            }
+            pause(POLL_MS);
+        }
+        fail("the vanilla client did not " + what + " within " + (STEP_TIMEOUT_MS / 1000L) + " seconds");
+        return null;
+    }
+
+    /** One poll of the game's state; {@code null} means not yet. */
+    private interface Check<T> {
+        T answer();
     }
 
     /** The loaded mods, by id and version, in a line CI can be grepped for. */
@@ -131,9 +187,9 @@ public final class AshSmokeTest implements ClientModInitializer {
         Runtime.getRuntime().halt(1);
     }
 
-    private static void sleep() {
+    private static void pause(long millis) {
         try {
-            Thread.sleep(POLL_MS);
+            Thread.sleep(millis);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             fail("interrupted while waiting for the vanilla client");

@@ -78,16 +78,18 @@ public final class Settings {
             // IllegalArgumentException is what `Properties` throws on a
             // malformed unicode escape, and a Windows path is one: `C:\` then
             // `users`. A hand-edited file can easily have one.
+            //
+            // Everything read before the bad line is thrown away with it. Keeping
+            // it would make which settings survive depend on where in the file
+            // the mistake happened to be, which no player could predict.
+            properties = new Properties();
             problems.add(FILE_NAME + " could not be read (" + unreadable + "), so every setting is at its default");
         }
 
-        StringBuilder missing = new StringBuilder();
-        if (!properties.containsKey(FPS_READOUT_ENABLED)) {
-            missing.append("# Show the frame rate in the top-left corner. true or false.\n")
-                    .append(FPS_READOUT_ENABLED).append("=true\n");
-        }
-        if (missing.length() > 0 && problems.isEmpty()) {
-            appendTo(configDir, file, original, missing.toString(), problems);
+        if (problems.isEmpty()) {
+            // Never written to when it could not be read: appending to a file
+            // ash does not understand is how a player's file gets damaged.
+            appendMissing(file, original, properties, problems);
         }
 
         boolean fpsReadoutEnabled = flag(properties, FPS_READOUT_ENABLED, true, problems);
@@ -109,16 +111,25 @@ public final class Settings {
     }
 
     /**
-     * Adds {@code lines} to the end of the file, on a line of their own.
+     * Adds every setting the file lacks to its end, on lines of their own.
      *
      * <p>A hand-edited file often has no newline at the end, and appending to
      * one would glue the first new setting onto the player's last line.
      */
-    private static void appendTo(Path configDir, Path file, byte[] original, String lines, List<String> problems) {
+    private static void appendMissing(Path file, byte[] original, Properties properties, List<String> problems) {
+        StringBuilder missing = new StringBuilder();
+        if (!properties.containsKey(FPS_READOUT_ENABLED)) {
+            missing.append("# Show the frame rate in the top-left corner. true or false.\n")
+                    .append(FPS_READOUT_ENABLED).append("=true\n");
+        }
+        if (missing.length() == 0) {
+            return;
+        }
+
         boolean endsMidLine = original.length > 0 && original[original.length - 1] != '\n';
         try {
-            Files.createDirectories(configDir);
-            Files.write(file, ((endsMidLine ? "\n" : "") + lines).getBytes(StandardCharsets.UTF_8),
+            Files.createDirectories(file.getParent());
+            Files.write(file, ((endsMidLine ? "\n" : "") + missing).getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException unwritable) {
             problems.add(FILE_NAME + " could not be written (" + unwritable

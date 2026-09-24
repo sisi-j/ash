@@ -94,12 +94,19 @@ loader's own; better than nothing, which is what "that tier does not work"
 would otherwise buy.
 
 **The rest is a real game, and #22 automated it.** On 1.21.11 that is Fabric's
-own client game tests (`src/gametest`), which launch a vanilla client, wait
-twenty ticks, assert ash is loaded and keep a screenshot. On 1.8.9 no such
-framework exists - none of Legacy Fabric API's 44 modules is a gametest module
-- so `src/smoketest` is ash's miniature of it: a vanilla client, launched the
-same way, that prints its mod list, says whether ash is in it and shuts itself
-down. Neither test mod declares a dependency on `ash`, deliberately: with one,
+own client game tests (`src/gametest`): a vanilla client that asserts ash is
+loaded and wrote `config/ash.properties`, screenshots the title screen, then
+creates a world, waits for its chunks to render and screenshots that. On 1.8.9
+no such framework exists - none of Legacy Fabric API's 44 modules is a gametest
+module - so `src/smoketest` is ash's miniature of it: a vanilla client that
+prints its mod list, makes the same two assertions, starts a flat world, lets
+the HUD draw for three seconds, screenshots it and shuts itself down.
+
+Both go into a world because ash's in-game code only runs in one. The HUD is
+drawn only there, and the player - whose movement tick is where toggle sprint's
+mixin lands - only exists there; a test that stopped at the title screen would
+pass with all of it broken. What was drawn is checked by eye, from the two
+`ash-in-world` screenshots CI keeps, rather than by pixel. Neither test mod declares a dependency on `ash`, deliberately: with one,
 the loader would refuse to start when ash was missing and the assertion would
 never be the thing that noticed.
 

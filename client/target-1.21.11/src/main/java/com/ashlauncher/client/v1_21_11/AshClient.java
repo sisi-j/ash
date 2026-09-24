@@ -43,9 +43,10 @@ public final class AshClient implements ClientModInitializer {
 
         // Last, so nothing vanilla draws over them. That is a decision about
         // this target's element registry rather than about either feature, so
-        // it lives here. It is also why both check `hidden()` themselves:
+        // it lives here. It is also why both check `hudHidden()` themselves:
         // Fabric documents that `addLast` inherits no render condition, so
-        // unlike every vanilla element these would otherwise draw through F1.
+        // unlike every vanilla element but the sleep overlay, these would
+        // otherwise draw through F1.
         HudElementRegistry.addLast(MARKER, (graphics, tickCounter) ->
                 marker.draw(new GuiGraphicsHudSurface(graphics)));
         HudElementRegistry.addLast(FPS_READOUT, (graphics, tickCounter) ->

@@ -162,6 +162,7 @@ jobs:
             client/target-1.21.11/build/run/clientGameTest/screenshots/
             client/target-1.21.11/build/run/clientGameTest/logs/
             client/target-1.8.9/build/run/smoketest/logs/
+            client/target-1.8.9/build/run/smoketest/screenshots/
           if-no-files-found: ignore
 
   typescript:

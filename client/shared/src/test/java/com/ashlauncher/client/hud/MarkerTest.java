@@ -48,15 +48,16 @@ class MarkerTest {
 
     @Test
     void the_marker_is_opaque() {
-        // A zero alpha draws nothing at all on either target, which would look
-        // exactly like the client having failed to load.
+        // At zero alpha 1.21.11 draws nothing - which would look exactly like
+        // the client having failed to load - and 1.8.9 draws it opaque anyway,
+        // so the two targets would not even agree about being wrong.
         assertEquals(0xFF, (Marker.COLOUR >>> 24) & 0xFF);
     }
 
     @Test
     void the_marker_is_hidden_with_the_rest_of_the_hud() {
-        // The same asymmetry as the FPS readout: 1.21.11 would draw it
-        // through F1 and 1.8.9 would not.
+        // The same asymmetry as the FPS readout: 1.21.11's registry asks
+        // ash to draw under F1, and every vanilla element there declines.
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize().withHudHidden();
 
         new Marker().draw(surface);

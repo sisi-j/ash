@@ -25,7 +25,10 @@ public final class FpsReadout {
      */
     static final int MARGIN = 4;
 
-    /** Opaque white, as the marker is. A zero alpha would draw nothing at all. */
+    /**
+     * Opaque white, as the marker is, and for the same reason: an unset alpha
+     * draws nothing on 1.21.11 and opaque on 1.8.9. See {@link HudSurface#drawText}.
+     */
     static final int COLOUR = 0xFFFFFFFF;
 
     private final FrameRate frameRate;
@@ -46,7 +49,7 @@ public final class FpsReadout {
      * debug screen - which draws its own frame rate from this same corner.
      */
     public void draw(HudSurface surface) {
-        if (!enabled || surface.hidden() || surface.debugScreenShown()) {
+        if (!enabled || surface.hudHidden() || surface.debugScreenShown()) {
             return;
         }
         surface.drawText(frameRate.perSecond() + " FPS", MARGIN, MARGIN, COLOUR);
