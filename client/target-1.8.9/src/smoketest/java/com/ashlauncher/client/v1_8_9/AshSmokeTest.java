@@ -85,8 +85,19 @@ public final class AshSmokeTest implements ClientModInitializer {
         // Flat, because generation is the slow part of starting a world and a
         // software-GL runner is slow enough already. On the client thread,
         // because that is the only thread the game will start a world from.
-        client.submit(() -> client.startIntegratedServer("ash-smoke-test", "ash smoke test",
-                new LevelInfo(0L, LevelInfo.GameMode.SURVIVAL, false, false, LevelGeneratorType.FLAT)));
+        //
+        // Capped first. With no GPU, llvmpipe draws the loading screen
+        // uncapped on every core and the integrated server starves - the
+        // modern target's first attempt sat at "Preparing spawn area: 16%" for
+        // a minute. And not paused on lost focus, because under Xvfb the
+        // window never has focus, and a paused singleplayer world does not
+        // tick the player at all.
+        client.submit(() -> {
+            client.options.maxFramerate = 30;
+            client.options.pauseOnLostFocus = false;
+            client.startIntegratedServer("ash-smoke-test", "ash smoke test",
+                    new LevelInfo(0L, LevelInfo.GameMode.SURVIVAL, false, false, LevelGeneratorType.FLAT));
+        });
         await("join a world", () ->
                 client.world != null && client.player != null && client.currentScreen == null ? client : null);
 
@@ -149,13 +160,26 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
     }
 
-    /** Polls until {@code check} answers something, or fails the run. */
+    /**
+     * Polls until {@code check} answers something, or fails the run.
+     *
+     * <p>Says what it can see every ten seconds while it waits. A wait that
+     * times out in silence is a failure with no diagnosis - which is exactly
+     * what the first run of the world step produced.
+     */
     private static <T> T await(String what, Check<T> check) {
-        long deadline = System.currentTimeMillis() + STEP_TIMEOUT_MS;
+        long start = System.currentTimeMillis();
+        long deadline = start + STEP_TIMEOUT_MS;
+        long nextReport = start + 10_000L;
         while (System.currentTimeMillis() < deadline) {
             T answer = check.answer();
             if (answer != null) {
                 return answer;
+            }
+            if (System.currentTimeMillis() >= nextReport) {
+                System.out.println("ash smoke test: still waiting to " + what + " after "
+                        + (System.currentTimeMillis() - start) / 1000L + "s - " + describeState());
+                nextReport += 10_000L;
             }
             pause(POLL_MS);
         }
@@ -166,6 +190,17 @@ public final class AshSmokeTest implements ClientModInitializer {
     /** One poll of the game's state; {@code null} means not yet. */
     private interface Check<T> {
         T answer();
+    }
+
+    /** What the client is showing and holding, for a wait that is taking too long. */
+    private static String describeState() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            return "no client yet";
+        }
+        return "screen " + (client.currentScreen == null ? "none" : client.currentScreen.getClass().getSimpleName())
+                + ", world " + (client.world != null) + ", player " + (client.player != null)
+                + ", server " + client.isIntegratedServerRunning();
     }
 
     /** The loaded mods, by id and version, in a line CI can be grepped for. */
