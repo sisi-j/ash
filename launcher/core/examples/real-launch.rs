@@ -195,14 +195,51 @@ async fn main() {
     ash.stop_game(&instance.id);
 }
 
-/// The client jars, as the client build leaves them.
+/// Every target's client jar, staged into one directory the way the installer
+/// lays them out.
 ///
 /// On a real machine these are part of the installation and the adapter finds
-/// them beside the executable. This example is run from the repo, so it points
-/// at what `./gradlew build` produced - which also means a modded run here
-/// always uses the client you just built rather than one copied by hand.
+/// them beside the executable, all of them in one `client/` - which is why
+/// `Config::client_root` is a single directory rather than one per target.
+/// This example runs from the repo, so it gathers what `./gradlew build`
+/// produced into the same shape, and a modded run here always uses the client
+/// you just built rather than one copied by hand.
+///
+/// It gathers rather than pointing at one module because pointing at one
+/// module is what it used to do: `target-1.21.11/build/libs`, which held the
+/// modern jar and could never hold the 1.8.9 one. Every legacy-fabric launch
+/// answered `client_missing` from the day `target-1.8.9` was added, and only
+/// a manual run could find that, because this file is the only thing that had
+/// the bug.
 fn built_client_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../client/target-1.21.11/build/libs")
+    let client = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../client");
+    let staged = client.join("build").join("manual-run");
+    std::fs::create_dir_all(&staged).expect("creating the staging directory");
+
+    let mut names = Vec::new();
+    for module in std::fs::read_dir(&client).expect("reading client/").flatten() {
+        let libs = module.path().join("build").join("libs");
+        let Ok(jars) = std::fs::read_dir(&libs) else { continue };
+        for jar in jars.flatten() {
+            let name = jar.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("ash-client-") || !name.ends_with(".jar") {
+                continue;
+            }
+            std::fs::copy(jar.path(), staged.join(&name)).expect("staging a client jar");
+            names.push(name);
+        }
+    }
+
+    if names.is_empty() {
+        eprintln!(
+            "no ash-client-*.jar under client/*/build/libs - run `./gradlew build` in client/"
+        );
+        std::process::exit(2);
+    }
+
+    names.sort();
+    println!("  client jars: {}", names.join(", "));
+    staged
 }
 
 /// The same directory the Tauri adapter picks, so this shares one depot with

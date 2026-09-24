@@ -1040,6 +1040,35 @@ mod tests {
         assert!(checked > 0, "the test proves nothing if ash pins no libraries");
     }
 
+    /// A pin naming a client jar the installer does not ship is an install
+    /// that refuses to launch that target, with `client_missing`, on a
+    /// player's machine and nowhere earlier.
+    ///
+    /// This is the shape of bug that adding a version target invites: the pin
+    /// is the obvious place to add the jar and the bundle config is the easy
+    /// one to forget, and nothing between them would notice. The example
+    /// `real-launch` had the same gap in its own form from the day
+    /// `target-1.8.9` existed - it looked for every target's jar in the
+    /// modern target's build directory - and only a manual run found it.
+    #[test]
+    fn every_client_jar_a_pin_names_is_one_the_installer_ships() {
+        let bundle = include_str!("../../src-tauri/tauri.bundle.conf.json");
+
+        let mut checked = 0;
+        for pin in PINS {
+            let Some(jar) = pin.client_jar else { continue };
+            assert!(
+                bundle.contains(jar),
+                "`{jar}` is named by the {} pin but `tauri.bundle.conf.json` does not ship it,                  so an installed ash would refuse to launch {} at all",
+                pin.version_id,
+                pin.version_id,
+            );
+            checked += 1;
+        }
+
+        assert!(checked > 0, "no pin names a client jar, so this check proved nothing");
+    }
+
     #[test]
     fn everything_pinned_at_the_one_self_hosted_repository_is_mirrored() {
         // The whole argument of `docs/mirror.md`: `maven.legacyfabric.net` is
