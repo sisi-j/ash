@@ -34,6 +34,19 @@ final class GuiGraphicsHudSurface implements HudSurface {
 
     @Override
     public void drawText(String text, int x, int y, int colour) {
+        // This overload passes `true` for the drop shadow - checked in the
+        // bytecode, not assumed - which is what 1.8.9's `drawWithShadow` does,
+        // so the two targets draw the same text the same way.
         graphics.drawString(Minecraft.getInstance().font, text, x, y, colour);
+    }
+
+    @Override
+    public boolean debugScreenShown() {
+        return Minecraft.getInstance().getDebugOverlay().showDebugScreen();
+    }
+
+    @Override
+    public boolean hidden() {
+        return Minecraft.getInstance().options.hideGui;
     }
 }

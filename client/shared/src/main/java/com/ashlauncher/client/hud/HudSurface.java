@@ -39,4 +39,24 @@ public interface HudSurface {
      * @param colour packed ARGB; a zero alpha draws nothing on either target
      */
     void drawText(String text, int x, int y, int colour);
+
+    /**
+     * Whether the game's debug screen is open - F3 on both targets.
+     *
+     * <p>It fills the top-left with text of its own, so anything ash draws
+     * there has to know.
+     */
+    boolean debugScreenShown();
+
+    /**
+     * Whether the player has hidden the HUD - F1 on both targets.
+     *
+     * <p>A question the surface has to answer rather than one the game answers
+     * by not asking, because the two targets disagree. 1.8.9 never fires its
+     * HUD callback while the HUD is hidden. 1.21.11's element registry does:
+     * Fabric documents that elements added first or last "will not inherit
+     * any render condition", and the condition every vanilla element has is
+     * this one.
+     */
+    boolean hidden();
 }

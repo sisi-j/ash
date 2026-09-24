@@ -12,32 +12,46 @@ import java.util.List;
  * a situation this cannot produce - a surface of some other size, a font of
  * some other height - the fix is to widen the fake, never to reach around it.
  */
-final class FakeHudSurface implements HudSurface {
+public final class FakeHudSurface implements HudSurface {
 
     /** One call to {@link HudSurface#drawText}, as it arrived. */
-    record Text(String text, int x, int y, int colour) {
+    public record Text(String text, int x, int y, int colour) {
     }
 
     private final int height;
     private final int lineHeight;
     private final List<Text> drawn = new ArrayList<>();
+    private boolean debugScreenShown;
+    private boolean hidden;
 
-    FakeHudSurface(int height, int lineHeight) {
+    public FakeHudSurface(int height, int lineHeight) {
         this.height = height;
         this.lineHeight = lineHeight;
     }
 
     /** A surface roughly the size of a real one at the default GUI scale. */
-    static FakeHudSurface ofTypicalSize() {
+    public static FakeHudSurface ofTypicalSize() {
         return new FakeHudSurface(240, 9);
     }
 
-    List<Text> drawn() {
+    /** The same surface with the debug screen open over it. */
+    public FakeHudSurface withDebugScreenShown() {
+        debugScreenShown = true;
+        return this;
+    }
+
+    /** The same surface with the player having hidden the HUD. */
+    public FakeHudSurface withHudHidden() {
+        hidden = true;
+        return this;
+    }
+
+    public List<Text> drawn() {
         return List.copyOf(drawn);
     }
 
     /** The only thing drawn, failing the test if that is not what happened. */
-    Text onlyText() {
+    public Text onlyText() {
         if (drawn.size() != 1) {
             throw new AssertionError("expected exactly one draw, got " + drawn);
         }
@@ -57,5 +71,15 @@ final class FakeHudSurface implements HudSurface {
     @Override
     public void drawText(String text, int x, int y, int colour) {
         drawn.add(new Text(text, x, y, colour));
+    }
+
+    @Override
+    public boolean debugScreenShown() {
+        return debugScreenShown;
+    }
+
+    @Override
+    public boolean hidden() {
+        return hidden;
     }
 }

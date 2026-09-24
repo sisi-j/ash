@@ -52,4 +52,15 @@ class MarkerTest {
         // exactly like the client having failed to load.
         assertEquals(0xFF, (Marker.COLOUR >>> 24) & 0xFF);
     }
+
+    @Test
+    void the_marker_is_hidden_with_the_rest_of_the_hud() {
+        // The same asymmetry as the FPS readout: 1.21.11 would draw it
+        // through F1 and 1.8.9 would not.
+        FakeHudSurface surface = FakeHudSurface.ofTypicalSize().withHudHidden();
+
+        new Marker().draw(surface);
+
+        assertEquals(0, surface.drawn().size(), "drew " + surface.drawn());
+    }
 }

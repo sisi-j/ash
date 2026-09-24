@@ -1,7 +1,11 @@
 package com.ashlauncher.client.v1_21_11;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
@@ -14,7 +18,6 @@ import net.fabricmc.loader.api.FabricLoader;
  * because it exists — a degradation nothing detects is indistinguishable from
  * a feature that was never there.
  *
- *
  * <p>Its manifest names no dependency on `ash`, which looks like an omission
  * and is not. With `depends` on `ash`, the loader would refuse to start when
  * ash was missing and this assertion would never run - the loader would be
@@ -22,9 +25,10 @@ import net.fabricmc.loader.api.FabricLoader;
  * game starts either way and the line below is what decides, which is the only
  * arrangement in which it means anything.
  *
- * <p>It asserts little, deliberately. What is being proved is that the chain
- * reaches a running game at all; asserting on what is drawn comes with the
- * first feature that draws something worth asserting on.
+ * <p>What is drawn is asserted by eye rather than by pixel. The screenshot
+ * taken in a world is the only automated picture of the HUD there is - the
+ * title screen has none - and it is kept as a CI artifact so the readout and
+ * the marker can be seen without anyone launching the game.
  */
 public class AshLoadsGameTest implements FabricClientGameTest {
 
@@ -39,9 +43,28 @@ public class AshLoadsGameTest implements FabricClientGameTest {
                     "the vanilla client started without ash in it, which is the one thing this tier is for");
         }
 
-        // Kept as a CI artifact. When something does go wrong in here, the
-        // difference between a log line and a picture of the screen is most of
-        // the diagnosis.
+        // The settings file is written while the client initialises, so by now
+        // a real game directory has one. Its absence would mean the adapter
+        // never loaded settings at all, and every feature was running on
+        // defaults nobody could change.
+        Path settings = FabricLoader.getInstance().getConfigDir().resolve("ash.properties");
+        try {
+            String written = Files.readString(settings);
+            if (!written.contains("fps-readout.enabled=")) {
+                throw new AssertionError("ash.properties has no FPS readout setting:\n" + written);
+            }
+        } catch (IOException missing) {
+            throw new AssertionError("the client started without writing ash.properties", missing);
+        }
+
         context.takeScreenshot("ash-loaded");
+
+        // In a world, where the HUD is. Both ash elements should be in this
+        // picture: the frame rate top-left and the marker bottom-left.
+        try (TestSingleplayerContext world = context.worldBuilder().create()) {
+            world.getClientWorld().waitForChunksRender();
+            context.waitTicks(40);
+            context.takeScreenshot("ash-in-world");
+        }
     }
 }

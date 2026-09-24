@@ -340,6 +340,32 @@ async fn preparing_a_modded_instance_leaves_the_rest_of_the_game_directory_alone
     assert!(game.join("saves").join("My World").is_dir(), "a world was touched");
 }
 
+/// The client owns `config/ash.properties` and the launcher never writes it -
+/// a rule of this phase rather than an accident of it. Synced settings are
+/// Phase 4, and a second writer brings conflict rules that belong to that
+/// design; the client's file format is not the launcher's to invent early.
+#[tokio::test]
+async fn the_clients_own_settings_file_is_left_exactly_as_the_client_wrote_it() {
+    let f = fixture();
+    let id = f.modded().await;
+    let game = f.ash.game_directory(&id);
+    let settings = game.join("config").join("ash.properties");
+    std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    // Nothing a launcher that parsed the file would leave alone: a comment, a
+    // setting from a future client, and no newline at the end.
+    let written = b"# turned off for recording\nfps-readout.enabled=false\nsome-future.setting=42";
+    std::fs::write(&settings, written).unwrap();
+
+    f.prepare(&id).await;
+    f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    assert_eq!(
+        std::fs::read(&settings).ok().as_deref(),
+        Some(&written[..]),
+        "the launcher changed or removed the client's settings file"
+    );
+}
+
 // ---- ash's own client -------------------------------------------------------
 
 #[tokio::test]

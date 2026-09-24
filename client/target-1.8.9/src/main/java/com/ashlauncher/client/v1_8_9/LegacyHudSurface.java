@@ -41,4 +41,18 @@ final class LegacyHudSurface implements HudSurface {
     public void drawText(String text, int x, int y, int colour) {
         minecraft.textRenderer.drawWithShadow(text, x, y, colour);
     }
+
+    @Override
+    public boolean debugScreenShown() {
+        return minecraft.options.debugEnabled;
+    }
+
+    @Override
+    public boolean hidden() {
+        // Always false in practice: the game does not fire the HUD callback
+        // while the HUD is hidden. Answered anyway, because the modern target
+        // does fire it, and the decision belongs to the shared module rather
+        // than to whichever target happens to skip the call.
+        return minecraft.options.hudHidden;
+    }
 }

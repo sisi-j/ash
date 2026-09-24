@@ -1,5 +1,9 @@
 package com.ashlauncher.client.v1_8_9;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -86,7 +90,23 @@ public final class AshSmokeTest implements ClientModInitializer {
             return;
         }
 
-        System.out.println("ash smoke test: a 1.8.9 client is up and ash is loaded");
+        // Written while the client initialised, so a real game directory has
+        // one by the time a screen is up. Without it the adapter never loaded
+        // settings, and every feature is on defaults nobody can change.
+        Path settings = FabricLoader.getInstance().getConfigDir().resolve("ash.properties");
+        String written;
+        try {
+            written = new String(Files.readAllBytes(settings), StandardCharsets.UTF_8);
+        } catch (IOException missing) {
+            fail("the vanilla client started without ash writing ash.properties (" + missing + ")");
+            return;
+        }
+        if (!written.contains("fps-readout.enabled=")) {
+            fail("ash.properties has no FPS readout setting: " + written);
+            return;
+        }
+
+        System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded and wrote its settings");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();

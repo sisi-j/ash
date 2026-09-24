@@ -25,6 +25,9 @@ public final class Marker {
     static final int COLOUR = 0xFFFFFFFF;
 
     public void draw(HudSurface surface) {
+        if (surface.hidden()) {
+            return;
+        }
         int y = surface.height() - surface.lineHeight() - MARGIN;
         surface.drawText(TEXT, MARGIN, y, COLOUR);
     }
