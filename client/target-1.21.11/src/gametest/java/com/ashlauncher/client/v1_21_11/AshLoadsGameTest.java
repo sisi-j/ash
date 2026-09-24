@@ -5,7 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
-import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
+import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
@@ -59,24 +60,29 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
         context.takeScreenshot("ash-loaded");
 
-        // A CI runner has no GPU, and llvmpipe - the software renderer that
-        // stands in for one - draws the loading screen uncapped on every core.
-        // The first attempt at a world here sat at "Preparing spawn area: 16%"
-        // for a minute beside "Can't keep up! Is the server overloaded?" and
-        // timed out: the integrated server never got the CPU. So the client
-        // is capped before the world starts, and told not to pause itself for
-        // a window that, under Xvfb, never has focus.
-        context.runOnClient(client -> {
-            client.options.framerateLimit().set(30);
-            client.options.pauseOnLostFocus = false;
-        });
+        // Under Xvfb the window never has focus, and a client that pauses
+        // itself for that is not a client in a world.
+        context.runOnClient(client -> client.options.pauseOnLostFocus = false);
 
         // In a world, where the HUD is. Both ash elements should be in this
         // picture: the frame rate top-left and the marker bottom-left.
-        Thread watchdog = stackDumpAfter(45_000L);
-        try (TestSingleplayerContext world = context.worldBuilder().create()) {
+        //
+        // A dedicated server rather than a singleplayer world, and not by
+        // taste. A singleplayer world never finished loading here: it sat at
+        // "Preparing spawn area: 16%" until the framework's minute ran out.
+        // The chain, read from 1.21.11's bytecode: a joining player's spawn is
+        // prepared while they are not yet in the player list; an integrated
+        // server with an empty player list pauses and stops ticking its
+        // levels; a paused server only advances chunks in idle time, and only
+        // if it is ahead of schedule (`MinecraftServer.pollTaskInternal`
+        // checks `haveTime()`); and under the framework's lockstep ticking it
+        // was 40 ticks behind. A dedicated server does not pause when empty,
+        // so its levels tick and the chunks load whatever the schedule.
+        Thread watchdog = stackDumpAfter(90_000L);
+        try (TestDedicatedServerContext server = context.worldBuilder().createServer();
+                TestServerConnection connection = server.connect()) {
             watchdog.interrupt();
-            world.getClientWorld().waitForChunksRender();
+            connection.getClientWorld().waitForChunksRender();
             context.waitTicks(40);
             context.takeScreenshot("ash-in-world");
         }

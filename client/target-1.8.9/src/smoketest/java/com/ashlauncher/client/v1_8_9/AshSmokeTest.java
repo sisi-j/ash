@@ -86,14 +86,12 @@ public final class AshSmokeTest implements ClientModInitializer {
         // software-GL runner is slow enough already. On the client thread,
         // because that is the only thread the game will start a world from.
         //
-        // Capped first. With no GPU, llvmpipe draws the loading screen
-        // uncapped on every core and the integrated server starves - the
-        // modern target's first attempt sat at "Preparing spawn area: 16%" for
-        // a minute. And not paused on lost focus, because under Xvfb the
-        // window never has focus, and a paused singleplayer world does not
+        // Not paused on lost focus first. Under Xvfb the window never has
+        // focus, so the game opens its pause menu the moment the world is up -
+        // the first run of this waited three minutes for a screen that was
+        // never going to close - and a paused singleplayer world does not
         // tick the player at all.
         client.submit(() -> {
-            client.options.maxFramerate = 30;
             client.options.pauseOnLostFocus = false;
             client.startIntegratedServer("ash-smoke-test", "ash smoke test",
                     new LevelInfo(0L, LevelInfo.GameMode.SURVIVAL, false, false, LevelGeneratorType.FLAT));
