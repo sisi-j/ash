@@ -3,11 +3,17 @@ package com.ashlauncher.client.v1_21_11;
 import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.settings.Settings;
+import com.ashlauncher.client.sprint.ToggleSprint;
+import com.ashlauncher.client.sprint.ToggleSprintHook;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
+import org.lwjgl.glfw.GLFW;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -51,5 +57,17 @@ public final class AshClient implements ClientModInitializer {
                 marker.draw(new GuiGraphicsHudSurface(graphics)));
         HudElementRegistry.addLast(FPS_READOUT, (graphics, tickCounter) ->
                 fpsReadout.draw(new GuiGraphicsHudSurface(graphics)));
+
+        // R, under Movement beside the game's own Sprint. Free by default on
+        // both targets - read from each game's options, not from a list - and
+        // rebindable in Controls like any other key. Only registered when the
+        // player wants the feature: a binding that does nothing should not be
+        // holding a key they might want for something else.
+        if (settings.toggleSprintEnabled()) {
+            KeyMapping toggleSprintKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                    ToggleSprint.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R,
+                    KeyMapping.Category.MOVEMENT));
+            ToggleSprintHook.install(new ToggleSprint(new KeyMappingToggleKey(toggleSprintKey), true));
+        }
     }
 }

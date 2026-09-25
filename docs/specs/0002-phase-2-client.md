@@ -114,7 +114,7 @@ The point of the phase is not two features. It is that the chain from a Gradle b
 ### The seam's shape
 
 - The shared drawing surface is expressed as "draw these primitives at this position", never as "replace element X". Modern Fabric API offers a named, ordered element registry; Legacy Fabric API offers a single additive-only HUD callback that cannot replace or remove anything. The narrower target dictates the seam.
-- The shared module names no Minecraft type and no Fabric API type. The key-binding helper alone has a different class name on each target.
+- The shared module names no Minecraft type and no Fabric API type. The key-binding helper alone ~~has a different class name on each target~~ is `KeyBindingHelper` in a different package on each target, over a different key type (*corrected 2026-09-24, while implementing #24* - the simple names match; the packages and key types do not).
 - Feature state machines, timers, settings and formatting live in the shared module. Everything that touches the game lives in a version module.
 
 ### Failure

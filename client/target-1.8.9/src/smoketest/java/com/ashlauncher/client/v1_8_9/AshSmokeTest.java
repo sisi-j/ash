@@ -8,13 +8,16 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import com.ashlauncher.client.sprint.ToggleSprint;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.world.level.LevelGeneratorType;
 import net.minecraft.world.level.LevelInfo;
@@ -102,8 +105,10 @@ public final class AshSmokeTest implements ClientModInitializer {
         pause(IN_WORLD_MS);
         screenshot(client, "ash-in-world.png");
 
-        System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings"
-                + " and drew its HUD in a world");
+        toggleSprintWorks(client);
+
+        System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
+                + " drew its HUD in a world, and toggle sprint started and stopped a sprint");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -138,6 +143,97 @@ public final class AshSmokeTest implements ClientModInitializer {
         if (!written.contains("fps-readout.enabled=")) {
             fail("ash.properties has no FPS readout setting: " + written);
         }
+    }
+
+    /**
+     * Toggle sprint, with the real mixin and the real latch, driven the way a
+     * keyboard drives it: through {@code KeyBinding}'s own statics, on the
+     * client thread, as a key event would arrive. There is no input framework
+     * on this target, so this is as close to a keyboard as it gets.
+     */
+    private static void toggleSprintWorks(MinecraftClient client) {
+        KeyBinding toggle = onClient(client, () -> {
+            for (KeyBinding binding : client.options.allKeys) {
+                if (binding.getTranslationKey().equals(ToggleSprint.BINDING_NAME)) {
+                    return binding;
+                }
+            }
+            return null;
+        });
+        if (toggle == null) {
+            fail("there is no \"" + ToggleSprint.BINDING_NAME + "\" binding in Controls");
+            return;
+        }
+        // Against every binding the game has, rather than against a list
+        // someone wrote down.
+        String sharedWith = onClient(client, () -> {
+            for (KeyBinding other : client.options.allKeys) {
+                if (other != toggle && other.getDefaultCode() == toggle.getDefaultCode()) {
+                    return other.getTranslationKey();
+                }
+            }
+            return null;
+        });
+        if (sharedWith != null) {
+            fail("toggle sprint's default key is also " + sharedWith + "'s");
+        }
+
+        int forward = client.options.forwardKey.getCode();
+        int toggleKey = toggle.getCode();
+
+        hold(client, forward, true);
+        pause(1_000L);
+        expectSprinting(client, false, "holding forward alone started a sprint");
+
+        tap(client, toggleKey);
+        pause(1_000L);
+        expectSprinting(client, true, "a press of the toggle key did not start a sprint");
+
+        hold(client, forward, false);
+        pause(500L);
+        tap(client, toggleKey);
+        hold(client, forward, true);
+        pause(1_000L);
+        expectSprinting(client, false, "a second press of the toggle key did not turn it off");
+        hold(client, forward, false);
+    }
+
+    private static void hold(MinecraftClient client, int key, boolean down) {
+        onClient(client, () -> {
+            KeyBinding.setKeyPressed(key, down);
+            return null;
+        });
+    }
+
+    /** Down, counted as a press, and up again two ticks later - a real tap. */
+    private static void tap(MinecraftClient client, int key) {
+        onClient(client, () -> {
+            KeyBinding.setKeyPressed(key, true);
+            KeyBinding.onKeyPressed(key);
+            return null;
+        });
+        pause(100L);
+        hold(client, key, false);
+    }
+
+    private static void expectSprinting(MinecraftClient client, boolean expected, String otherwise) {
+        Boolean sprinting = onClient(client, () -> client.player.isSprinting());
+        if (sprinting == null || sprinting != expected) {
+            fail(otherwise + " (sprinting: " + sprinting + ")");
+        }
+    }
+
+    /** Runs {@code work} on the client thread and waits for its answer. */
+    private static <T> T onClient(MinecraftClient client, Callable<T> work) {
+        try {
+            return client.execute(work).get(STEP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            fail("interrupted while waiting on the client thread");
+        } catch (ExecutionException | TimeoutException failed) {
+            fail("the client thread did not answer (" + failed + ")");
+        }
+        return null;
     }
 
     /**

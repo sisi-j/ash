@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.sprint.ToggleSprint;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,6 +9,9 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 
 /**
  * A real vanilla client, launched, with ash in it.
@@ -83,6 +87,94 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             connection.getClientWorld().waitForChunksRender();
             context.waitTicks(40);
             context.takeScreenshot("ash-in-world");
+
+            toggleSprintWorks(context, server);
+        }
+    }
+
+    /**
+     * Toggle sprint, driven through the same input a player's keyboard feeds,
+     * with the real mixin, the real latch and the real server.
+     *
+     * <p>The server's view is checked as well as the client's, because it is
+     * the one the feature's promise is about. Since 1.21.2 the client sends
+     * the player's keys to the server every tick, and the server keeps the
+     * last set it received - so this asks the server directly what it was
+     * told the sprint key was doing, as well as whether the player sprints.
+     * The one place that answer must differ from the latch is a menu: the game
+     * releases every key when a screen opens, and a vanilla client in an
+     * inventory cannot send "sprint held".
+     */
+    private static void toggleSprintWorks(ClientGameTestContext context, TestDedicatedServerContext server) {
+        KeyMapping toggle = context.computeOnClient(client -> {
+            KeyMapping found = null;
+            for (KeyMapping mapping : client.options.keyMappings) {
+                if (mapping.getName().equals(ToggleSprint.BINDING_NAME)) {
+                    found = mapping;
+                }
+            }
+            if (found == null) {
+                throw new AssertionError("no \"" + ToggleSprint.BINDING_NAME + "\" binding in Controls");
+            }
+            // Against every binding the game has, the F3 combinations
+            // included, rather than against a list someone wrote down.
+            for (KeyMapping other : client.options.keyMappings) {
+                if (other != found && other.getDefaultKey().equals(found.getDefaultKey())) {
+                    throw new AssertionError("toggle sprint's default key is also " + other.getName() + "'s");
+                }
+            }
+            return found;
+        });
+
+        context.getInput().holdKey(options -> options.keyUp);
+        context.waitTicks(20);
+        assertSprinting(context, server, false, "holding forward alone started a sprint");
+
+        context.getInput().pressKey(toggle);
+        context.waitTicks(20);
+        assertSprinting(context, server, true, "a press of the toggle key did not start a sprint");
+        assertServerWasSent(context, server, true, "the server was not sent the sprint key held while it was toggled on");
+
+        // A menu, with the latch still on. The game releases every key when a
+        // screen opens; the latch must read as released with them.
+        context.getInput().releaseKey(options -> options.keyUp);
+        context.setScreen(() -> new InventoryScreen(Minecraft.getInstance().player));
+        context.waitTicks(10);
+        assertServerWasSent(context, server, false, "the server was sent the sprint key held from inside an inventory");
+
+        // And back out: the latch outlived the menu, and holding forward
+        // sprints again without another press.
+        context.setScreen(() -> null);
+        context.getInput().holdKey(options -> options.keyUp);
+        context.waitTicks(20);
+        assertSprinting(context, server, true, "closing a menu lost the latch");
+
+        context.getInput().releaseKey(options -> options.keyUp);
+        context.waitTicks(10);
+        context.getInput().pressKey(toggle);
+        context.getInput().holdKey(options -> options.keyUp);
+        context.waitTicks(20);
+        assertSprinting(context, server, false, "a second press of the toggle key did not turn it off");
+        context.getInput().releaseKey(options -> options.keyUp);
+    }
+
+    private static void assertSprinting(
+            ClientGameTestContext context, TestDedicatedServerContext server, boolean expected, String otherwise) {
+        boolean client = context.computeOnClient(c -> c.player.isSprinting());
+        boolean seenByServer = server.computeOnServer(s -> s.getPlayerList().getPlayers().get(0).isSprinting());
+        if (client != expected || seenByServer != expected) {
+            throw new AssertionError(otherwise + " (client sprinting: " + client + ", server sees: " + seenByServer + ")");
+        }
+    }
+
+    /** What the server was last told the sprint key was doing, and what the client built. */
+    private static void assertServerWasSent(
+            ClientGameTestContext context, TestDedicatedServerContext server, boolean expected, String otherwise) {
+        boolean built = context.computeOnClient(c -> c.player.input.keyPresses.sprint());
+        boolean received = server.computeOnServer(
+                s -> s.getPlayerList().getPlayers().get(0).getLastClientInput().sprint());
+        if (built != expected || received != expected) {
+            throw new AssertionError(otherwise + " (client built: " + built + ", server received: " + received + ")");
         }
     }
 }

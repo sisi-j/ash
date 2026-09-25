@@ -10,7 +10,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -46,13 +48,26 @@ public final class Settings {
     /** In the loader's config directory, named for the mod id, as Fabric mods do. */
     static final String FILE_NAME = "ash.properties";
 
-    static final String FPS_READOUT_ENABLED = "fps-readout.enabled";
+    private static final Flag FPS_READOUT = new Flag("fps-readout.enabled", true,
+            "Show the frame rate in the top-left corner. true or false.");
 
-    private final boolean fpsReadoutEnabled;
+    private static final Flag TOGGLE_SPRINT = new Flag("toggle-sprint.enabled", true,
+            "Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
+                    + " true or false.");
+
+    /**
+     * Every setting, in the order a first run writes them. One list, and
+     * every setting is both read and written by walking it - so a setting
+     * left out of it is not quietly read and never written, it has no value
+     * at all, and the first test to ask for it fails.
+     */
+    private static final Flag[] FLAGS = {FPS_READOUT, TOGGLE_SPRINT};
+
+    private final Map<Flag, Boolean> values;
     private final List<String> problems;
 
-    private Settings(boolean fpsReadoutEnabled, List<String> problems) {
-        this.fpsReadoutEnabled = fpsReadoutEnabled;
+    private Settings(Map<Flag, Boolean> values, List<String> problems) {
+        this.values = values;
         this.problems = Collections.unmodifiableList(problems);
     }
 
@@ -92,12 +107,19 @@ public final class Settings {
             appendMissing(file, original, properties, problems);
         }
 
-        boolean fpsReadoutEnabled = flag(properties, FPS_READOUT_ENABLED, true, problems);
-        return new Settings(fpsReadoutEnabled, problems);
+        Map<Flag, Boolean> values = new IdentityHashMap<>();
+        for (Flag flag : FLAGS) {
+            values.put(flag, read(properties, flag, problems));
+        }
+        return new Settings(values, problems);
     }
 
     public boolean fpsReadoutEnabled() {
-        return fpsReadoutEnabled;
+        return values.get(FPS_READOUT);
+    }
+
+    public boolean toggleSprintEnabled() {
+        return values.get(TOGGLE_SPRINT);
     }
 
     /**
@@ -118,9 +140,11 @@ public final class Settings {
      */
     private static void appendMissing(Path file, byte[] original, Properties properties, List<String> problems) {
         StringBuilder missing = new StringBuilder();
-        if (!properties.containsKey(FPS_READOUT_ENABLED)) {
-            missing.append("# Show the frame rate in the top-left corner. true or false.\n")
-                    .append(FPS_READOUT_ENABLED).append("=true\n");
+        for (Flag flag : FLAGS) {
+            if (!properties.containsKey(flag.key)) {
+                missing.append("# ").append(flag.comment).append('\n')
+                        .append(flag.key).append('=').append(flag.fallback).append('\n');
+            }
         }
         if (missing.length() == 0) {
             return;
@@ -144,10 +168,10 @@ public final class Settings {
      * calls anything that is not "true" false, so a player who writes "yes"
      * would switch the feature off without a word.
      */
-    private static boolean flag(Properties properties, String key, boolean fallback, List<String> problems) {
-        String value = properties.getProperty(key);
+    private static boolean read(Properties properties, Flag flag, List<String> problems) {
+        String value = properties.getProperty(flag.key);
         if (value == null) {
-            return fallback;
+            return flag.fallback;
         }
         String trimmed = value.trim();
         if (trimmed.equalsIgnoreCase("true")) {
@@ -156,8 +180,21 @@ public final class Settings {
         if (trimmed.equalsIgnoreCase("false")) {
             return false;
         }
-        problems.add(key + " is \"" + value + "\" in " + FILE_NAME
-                + ", which is neither true nor false, so it is " + fallback + " until that is fixed");
-        return fallback;
+        problems.add(flag.key + " is \"" + value + "\" in " + FILE_NAME
+                + ", which is neither true nor false, so it is " + flag.fallback + " until that is fixed");
+        return flag.fallback;
+    }
+
+    /** One on/off setting: its key, what it is when unset, and what it does. */
+    private static final class Flag {
+        final String key;
+        final boolean fallback;
+        final String comment;
+
+        Flag(String key, boolean fallback, String comment) {
+            this.key = key;
+            this.fallback = fallback;
+            this.comment = comment;
+        }
     }
 }

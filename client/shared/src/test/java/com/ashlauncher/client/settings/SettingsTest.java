@@ -25,9 +25,27 @@ class SettingsTest {
     }
 
     @Test
+    void a_file_from_before_toggle_sprint_gains_its_setting_and_keeps_the_player_s() throws IOException {
+        // Exactly the file every player who ran the FPS readout's release has.
+        Path file = configDir.resolve("ash.properties");
+        String older = "# Show the frame rate in the top-left corner. true or false.\nfps-readout.enabled=false\n";
+        Files.writeString(file, older);
+
+        Settings settings = Settings.load(configDir);
+
+        assertFalse(settings.fpsReadoutEnabled(), "the player's own choice was lost in the upgrade");
+        assertTrue(settings.toggleSprintEnabled());
+        String now = Files.readString(file);
+        assertTrue(now.startsWith(older), "what the player had was changed:\n" + now);
+        assertTrue(now.contains("\ntoggle-sprint.enabled=true\n"), "toggle sprint's setting was not added:\n" + now);
+    }
+
+    @Test
     void a_setting_the_player_changed_is_what_the_next_session_uses() throws IOException {
         Path file = configDir.resolve("ash.properties");
-        String mine = "# turned off for recording\nfps-readout.enabled=false\n";
+        // Complete - every setting present - so nothing needs adding and the
+        // file has no reason to change.
+        String mine = "# turned off for recording\nfps-readout.enabled=false\ntoggle-sprint.enabled=true\n";
         Files.writeString(file, mine);
 
         Settings settings = Settings.load(configDir);
@@ -58,7 +76,7 @@ class SettingsTest {
         // `Boolean.parseBoolean("yes")` is false, so the obvious reading of
         // this file would switch the readout off without a word.
         Path file = configDir.resolve("ash.properties");
-        String mine = "fps-readout.enabled=yes\n";
+        String mine = "fps-readout.enabled=yes\ntoggle-sprint.enabled=true\n";
         Files.writeString(file, mine);
 
         Settings settings = Settings.load(configDir);

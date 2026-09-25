@@ -104,6 +104,15 @@ module - so `src/smoketest` is ash's miniature of it: a vanilla client that
 prints its mod list, makes the same two assertions, starts a flat world, lets
 the HUD draw for three seconds, screenshots it and shuts itself down.
 
+Once in the world, both drive toggle sprint through a real key press and
+check the player actually sprints, that a second press stops it, and that its
+default key collides with no binding the game has. The 1.21.11 test also asks
+the server what it was sent: the sprint key held while toggled on, and released
+while an inventory is open - which is what a vanilla client in a menu sends.
+The 1.8.9 one drives `KeyBinding`'s own statics rather than a keyboard, since
+there is no input framework on that target, so the Windows manual pass is still
+what proves the keyboard end of it there.
+
 Both go into a world because ash's in-game code only runs in one. The HUD is
 drawn only there, and the player - whose movement tick is where toggle sprint's
 mixin lands - only exists there; a test that stopped at the title screen would
@@ -115,6 +124,17 @@ never be the thing that noticed.
 Both run in CI on Linux only, and that is a capability rather than a
 preference - see `docs/adr/0016-ci-accepts-the-minecraft-eula.md`, which also
 records what they cost and what a headless runner does and does not provide.
+
+## Mixins, for now
+
+Both targets' `ash.mixins.json` are `"required": true` with `defaultRequire: 1`
+as toggle sprint lands: a mixin that stops matching its target stops the game,
+loudly. That is the opposite of what ADR-0017 decided - a feature that cannot
+load should degrade, and the launcher should say so - and it is deliberately
+temporary: degradation is #25, the next ticket, and it needs more than a flag.
+`required: false` alone does not do it, because an injector whose call site has
+gone throws an `InjectionError` that escapes Mixin's error handling whatever the
+config says.
 
 ## How the jar reaches a player
 
