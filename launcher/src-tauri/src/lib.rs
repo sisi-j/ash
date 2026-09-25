@@ -10,9 +10,9 @@ use ash_core::credentials::OsCredentialStore;
 use ash_core::http::ReqwestHttp;
 use ash_core::process::OsProcessPort;
 use ash_core::{
-    Account, Accounts, Ash, Cancel, Catalogue, Config, DeletionPreview, GameStatus, Instance,
-    InstanceId, InvocationView, Loader, MachineOverrides, PendingSignIn, Plan, PrepareEvent,
-    ProgressSink, Runtime, SignInStatus,
+    Account, Accounts, Ash, Cancel, Catalogue, Config, DegradationNotice, DeletionPreview,
+    GameStatus, Instance, InstanceId, InvocationView, Loader, MachineOverrides, PendingSignIn,
+    Plan, PrepareEvent, ProgressSink, Runtime, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -259,6 +259,14 @@ async fn overrides(
 }
 
 #[tauri::command]
+async fn degradation_notice(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Option<DegradationNotice>, UiError> {
+    state.ash.degradation_notice(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
 async fn set_overrides(
     state: tauri::State<'_, AppState>,
     id: InstanceId,
@@ -500,6 +508,7 @@ pub fn run() {
             stop_game,
             overrides,
             set_overrides,
+            degradation_notice,
             default_memory_mb,
             reveal_log
         ])

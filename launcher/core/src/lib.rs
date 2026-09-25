@@ -21,6 +21,7 @@ mod error;
 mod gamelog;
 mod instance;
 mod launch;
+mod load_report;
 mod loader;
 mod natives;
 mod overrides;
@@ -41,6 +42,7 @@ pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use diagnostics::Diagnostics;
 pub use error::AshError;
 pub use instance::{DeletionPreview, Instance, InstanceId};
+pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
 pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
@@ -459,6 +461,30 @@ impl Ash {
         Ok(overrides::load(&self.config.data_root, id))
     }
 
+    /// Which of ash's features did not load in this instance's last session,
+    /// as the client reported it. `None` when every one loaded - or when the
+    /// client has not run yet to say.
+    pub fn degradation_notice(
+        &self,
+        id: &InstanceId,
+    ) -> Result<Option<DegradationNotice>, AshError> {
+        self.instance(id)?;
+        Ok(self.load_report(id).and_then(|report| report.notice()))
+    }
+
+    /// The client's last report for an instance, or `None` - with a line in
+    /// ash's log when there was one it could not read, because an unreadable
+    /// report is worth knowing about and never worth refusing a play over.
+    fn load_report(&self, id: &InstanceId) -> Option<load_report::LoadReport> {
+        match load_report::read(&self.game_directory(id)) {
+            Ok(report) => report,
+            Err(reason) => {
+                self.diagnostics.warn("load-report-unreadable", &format!("instance={id} {reason}"));
+                None
+            }
+        }
+    }
+
     /// Set this machine's settings for an instance.
     ///
     /// Validated here rather than at launch, so a figure the JVM would
@@ -524,6 +550,19 @@ impl Ash {
                 diagnostics::describe(&view)
             ),
         );
+
+        // What the client said about the last session, into ash's own log, so
+        // it arrives in anything a player sends in - whether or not they read
+        // the notice. Once a launch, before the game this launch starts
+        // overwrites it.
+        if let Some(report) = self.load_report(id) {
+            let line = format!("instance={id} {}", report.describe());
+            if report.any_degraded() {
+                self.diagnostics.warn("load-report", &line);
+            } else {
+                self.diagnostics.info("load-report", &line);
+            }
+        }
 
         let process = match self.process.spawn(&invocation) {
             Ok(process) => process,

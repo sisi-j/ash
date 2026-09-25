@@ -8,12 +8,23 @@ plugins {
 
 repositories {
     mavenCentral()
+    // Fabric's build of Mixin is published there and nowhere else.
+    maven { url = 'https://maven.fabricmc.net/' }
 }
 
 dependencies {
-    // Nothing from the game and nothing from either API, deliberately. An
-    // empty compile classpath is the first half of the rule; `checkNoGameTypes`
-    // below is the half that survives someone adding a line here.
+    // Nothing from the game and nothing from either API, deliberately;
+    // `checkNoGameTypes` below is what survives someone adding a line here.
+    //
+    // Mixin and ASM are the one exception, and they are neither. Both loaders
+    // ship the same Mixin (0.8.7) and the same ASM (9.10.1), and the check
+    // that tells a feature whose mixin landed from one whose mixin silently
+    // matched nothing is identical on both targets - so it is written once,
+    // here, and tested here with class files built by hand rather than with a
+    // game. `compileOnly`, because each game brings its own at runtime.
+    compileOnly "net.fabricmc:sponge-mixin:${mixin_version}"
+    compileOnly "org.ow2.asm:asm-tree:${asm_version}"
+    testImplementation "org.ow2.asm:asm-tree:${asm_version}"
     //
     // Plain JUnit, not Fabric Loader JUnit. Fabric ships that tier because
     // mods rely on Mixin and on registries that only exist once the loader is

@@ -6,6 +6,7 @@ import {
   onPrepareFinished,
   onPrepareProgress,
   type Account,
+  type DegradationNotice,
   type InstanceId,
   type InvocationView,
   type Plan,
@@ -58,6 +59,7 @@ function valueOf(args: string[], flag: string): string | null {
 export function Play(props: { id: InstanceId; playingAs: Account | null }) {
   const [phase, setPhase] = useState<Phase>({ at: "checking" });
   const [command, setCommand] = useState<InvocationView | null>(null);
+  const [notice, setNotice] = useState<DegradationNotice | null>(null);
   const goal = useRef<"prepare" | "play">("play");
 
   const replan = useCallback(async () => {
@@ -80,6 +82,31 @@ export function Play(props: { id: InstanceId; playingAs: Account | null }) {
     setCommand(null);
     void replan();
   }, [props.id, replan]);
+
+  // What the client said about the last session. Asked again whenever the
+  // player is about to play - including straight after a game closes, which
+  // is when the client has just written a fresh report. Never in the way:
+  // a notice that cannot be read is no notice, and Play still works.
+  const beforePlay = phase.at === "idle" || phase.at === "exited";
+  useEffect(() => {
+    if (!beforePlay) return;
+    let live = true;
+    void api
+      .degradationNotice(props.id)
+      .catch(() => null)
+      .then((found) => {
+        if (live) setNotice(found);
+      });
+    return () => {
+      live = false;
+    };
+  }, [beforePlay, props.id]);
+
+  const degraded = notice && (
+    <p className="notice" role="status">
+      {notice.message}
+    </p>
+  );
 
   // Poll only while something is actually running.
   useEffect(() => {
@@ -252,6 +279,7 @@ export function Play(props: { id: InstanceId; playingAs: Account | null }) {
           </>
         )}
 
+        {degraded}
         <div className="actions">
           <button className="button" onClick={() => start("play")}>
             Play again
@@ -280,6 +308,7 @@ export function Play(props: { id: InstanceId; playingAs: Account | null }) {
             </>
           )}
         </p>
+        {degraded}
         <div className="actions">
           <button className="button" onClick={() => start("play")}>
             Play

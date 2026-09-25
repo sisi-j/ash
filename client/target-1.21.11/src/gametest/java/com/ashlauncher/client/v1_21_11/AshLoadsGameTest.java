@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -60,6 +61,25 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             }
         } catch (IOException missing) {
             throw new AssertionError("the client started without writing ash.properties", missing);
+        }
+
+        // And the load report, which the launcher reads before the next play.
+        // In a build where every mixin lands, every feature reports loaded -
+        // and a mixin that stopped matching this game version fails here, by
+        // feature, with the game still running rather than crashed.
+        Path report = FabricLoader.getInstance().getGameDir().resolve(LoadReport.RELATIVE_PATH);
+        try {
+            String written = Files.readString(report);
+            for (String feature : new String[] {
+                "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
+                "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
+            }) {
+                if (!written.contains(feature)) {
+                    throw new AssertionError("the load report does not say " + feature + ":\n" + written);
+                }
+            }
+        } catch (IOException missing) {
+            throw new AssertionError("the client started without writing its load report", missing);
         }
 
         context.takeScreenshot("ash-loaded");
