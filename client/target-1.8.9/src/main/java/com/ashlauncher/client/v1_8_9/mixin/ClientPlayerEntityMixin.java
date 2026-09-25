@@ -44,7 +44,7 @@ abstract class ClientPlayerEntityMixin {
     }
 
     @WrapOperation(method = "tickMovement",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/option/KeyBinding;isPressed()Z"))
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/option/KeyBinding;isPressedInAFutureVersion()Z"))
     private boolean ash$sprintKeyDown(KeyBinding key, Operation<Boolean> original) {
         boolean down = original.call(key);
         if (key != client.options.sprintKey) {

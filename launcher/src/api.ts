@@ -66,6 +66,17 @@ export type Instance = {
   last_played_ms: number | null;
 };
 
+/**
+ * One of ash's features did not load in an instance's last session. Read
+ * from what the client reported, so it stays until a session where it loads.
+ */
+export type DegradationNotice = {
+  /** The features that did not load, by the name the client gave them. */
+  features: string[];
+  /** What to show the player: ash's problem, not theirs. */
+  message: string;
+};
+
 export type DeletionPreview = {
   instance: Instance;
   worlds: string[];
@@ -227,6 +238,8 @@ export const api = {
   stopGame: (id: InstanceId) => invoke<void>("stop_game", { id }),
 
   overrides: (id: InstanceId) => invoke<MachineOverrides>("overrides", { id }),
+  degradationNotice: (id: InstanceId) =>
+    invoke<DegradationNotice | null>("degradation_notice", { id }),
   setOverrides: (id: InstanceId, settings: MachineOverrides) =>
     invoke<MachineOverrides>("set_overrides", { id, settings }),
   defaultMemoryMb: () => invoke<number>("default_memory_mb"),

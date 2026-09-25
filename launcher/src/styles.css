@@ -367,6 +367,15 @@ body {
   cursor: pointer;
 }
 
+/* A feature of ash's did not load. Boxed like an error so it is seen before
+   Play, but not one: nothing to click, and nothing the player did wrong. */
+.notice {
+  margin: 0 0 1.5rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--emphasis);
+  border-radius: 4px;
+}
+
 /* ---- scrollbars, kept in palette ---- */
 
 ::-webkit-scrollbar {
