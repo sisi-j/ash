@@ -48,11 +48,29 @@ public final class Settings {
 
     static final String FPS_READOUT_ENABLED = "fps-readout.enabled";
 
+    static final String TOGGLE_SPRINT_ENABLED = "toggle-sprint.enabled";
+
+    private static final Flag FPS_READOUT = new Flag(FPS_READOUT_ENABLED, true,
+            "Show the frame rate in the top-left corner. true or false.");
+
+    private static final Flag TOGGLE_SPRINT = new Flag(TOGGLE_SPRINT_ENABLED, true,
+            "Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
+                    + " true or false.");
+
+    /**
+     * Every setting, in the order a first run writes them. One list, so that
+     * a setting cannot be read without also being written into a file that
+     * lacks it.
+     */
+    private static final Flag[] FLAGS = {FPS_READOUT, TOGGLE_SPRINT};
+
     private final boolean fpsReadoutEnabled;
+    private final boolean toggleSprintEnabled;
     private final List<String> problems;
 
-    private Settings(boolean fpsReadoutEnabled, List<String> problems) {
+    private Settings(boolean fpsReadoutEnabled, boolean toggleSprintEnabled, List<String> problems) {
         this.fpsReadoutEnabled = fpsReadoutEnabled;
+        this.toggleSprintEnabled = toggleSprintEnabled;
         this.problems = Collections.unmodifiableList(problems);
     }
 
@@ -92,12 +110,18 @@ public final class Settings {
             appendMissing(file, original, properties, problems);
         }
 
-        boolean fpsReadoutEnabled = flag(properties, FPS_READOUT_ENABLED, true, problems);
-        return new Settings(fpsReadoutEnabled, problems);
+        return new Settings(
+                read(properties, FPS_READOUT, problems),
+                read(properties, TOGGLE_SPRINT, problems),
+                problems);
     }
 
     public boolean fpsReadoutEnabled() {
         return fpsReadoutEnabled;
+    }
+
+    public boolean toggleSprintEnabled() {
+        return toggleSprintEnabled;
     }
 
     /**
@@ -118,9 +142,11 @@ public final class Settings {
      */
     private static void appendMissing(Path file, byte[] original, Properties properties, List<String> problems) {
         StringBuilder missing = new StringBuilder();
-        if (!properties.containsKey(FPS_READOUT_ENABLED)) {
-            missing.append("# Show the frame rate in the top-left corner. true or false.\n")
-                    .append(FPS_READOUT_ENABLED).append("=true\n");
+        for (Flag flag : FLAGS) {
+            if (!properties.containsKey(flag.key)) {
+                missing.append("# ").append(flag.comment).append('\n')
+                        .append(flag.key).append('=').append(flag.fallback).append('\n');
+            }
         }
         if (missing.length() == 0) {
             return;
@@ -144,10 +170,10 @@ public final class Settings {
      * calls anything that is not "true" false, so a player who writes "yes"
      * would switch the feature off without a word.
      */
-    private static boolean flag(Properties properties, String key, boolean fallback, List<String> problems) {
-        String value = properties.getProperty(key);
+    private static boolean read(Properties properties, Flag flag, List<String> problems) {
+        String value = properties.getProperty(flag.key);
         if (value == null) {
-            return fallback;
+            return flag.fallback;
         }
         String trimmed = value.trim();
         if (trimmed.equalsIgnoreCase("true")) {
@@ -156,8 +182,21 @@ public final class Settings {
         if (trimmed.equalsIgnoreCase("false")) {
             return false;
         }
-        problems.add(key + " is \"" + value + "\" in " + FILE_NAME
-                + ", which is neither true nor false, so it is " + fallback + " until that is fixed");
-        return fallback;
+        problems.add(flag.key + " is \"" + value + "\" in " + FILE_NAME
+                + ", which is neither true nor false, so it is " + flag.fallback + " until that is fixed");
+        return flag.fallback;
+    }
+
+    /** One on/off setting: its key, what it is when unset, and what it does. */
+    private static final class Flag {
+        final String key;
+        final boolean fallback;
+        final String comment;
+
+        Flag(String key, boolean fallback, String comment) {
+            this.key = key;
+            this.fallback = fallback;
+            this.comment = comment;
+        }
     }
 }

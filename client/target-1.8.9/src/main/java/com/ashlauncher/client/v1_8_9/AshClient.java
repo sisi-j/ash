@@ -3,12 +3,16 @@ package com.ashlauncher.client.v1_8_9;
 import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.settings.Settings;
+import com.ashlauncher.client.sprint.ToggleSprint;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
+import net.legacyfabric.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.legacyfabric.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.KeyBinding;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lwjgl.input.Keyboard;
 
 /**
  * Where ash's client starts on 1.8.9.
@@ -28,6 +32,13 @@ public final class AshClient implements ClientModInitializer {
 
     private static final Logger LOG = LogManager.getLogger("ash");
 
+    /**
+     * Display text rather than a translation key, so Controls reads the same
+     * on both targets: this one loads no mod assets without another Legacy
+     * Fabric module, and a name with no translation is shown as itself.
+     */
+    static final String TOGGLE_SPRINT_BINDING = "Toggle Sprint";
+
     @Override
     public void onInitializeClient() {
         Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
@@ -45,5 +56,12 @@ public final class AshClient implements ClientModInitializer {
             marker.draw(surface);
             fpsReadout.draw(surface);
         });
+
+        // R, in the game's own Movement category beside Sprint - free by
+        // default on both targets, and rebindable in Controls.
+        KeyBinding toggleSprintKey = KeyBindingHelper.registerKeyBinding(
+                new KeyBinding(TOGGLE_SPRINT_BINDING, Keyboard.KEY_R, "key.categories.movement"));
+        ToggleSprintHook.install(new ToggleSprint(
+                new KeyBindingToggleKey(toggleSprintKey), settings.toggleSprintEnabled()));
     }
 }

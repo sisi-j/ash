@@ -41,6 +41,7 @@ ARTIFACTS = [
     ("net.legacyfabric.legacy-fabric-api:legacy-fabric-api-base-common:1.2.2", None),
     ("net.legacyfabric.legacy-fabric-api:legacy-fabric-rendering-api-v1:1.0.1+1.8.9", None),
     ("net.legacyfabric.legacy-fabric-api:legacy-fabric-rendering-api-v1-common:1.0.1", None),
+    ("net.legacyfabric.legacy-fabric-api:legacy-fabric-keybindings-api-v1-common:1.2.0", None),
 ]
 
 

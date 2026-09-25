@@ -474,7 +474,7 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
             size: 5_217,
             natives: &[],
         },
-        // And the three modules ash's client actually uses. Legacy Fabric API
+        // And the four modules ash's client actually uses. Legacy Fabric API
         // is 44 separately versioned modules behind that front, and every one
         // of their POMs is empty - nothing declares a dependency on anything -
         // so each is named here or it is simply not there at runtime.
@@ -487,13 +487,19 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
         //   api-base-common          `Event`, which `HudRenderCallback.EVENT` is
         //   rendering-api-v1-common  `HudRenderCallback` itself
         //   rendering-api-v1         `InGameHudMixin`, which fires it
+        //   keybindings-api-v1-common  `KeyBindingHelper`, for toggle sprint's key
+        //
+        // The keybindings split runs the other way round from rendering's:
+        // its `+1.8.9` jar holds no classes at all, and `-common` holds the
+        // helper, its implementation and both of its mixins, and names no
+        // other Legacy Fabric package. So `-common` alone is the module.
         //
         // `legacy-fabric-api-base` is deliberately not among them. Its only
         // class is `api/util/Location`, nothing ash ships names it, and the
         // client builds without it - so shipping it would be one more thing
         // to mirror and keep current for no reason.
         //
-        // Only these three. `client/target-1.8.9/build.gradle` compiles
+        // Only these four. `client/target-1.8.9/build.gradle` compiles
         // against exactly the same list, so a class from a module ash does not
         // ship cannot get into the client without the build failing first.
         PinnedLibrary {
@@ -518,6 +524,15 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
             mirror: mirrored!("legacy-fabric-rendering-api-v1-common-1.0.1.jar"),
             sha1: "92755559eb446afb6ce4118da99954969b75226c",
             size: 18_238,
+            natives: &[],
+        },
+        PinnedLibrary {
+            name:
+                "net.legacyfabric.legacy-fabric-api:legacy-fabric-keybindings-api-v1-common:1.2.0",
+            repository: LEGACY_MAVEN,
+            mirror: mirrored!("legacy-fabric-keybindings-api-v1-common-1.2.0.jar"),
+            sha1: "768a633f036d6fc0a49ad653a4172b679fa32d78",
+            size: 13_672,
             natives: &[],
         },
     ],

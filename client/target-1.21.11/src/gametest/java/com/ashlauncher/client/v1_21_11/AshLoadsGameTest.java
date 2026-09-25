@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.KeyMapping;
 
 /**
  * A real vanilla client, launched, with ash in it.
@@ -83,6 +84,64 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             connection.getClientWorld().waitForChunksRender();
             context.waitTicks(40);
             context.takeScreenshot("ash-in-world");
+
+            toggleSprintWorks(context, server);
+        }
+    }
+
+    /**
+     * Toggle sprint, driven through the same input a player's keyboard feeds,
+     * with the real mixin, the real latch and the real server.
+     *
+     * <p>The server's view is checked as well as the client's because it is
+     * the one that matters for the feature's promise: the server can only
+     * know the player is sprinting from the ordinary sprint packet a held key
+     * sends, so seeing it there is seeing that nothing else was sent.
+     */
+    private static void toggleSprintWorks(ClientGameTestContext context, TestDedicatedServerContext server) {
+        KeyMapping toggle = context.computeOnClient(client -> {
+            KeyMapping found = null;
+            for (KeyMapping mapping : client.options.keyMappings) {
+                if (mapping.getName().equals(AshClient.TOGGLE_SPRINT_BINDING)) {
+                    found = mapping;
+                }
+            }
+            if (found == null) {
+                throw new AssertionError("no \"" + AshClient.TOGGLE_SPRINT_BINDING + "\" binding in Controls");
+            }
+            // Against every binding the game has, the F3 combinations
+            // included, rather than against a list someone wrote down.
+            for (KeyMapping other : client.options.keyMappings) {
+                if (other != found && other.getDefaultKey().equals(found.getDefaultKey())) {
+                    throw new AssertionError("toggle sprint's default key is also " + other.getName() + "'s");
+                }
+            }
+            return found;
+        });
+
+        context.getInput().holdKey(options -> options.keyUp);
+        context.waitTicks(20);
+        assertSprinting(context, server, false, "holding forward alone started a sprint");
+
+        context.getInput().pressKey(toggle);
+        context.waitTicks(20);
+        assertSprinting(context, server, true, "a press of the toggle key did not start a sprint");
+
+        context.getInput().releaseKey(options -> options.keyUp);
+        context.waitTicks(10);
+        context.getInput().pressKey(toggle);
+        context.getInput().holdKey(options -> options.keyUp);
+        context.waitTicks(20);
+        assertSprinting(context, server, false, "a second press of the toggle key did not turn it off");
+        context.getInput().releaseKey(options -> options.keyUp);
+    }
+
+    private static void assertSprinting(
+            ClientGameTestContext context, TestDedicatedServerContext server, boolean expected, String otherwise) {
+        boolean client = context.computeOnClient(c -> c.player.isSprinting());
+        boolean seenByServer = server.computeOnServer(s -> s.getPlayerList().getPlayers().get(0).isSprinting());
+        if (client != expected || seenByServer != expected) {
+            throw new AssertionError(otherwise + " (client sprinting: " + client + ", server sees: " + seenByServer + ")");
         }
     }
 }

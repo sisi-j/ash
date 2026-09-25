@@ -36,13 +36,14 @@ stored as `lwjgl-2.9.4-legacyfabric.17.jar`.
 | `legacy-fabric-api-base-common-1.2.2.jar` | `…:legacy-fabric-api-base-common:1.2.2` |
 | `legacy-fabric-rendering-api-v1-1.0.1-1.8.9.jar` | `…:legacy-fabric-rendering-api-v1:1.0.1+1.8.9` |
 | `legacy-fabric-rendering-api-v1-common-1.0.1.jar` | `…:legacy-fabric-rendering-api-v1-common:1.0.1` |
+| `legacy-fabric-keybindings-api-v1-common-1.2.0.jar` | `…:legacy-fabric-keybindings-api-v1-common:1.2.0` |
 | `NOTICE.md` | attribution, see below |
 
-**Three of the API's 44 modules, not all of them.** `legacy-fabric-api` is a
+**Four of the API's 44 modules, not all of them.** `legacy-fabric-api` is a
 metadata-only aggregator that declares no dependency on any module, so ash
 ships the aggregator plus exactly the modules its client uses — and mirrors
 exactly those. `client/target-1.8.9/build.gradle` compiles against the same
-list, so a fifth module cannot get into the client without being pinned, and
+list, so another module cannot get into the client without being pinned, and
 `loader.rs` has a test that a pinned one is mirrored.
 
 **Upstream Fabric's own artifacts are deliberately not mirrored.** The loader
