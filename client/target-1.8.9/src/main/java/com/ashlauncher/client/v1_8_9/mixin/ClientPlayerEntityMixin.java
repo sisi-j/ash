@@ -1,6 +1,6 @@
 package com.ashlauncher.client.v1_8_9.mixin;
 
-import com.ashlauncher.client.v1_8_9.ToggleSprintHook;
+import com.ashlauncher.client.sprint.ToggleSprintHook;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.MinecraftClient;
@@ -38,13 +38,21 @@ abstract class ClientPlayerEntityMixin {
 
     @Inject(method = "tickMovement", at = @At("HEAD"))
     private void ash$readToggleKey(CallbackInfo info) {
-        ToggleSprintHook.tick();
+        // This player, for its identity: a new one after a death or a world
+        // change starts with the latch off.
+        ToggleSprintHook.tick(this);
     }
 
     @WrapOperation(method = "tickMovement",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/option/KeyBinding;isPressed()Z"))
     private boolean ash$sprintKeyDown(KeyBinding key, Operation<Boolean> original) {
         boolean down = original.call(key);
-        return key == client.options.sprintKey ? ToggleSprintHook.sprintKeyDown(down) : down;
+        if (key != client.options.sprintKey) {
+            return down;
+        }
+        // Released with every other key while a screen is open, as the game
+        // releases them - the same rule as on 1.21.11, where it is also what
+        // keeps "sprint held" out of the packets a menu sends.
+        return ToggleSprintHook.sprintKeyDown(down, client.currentScreen != null);
     }
 }

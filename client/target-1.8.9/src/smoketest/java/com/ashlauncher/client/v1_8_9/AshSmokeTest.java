@@ -12,6 +12,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import com.ashlauncher.client.sprint.ToggleSprint;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
@@ -153,14 +154,14 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static void toggleSprintWorks(MinecraftClient client) {
         KeyBinding toggle = onClient(client, () -> {
             for (KeyBinding binding : client.options.allKeys) {
-                if (binding.getTranslationKey().equals("Toggle Sprint")) {
+                if (binding.getTranslationKey().equals(ToggleSprint.BINDING_NAME)) {
                     return binding;
                 }
             }
             return null;
         });
         if (toggle == null) {
-            fail("there is no \"Toggle Sprint\" binding in Controls");
+            fail("there is no \"" + ToggleSprint.BINDING_NAME + "\" binding in Controls");
             return;
         }
         // Against every binding the game has, rather than against a list

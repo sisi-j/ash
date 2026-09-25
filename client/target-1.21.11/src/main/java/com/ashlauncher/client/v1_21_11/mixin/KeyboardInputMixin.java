@@ -1,9 +1,10 @@
 package com.ashlauncher.client.v1_21_11.mixin;
 
-import com.ashlauncher.client.v1_21_11.ToggleSprintHook;
+import com.ashlauncher.client.sprint.ToggleSprintHook;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.player.KeyboardInput;
 import org.spongepowered.asm.mixin.Final;
@@ -26,8 +27,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * seven: a reordering of the others then changes nothing.
  *
  * <p>Nothing else is touched. The game goes on to decide whether to sprint -
- * hunger, blindness, moving forward - and to tell the server, exactly as it
- * would for a player holding the key.
+ * hunger, blindness, moving forward - and to tell the server. What it tells
+ * the server includes this very answer: since 1.21.2 the player's keys are
+ * sent every tick, menu or not. So the latch is asked whether a screen is
+ * open, where the game has released every key, and reads as released there
+ * too - otherwise ash would send "sprint held" from inside an inventory, which
+ * no vanilla client can.
  */
 @Mixin(KeyboardInput.class)
 abstract class KeyboardInputMixin {
@@ -38,13 +43,18 @@ abstract class KeyboardInputMixin {
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void ash$readToggleKey(CallbackInfo info) {
-        ToggleSprintHook.tick();
+        // The player, for its identity: a new one after a death or a world
+        // change starts with the latch off, as the game's own toggle keys do.
+        ToggleSprintHook.tick(Minecraft.getInstance().player);
     }
 
     @WrapOperation(method = "tick",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/KeyMapping;isDown()Z"))
     private boolean ash$sprintKeyDown(KeyMapping key, Operation<Boolean> original) {
         boolean down = original.call(key);
-        return key == options.keySprint ? ToggleSprintHook.sprintKeyDown(down) : down;
+        if (key != options.keySprint) {
+            return down;
+        }
+        return ToggleSprintHook.sprintKeyDown(down, Minecraft.getInstance().screen != null);
     }
 }

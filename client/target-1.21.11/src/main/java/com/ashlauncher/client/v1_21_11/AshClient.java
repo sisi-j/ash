@@ -4,6 +4,7 @@ import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.sprint.ToggleSprint;
+import com.ashlauncher.client.sprint.ToggleSprintHook;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -37,14 +38,6 @@ public final class AshClient implements ClientModInitializer {
 
     private static final Identifier FPS_READOUT = Identifier.fromNamespaceAndPath("ash", "fps_readout");
 
-    /**
-     * The binding's name is what Controls shows, and it is display text rather
-     * than a translation key on purpose: 1.8.9 loads no mod assets without
-     * another Legacy Fabric module, so a key there would appear raw. A name
-     * the game has no translation for is shown as itself, on both targets.
-     */
-    static final String TOGGLE_SPRINT_BINDING = "Toggle Sprint";
-
     @Override
     public void onInitializeClient() {
         Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
@@ -67,10 +60,14 @@ public final class AshClient implements ClientModInitializer {
 
         // R, under Movement beside the game's own Sprint. Free by default on
         // both targets - read from each game's options, not from a list - and
-        // rebindable in Controls like any other key.
-        KeyMapping toggleSprintKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
-                TOGGLE_SPRINT_BINDING, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R, KeyMapping.Category.MOVEMENT));
-        ToggleSprintHook.install(new ToggleSprint(
-                new KeyMappingToggleKey(toggleSprintKey), settings.toggleSprintEnabled()));
+        // rebindable in Controls like any other key. Only registered when the
+        // player wants the feature: a binding that does nothing should not be
+        // holding a key they might want for something else.
+        if (settings.toggleSprintEnabled()) {
+            KeyMapping toggleSprintKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                    ToggleSprint.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R,
+                    KeyMapping.Category.MOVEMENT));
+            ToggleSprintHook.install(new ToggleSprint(new KeyMappingToggleKey(toggleSprintKey), true));
+        }
     }
 }

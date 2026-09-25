@@ -66,7 +66,7 @@ The first read is inside the double-tap-W branch, the second is the held-key bra
 
 ## 3. Key repeats
 
-**1.21.11 counts a key repeat as a press.** In `KeyboardHandler.keyPress`, a release takes one path (`KeyMapping.set(key, false)` and return) and everything else - a press *and* a repeat - takes the other: `KeyMapping.set(key, true)` then `KeyMapping.click(key)`. So a key held for three seconds reports several presses.
+**1.21.11 counts a key repeat as a press.** In `KeyboardHandler.keyPress`, a release takes one path (`KeyMapping.set(key, false)` and return) and everything else - a press *and* a repeat - takes the other: `KeyMapping.set(key, true)` then `KeyMapping.click(key)`. Repeats come at the operating system's rate - on Windows' defaults about half a second's delay, then around thirty a second - so a held key reports one or two presses every tick.
 
 That is why ash's latch cannot simply flip on every press: it would flap for as long as the key is held. A press only counts if the key was up at the previous tick, and the latch is unit-tested against exactly this (`holding_the_key_while_the_game_repeats_it_leaves_sprint_on`).
 
@@ -83,6 +83,7 @@ The Legacy Fabric module needed care:
 - Unlike the rendering API, the split is the other way round. `legacy-fabric-keybindings-api-v1-1.2.0+1.8.9.jar` holds **no classes at all**. `-common-1.2.0.jar` holds `KeyBindingHelper`, its implementation and both mixins (`GameOptionsMixin`, `MinecraftClientMixin`).
 - `-common` references no other Legacy Fabric package, so nothing transitive is missing. It is the one artifact ash pins, mirrors and ships for this feature.
 - Its sha1, `768a633f036d6fc0a49ad653a4172b679fa32d78`, matches the `.sha1` sidecar Legacy Fabric publishes.
+- **Its mod id is singular** - `legacy-fabric-keybinding-api-v1-common`, read from its own `fabric.mod.json` - while its Maven artifact is plural. So ash's 1.8.9 `fabric.mod.json` depends on the singular name, and that is correct: a `depends` names a mod id, not an artifact. It is the mismatch between the two that explains why the Maven listing has both spellings, and a reader who "fixes" the `depends` to match the artifact breaks the client.
 
 ## 5. The default key
 

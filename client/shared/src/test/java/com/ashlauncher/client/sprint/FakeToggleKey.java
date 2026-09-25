@@ -44,7 +44,10 @@ final class FakeToggleKey implements ToggleKey {
         held = true;
     }
 
-    /** What the game does to a held key every half-second or so: another press. */
+    /**
+     * One key repeat: another press on a key that is still down. The system
+     * sends them after about half a second held, then around thirty a second.
+     */
     void repeat() {
         presses++;
     }

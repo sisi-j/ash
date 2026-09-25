@@ -82,6 +82,11 @@ dependencies {
     //                              register a key with the game - its `+1.8.9`
     //                              jar holds no classes at all
     //
+    // The keybindings artifact is plural and its mod id is singular -
+    // `legacy-fabric-keybinding-api-v1-common` - so `fabric.mod.json`, which
+    // cannot carry a comment, depends on the singular name. That is correct:
+    // a `depends` names a mod id. See docs/research/0003.
+    //
     // `legacy-fabric-api-base` is deliberately absent: its only class is
     // `api/util/Location`, and nothing ash ships names it. The same list is
     // pinned in `launcher/core/src/loader.rs`, so a module reached for here

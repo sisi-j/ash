@@ -10,7 +10,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -46,31 +48,26 @@ public final class Settings {
     /** In the loader's config directory, named for the mod id, as Fabric mods do. */
     static final String FILE_NAME = "ash.properties";
 
-    static final String FPS_READOUT_ENABLED = "fps-readout.enabled";
-
-    static final String TOGGLE_SPRINT_ENABLED = "toggle-sprint.enabled";
-
-    private static final Flag FPS_READOUT = new Flag(FPS_READOUT_ENABLED, true,
+    private static final Flag FPS_READOUT = new Flag("fps-readout.enabled", true,
             "Show the frame rate in the top-left corner. true or false.");
 
-    private static final Flag TOGGLE_SPRINT = new Flag(TOGGLE_SPRINT_ENABLED, true,
+    private static final Flag TOGGLE_SPRINT = new Flag("toggle-sprint.enabled", true,
             "Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
                     + " true or false.");
 
     /**
-     * Every setting, in the order a first run writes them. One list, so that
-     * a setting cannot be read without also being written into a file that
-     * lacks it.
+     * Every setting, in the order a first run writes them. One list, and
+     * every setting is both read and written by walking it - so a setting
+     * left out of it is not quietly read and never written, it has no value
+     * at all, and the first test to ask for it fails.
      */
     private static final Flag[] FLAGS = {FPS_READOUT, TOGGLE_SPRINT};
 
-    private final boolean fpsReadoutEnabled;
-    private final boolean toggleSprintEnabled;
+    private final Map<Flag, Boolean> values;
     private final List<String> problems;
 
-    private Settings(boolean fpsReadoutEnabled, boolean toggleSprintEnabled, List<String> problems) {
-        this.fpsReadoutEnabled = fpsReadoutEnabled;
-        this.toggleSprintEnabled = toggleSprintEnabled;
+    private Settings(Map<Flag, Boolean> values, List<String> problems) {
+        this.values = values;
         this.problems = Collections.unmodifiableList(problems);
     }
 
@@ -110,18 +107,19 @@ public final class Settings {
             appendMissing(file, original, properties, problems);
         }
 
-        return new Settings(
-                read(properties, FPS_READOUT, problems),
-                read(properties, TOGGLE_SPRINT, problems),
-                problems);
+        Map<Flag, Boolean> values = new IdentityHashMap<>();
+        for (Flag flag : FLAGS) {
+            values.put(flag, read(properties, flag, problems));
+        }
+        return new Settings(values, problems);
     }
 
     public boolean fpsReadoutEnabled() {
-        return fpsReadoutEnabled;
+        return values.get(FPS_READOUT);
     }
 
     public boolean toggleSprintEnabled() {
-        return toggleSprintEnabled;
+        return values.get(TOGGLE_SPRINT);
     }
 
     /**
