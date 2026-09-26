@@ -699,6 +699,239 @@ fn only_the_loaders_a_version_target_can_run_are_offered() {
     assert_eq!(f.ash.loaders_for("1.16.5"), [Loader::Vanilla]);
 }
 
+// ---- the load report ----------------------------------------------------------
+//
+// The client writes `ash/load-report.json` into the game directory each time
+// it starts, naming which of ash's features loaded and which degraded. The
+// launcher reads it before the next play. One way only: the launcher never
+// writes it. See ADR-0017.
+
+/// What the client writes, as it would write it.
+fn write_load_report(f: &Fixture, id: &InstanceId, json: &str) {
+    let path = f.ash.game_directory(id).join("ash").join("load-report.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, json).unwrap();
+}
+
+/// What the client writes for a session where the FPS readout loaded and
+/// toggle sprint degraded. One file, and it is the contract: these tests parse
+/// it, and the client's own test in `client/shared` must produce it byte for
+/// byte - so the two sides cannot each pass while disagreeing about the format.
+const TOGGLE_SPRINT_DEGRADED: &str = include_str!("fixtures/load-report.json");
+
+#[tokio::test]
+async fn a_feature_that_degraded_last_session_is_surfaced_before_the_next_play() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+
+    let notice = f.ash.degradation_notice(&id).expect("read").expect("a notice");
+
+    assert_eq!(notice.features, ["Toggle sprint"], "only the degraded feature is named");
+    assert!(notice.message.contains("Toggle sprint"), "{}", notice.message);
+}
+
+#[tokio::test]
+async fn the_notice_says_the_fault_is_ash_s_and_sends_nobody_hunting_through_their_setup() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+
+    let message = f.ash.degradation_notice(&id).unwrap().unwrap().message;
+
+    // Whose problem it is, and that the game still works without it.
+    assert!(message.contains("problem with ash"), "does not say it is ash's problem: {message}");
+    assert!(message.contains("still play"), "does not say the game still works: {message}");
+    // None of the things a player would go and try, each of which would
+    // waste their evening: the fix is an ash update, not their machine.
+    for hunt in
+        ["reinstall", "Java", "driver", "your mods", "your files", "check your", "restart your"]
+    {
+        assert!(!message.contains(hunt), "sends the player hunting ({hunt:?}): {message}");
+    }
+    assert!(!message.contains('\n'), "not one clean line: {message}");
+}
+
+#[tokio::test]
+async fn the_notice_lasts_until_a_session_where_the_feature_loaded() {
+    let f = fixture();
+    let id = f.modded().await;
+    // A first launch reports nothing - the client has not run yet to say.
+    // That is the accepted cost of reporting in the launcher (ADR-0017).
+    assert_eq!(f.ash.degradation_notice(&id).unwrap(), None);
+
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+    // Asked again, as a restarted launcher would: it is still there, because
+    // it is read from what the client wrote, not held in the launcher.
+    assert!(f.ash.degradation_notice(&id).unwrap().is_some());
+    assert!(f.ash.degradation_notice(&id).unwrap().is_some(), "the notice went away on its own");
+
+    // A later session - an ash update, say - where it loaded.
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.1", "features": [
+            { "id": "fps-readout", "name": "FPS readout", "status": "loaded" },
+            { "id": "toggle-sprint", "name": "Toggle sprint", "status": "loaded" } ] }"#,
+    );
+    assert_eq!(f.ash.degradation_notice(&id).unwrap(), None, "fixed, but still reported");
+}
+
+#[tokio::test]
+async fn a_feature_the_player_switched_off_is_not_reported_as_a_problem() {
+    let f = fixture();
+    let id = f.modded().await;
+    // Beside one that did degrade, so the report has to be read and understood
+    // for this to pass - an unreadable report would name nothing at all.
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "fps-readout", "name": "FPS readout", "status": "off" },
+            { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+    );
+
+    let notice = f.ash.degradation_notice(&id).unwrap().expect("the report was not read");
+    assert_eq!(
+        notice.features,
+        ["Toggle sprint"],
+        "a switched-off feature was reported as a problem"
+    );
+}
+
+#[tokio::test]
+async fn a_launch_records_the_last_session_s_load_report_in_ash_s_own_log() {
+    // So it arrives in anything a player sends in, whether or not they
+    // noticed the notice.
+    let f = fixture();
+    let id = f.modded().await;
+    f.prepare(&id).await;
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+    let report = f.ash.game_directory(&id).join("ash").join("load-report.json");
+    let written = std::fs::read(&report).unwrap();
+
+    f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    let line =
+        log.lines().find(|l| l.contains("load-report")).expect("no load report in ash's log");
+    assert!(line.contains("toggle-sprint=degraded"), "{line}");
+    assert!(line.contains("fps-readout=loaded"), "{line}");
+    assert!(line.contains("client=0.1.0"), "{line}");
+    // And the channel runs one way: the launcher read it and left it alone.
+    assert_eq!(std::fs::read(&report).unwrap(), written, "the launcher wrote to the load report");
+}
+
+#[tokio::test]
+async fn a_report_the_launcher_cannot_read_costs_the_notice_and_not_the_play() {
+    let f = fixture();
+    let id = f.modded().await;
+    f.prepare(&id).await;
+    write_load_report(&f, &id, "{ this is not what the client writes");
+
+    assert_eq!(f.ash.degradation_notice(&id).unwrap(), None);
+    f.ash
+        .launch(&id, &NullSink, &Cancel::new())
+        .await
+        .expect("an unreadable report stopped a launch");
+
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    assert!(log.contains("load-report-unreadable"), "an unreadable report left no trace:\n{log}");
+}
+
+#[tokio::test]
+async fn text_ash_s_client_never_writes_never_reaches_ash_s_log() {
+    // The report sits where a player can edit it, and ash's log is what a
+    // player pastes into a support channel. Two ways text could ride from one
+    // to the other: a field ash logs, and the parser's own error message,
+    // which quotes a string it did not expect.
+    let f = fixture();
+    let id = f.modded().await;
+    let log = || std::fs::read_to_string(f.ash.diagnostics().path()).unwrap_or_default();
+
+    // One forgery per report, so each guard is tested on its own - with two
+    // in one report, whichever guard ran first would hide the other's absence.
+    for forged in [
+        r#"{ "client": "0.1.0 FORGED-IN-THE-VERSION", "features": [
+            { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "toggle sprint FORGED-IN-AN-ID", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "toggle-sprint", "name": "FORGED-IN-THE-NAME", "status": "degraded" } ] }"#,
+        r#"{ "client": "0.1.0", "features": [ "FORGED-IN-AN-ERROR" ] }"#,
+    ] {
+        write_load_report(&f, &id, forged);
+        f.ash.degradation_notice(&id).unwrap();
+    }
+
+    let written = log();
+    assert!(!written.contains("FORGED"), "the report's own text reached ash's log:\n{written}");
+    assert!(
+        written.contains("load-report-unreadable"),
+        "an unreadable report left no trace:\n{written}"
+    );
+}
+
+#[tokio::test]
+async fn reading_the_notice_puts_the_report_in_ash_s_log_once() {
+    // Straight after a degraded session is when a player reads the notice
+    // and opens the log - before they have launched anything again.
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+
+    f.ash.degradation_notice(&id).unwrap();
+    f.ash.degradation_notice(&id).unwrap();
+
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    let lines = log.lines().filter(|l| l.contains("toggle-sprint=degraded")).count();
+    assert_eq!(lines, 1, "expected the report once:\n{log}");
+}
+
+#[tokio::test]
+async fn a_report_from_before_the_last_launch_is_not_passed_off_as_that_session_s() {
+    // The client writes a report as it starts. A report older than the last
+    // launch means that session's client never wrote one - it crashed first,
+    // or could not write - and the verdict it still shows is somebody else's.
+    let f = fixture();
+    let id = f.modded().await;
+    f.prepare(&id).await;
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+    let report = f.ash.game_directory(&id).join("ash").join("load-report.json");
+    let an_hour_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    std::fs::File::options().write(true).open(&report).unwrap().set_modified(an_hour_ago).unwrap();
+
+    f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    assert_eq!(
+        f.ash.degradation_notice(&id).unwrap(),
+        None,
+        "a report from before the last launch was shown as the last session's"
+    );
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    assert!(log.contains("load-report-stale"), "the missing report left no trace:\n{log}");
+}
+
+#[tokio::test]
+async fn a_report_from_a_newer_client_still_surfaces_what_degraded() {
+    // The client ships inside the installer, so the two never skew in a
+    // released build - but a player can run a newer instance's game
+    // directory under an older launcher, and a status this launcher has
+    // never heard of must not throw the whole report away.
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "9.9.9", "written": "somewhen", "features": [
+            { "id": "freelook", "name": "Freelook", "status": "partially-loaded" },
+            { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+    );
+
+    let notice = f.ash.degradation_notice(&id).unwrap().expect("the degraded feature was lost");
+    assert_eq!(notice.features, ["Toggle sprint"]);
+}
+
 fn value_of<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
     let at = args.iter().position(|a| a == flag)?;
     args.get(at + 1).map(String::as_str)

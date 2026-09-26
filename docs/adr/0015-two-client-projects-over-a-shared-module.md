@@ -14,6 +14,8 @@ So the shared drawing surface must be expressible as "draw these primitives at t
 
 The rule has to exclude Fabric API too, not just Minecraft. The APIs diverge in their own surface: ~~`net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper`~~ `net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper` against `net.legacyfabric.fabric.api.client.keybinding.v1.KeyBindingHelper` - the same simple name in two packages, over two different key types, `KeyMapping` and `KeyBinding`. A shared module that names either one is already broken.
 
+*Extended 2026-09-24, while implementing #25.* The shared module now compiles against Mixin and ASM, `compileOnly`. Neither is the game nor either API, and both targets' loaders ship the same of each - Mixin 0.8.7, ASM 9.10.1 - so the one check that tells a landed mixin from a silently empty one is written once and tested without a game. MixinExtras is not included: it differs between the targets (0.5.4 and 0.5.5), and the shared module names it only as a string, to recognise its annotations. The rule this ADR sets is unchanged; the module's compile classpath is no longer empty.
+
 *Corrected 2026-09-24, while implementing #24.* This said the 1.21.11 helper was `keymapping.v1.KeyMappingHelper`, and that Fabric had renamed the module in its Mojmap migration. The Fabric API ash pins for 1.21.11 has no such module: `fabric-key-binding-api-v1` contains `keybinding.v1.KeyBindingHelper` and nothing else, which is what the client uses. The rename, if it happened, is not in the version ash builds against.
 
 ## Decision

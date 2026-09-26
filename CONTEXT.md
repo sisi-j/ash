@@ -69,7 +69,7 @@ One toggleable ash capability, such as toggle sprint or the custom crosshair. Pr
 _Avoid_: mod, module, tweak, hack
 
 **Load report**:
-The record the client writes saying which features loaded and which degraded. Written by the client, read by the launcher, never the other way.
+The record the client writes saying which features loaded, which degraded, and which the player switched off - `ash/load-report.json` in the game directory, replaced each time the client starts. Written by the client, read by the launcher before the next play and into ash's own log, never the other way.
 _Avoid_: health check, status file, diagnostics
 
 **Bundled mod**:

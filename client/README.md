@@ -71,7 +71,9 @@ to exactly one version target — the one thing this module may never have.
 
 That costs nothing here. Fabric ships that tier because mod code relies on
 Mixin and on registries that only exist once the loader is up, and the shared
-module has neither by construction.
+module has no registries and applies no mixins of its own. (It compiles against
+Mixin's API and ASM, since #25, to hold the check that tells a landed mixin from
+an empty one - which it tests with class files built by hand, no loader needed.)
 
 **The tier lives in the target modules instead**, where the game already is.
 `target-1.21.11/src/test/java/.../AshModMetadataTest.java` stands the real
@@ -104,7 +106,9 @@ module - so `src/smoketest` is ash's miniature of it: a vanilla client that
 prints its mod list, makes the same two assertions, starts a flat world, lets
 the HUD draw for three seconds, screenshots it and shuts itself down.
 
-Once in the world, both drive toggle sprint through a real key press and
+Before either enters a world, both read the load report the real client wrote
+and expect every feature in it to have loaded. Once in the world, both drive
+toggle sprint through a real key press and
 check the player actually sprints, that a second press stops it, and that its
 default key collides with no binding the game has. The 1.21.11 test also asks
 the server what it was sent: the sprint key held while toggled on, and released
@@ -125,16 +129,30 @@ Both run in CI on Linux only, and that is a capability rather than a
 preference - see `docs/adr/0016-ci-accepts-the-minecraft-eula.md`, which also
 records what they cost and what a headless runner does and does not provide.
 
-## Mixins, for now
+## Mixins, and what happens when one stops matching
 
-Both targets' `ash.mixins.json` are `"required": true` with `defaultRequire: 1`
-as toggle sprint lands: a mixin that stops matching its target stops the game,
-loudly. That is the opposite of what ADR-0017 decided - a feature that cannot
-load should degrade, and the launcher should say so - and it is deliberately
-temporary: degradation is #25, the next ticket, and it needs more than a flag.
-`required: false` alone does not do it, because an injector whose call site has
-gone throws an `InjectionError` that escapes Mixin's error handling whatever the
-config says.
+A feature whose mixin does not land is left out and reported rather than
+crashing the game - ADR-0017. Both targets' `ash.mixins.json` are `"required": false` with
+`defaultRequire: 0`, because `required: false` alone is not enough: an
+injector whose call site has gone throws an `InjectionError` that escapes
+Mixin's error handling and stops the game whatever the config says.
+
+(Not every Mixin error goes: an `allow` limit exceeded or a `CAPTURE_FAILHARD`
+mismatch still throws, which is why ash's mixins use neither.)
+
+That makes a missing match silent, so `AshMixinPlugin` (in `shared`, because
+Mixin and ASM are the same API on both targets) keeps each class ash's mixins
+went into, and `InjectorWiring` checks that every injector's handler is called
+from it. Each target's `AshClient` loads the class a feature's mixin targets
+at startup - which is what applies the mixin - and asks. A feature whose mixin
+did not land does not register its binding, and the client writes
+`ash/load-report.json` for the launcher to read before the next play.
+
+`AshMixinsLandTest` runs that same check on every `./gradlew build` in the
+1.21.11 module, against the real loader and the real game classes: a game
+version that breaks a mixin fails the build by mixin and injector. There is no
+equivalent on 1.8.9, where Fabric Loader JUnit cannot start (above), so there
+it is the smoke test, reading the load report the real client wrote.
 
 ## How the jar reaches a player
 

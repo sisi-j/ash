@@ -12,6 +12,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
@@ -142,6 +143,28 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
         if (!written.contains("fps-readout.enabled=")) {
             fail("ash.properties has no FPS readout setting: " + written);
+        }
+
+        // And the load report, which the launcher reads before the next play.
+        // Every feature loaded here, or a mixin stopped matching this game
+        // version - and the game is still running to say so.
+        Path report = FabricLoader.getInstance().getGameDir().resolve(LoadReport.RELATIVE_PATH);
+        String reported;
+        try {
+            reported = new String(Files.readAllBytes(report), StandardCharsets.UTF_8);
+        } catch (IOException missing) {
+            fail("the vanilla client started without ash writing its load report (" + missing + ")");
+            return;
+        }
+        System.out.println("ash smoke test: load report " + reported.replace('\n', ' '));
+        String[] loaded = {
+            "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
+            "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
+        };
+        for (String feature : loaded) {
+            if (!reported.contains(feature)) {
+                fail("the load report does not say " + feature);
+            }
         }
     }
 

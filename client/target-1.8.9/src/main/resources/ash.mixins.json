@@ -1,12 +1,13 @@
 {
-  "required": true,
+  "required": false,
   "minVersion": "0.8",
   "package": "com.ashlauncher.client.v1_8_9.mixin",
+  "plugin": "com.ashlauncher.client.mixin.AshMixinPlugin",
   "compatibilityLevel": "JAVA_8",
   "client": [
     "ClientPlayerEntityMixin"
   ],
   "injectors": {
-    "defaultRequire": 1
+    "defaultRequire": 0
   }
 }

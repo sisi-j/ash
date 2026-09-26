@@ -2,15 +2,21 @@ package com.ashlauncher.client.v1_8_9;
 
 import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Marker;
+import com.ashlauncher.client.mixin.MixinFeature;
+import com.ashlauncher.client.report.Feature;
+import com.ashlauncher.client.report.FeatureStatus;
+import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.sprint.ToggleSprintHook;
+import java.io.IOException;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.legacyfabric.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.legacyfabric.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lwjgl.input.Keyboard;
@@ -33,6 +39,9 @@ public final class AshClient implements ClientModInitializer {
 
     private static final Logger LOG = LogManager.getLogger("ash");
 
+    /** By name: a mixin class cannot be named by a class literal, because loading one directly is an error. */
+    private static final String TOGGLE_SPRINT_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerEntityMixin";
+
     @Override
     public void onInitializeClient() {
         Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
@@ -51,14 +60,34 @@ public final class AshClient implements ClientModInitializer {
             fpsReadout.draw(surface);
         });
 
+        FeatureStatus toggleSprint = MixinFeature.status(settings.toggleSprintEnabled(),
+                () -> ClientPlayerEntity.class, TOGGLE_SPRINT_MIXIN,
+                why -> LOG.warn("ash: " + Feature.TOGGLE_SPRINT.displayName() + " did not load - " + why
+                        + ". The game runs without it, and the launcher will say so before the next play."));
+
         // R, in the game's own Movement category beside Sprint - free by
         // default on both targets, and rebindable in Controls. Only when the
-        // player wants the feature, so a binding that does nothing is not
-        // holding a key.
-        if (settings.toggleSprintEnabled()) {
+        // feature is wanted and its mixin landed, so a binding that does
+        // nothing is not holding a key.
+        if (toggleSprint == FeatureStatus.LOADED) {
             KeyBinding toggleSprintKey = KeyBindingHelper.registerKeyBinding(
                     new KeyBinding(ToggleSprint.BINDING_NAME, Keyboard.KEY_R, "key.categories.movement"));
             ToggleSprintHook.install(new ToggleSprint(new KeyBindingToggleKey(toggleSprintKey), true));
         }
+
+        LoadReport report = new LoadReport(clientVersion())
+                .with(Feature.FPS_READOUT, settings.fpsReadoutEnabled() ? FeatureStatus.LOADED : FeatureStatus.OFF)
+                .with(Feature.TOGGLE_SPRINT, toggleSprint);
+        try {
+            report.writeTo(FabricLoader.getInstance().getGameDir());
+        } catch (IOException unwritable) {
+            LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
+        }
+    }
+
+    private static String clientVersion() {
+        return FabricLoader.getInstance().getModContainer("ash")
+                .map(ash -> ash.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
     }
 }
