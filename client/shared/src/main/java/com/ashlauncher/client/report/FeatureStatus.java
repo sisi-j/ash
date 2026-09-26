@@ -1,7 +1,7 @@
 package com.ashlauncher.client.report;
 
 /** How a feature came out of this session's start, in the report's words. */
-public enum FeatureState {
+public enum FeatureStatus {
     LOADED("loaded"),
     /** Its mixins did not apply, and the game is running without it. */
     DEGRADED("degraded"),
@@ -10,7 +10,7 @@ public enum FeatureState {
 
     private final String word;
 
-    FeatureState(String word) {
+    FeatureStatus(String word) {
         this.word = word;
     }
 

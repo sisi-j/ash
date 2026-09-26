@@ -15,9 +15,11 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
  * {@code ash.mixins.json}. See ADR-0017.
  *
  * <p>Both configs are {@code required: false} with {@code defaultRequire: 0},
- * so no failure of ash's can stop the game: a mixin Mixin rejects outright is
- * logged and left out, and an injector that matches nothing is merged and
- * never called. Neither says anything a feature could act on. This is what
+ * so a mixin of ash's that no longer matches cannot stop the game: one Mixin
+ * rejects outright is logged and left out, and an injector that matches
+ * nothing is merged and never called. (What still throws whatever the config
+ * says - an {@code allow} limit exceeded, a {@code CAPTURE_FAILHARD} mismatch -
+ * is why ash's mixins use neither.) Neither says anything a feature could act on. This is what
  * does: {@link InjectorWiring} checks that every one of a mixin's injectors is
  * called from the class it was applied to.
  *
@@ -61,7 +63,12 @@ public final class AshMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
-        APPLIED.put(mixinClassName, new Applied(targetClass, mixinInfo.getClassNode(0)));
+        record(mixinClassName, targetClass, mixinInfo.getClassNode(0));
+    }
+
+    /** What {@link #postApply} keeps. Package-private so a test can record one without Mixin. */
+    static void record(String mixinClassName, ClassNode target, ClassNode mixin) {
+        APPLIED.put(mixinClassName, new Applied(target, mixin));
     }
 
     @Override

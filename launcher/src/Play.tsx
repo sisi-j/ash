@@ -80,6 +80,9 @@ export function Play(props: { id: InstanceId; playingAs: Account | null }) {
   useEffect(() => {
     setPhase({ at: "checking" });
     setCommand(null);
+    // Another instance's notice must not stand on this one's screen while
+    // this one's is fetched.
+    setNotice(null);
     void replan();
   }, [props.id, replan]);
 
@@ -87,7 +90,7 @@ export function Play(props: { id: InstanceId; playingAs: Account | null }) {
   // player is about to play - including straight after a game closes, which
   // is when the client has just written a fresh report. Never in the way:
   // a notice that cannot be read is no notice, and Play still works.
-  const beforePlay = phase.at === "idle" || phase.at === "exited";
+  const beforePlay = phase.at === "idle" || phase.at === "exited" || phase.at === "failed";
   useEffect(() => {
     if (!beforePlay) return;
     let live = true;
@@ -231,6 +234,7 @@ export function Play(props: { id: InstanceId; playingAs: Account | null }) {
         <p className="error" role="alert">
           {phase.error.message}
         </p>
+        {degraded}
         <div className="actions">
           {phase.error.retryable && (
             <button className="button" onClick={() => start("play")}>

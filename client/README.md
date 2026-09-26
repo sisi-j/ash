@@ -71,7 +71,9 @@ to exactly one version target — the one thing this module may never have.
 
 That costs nothing here. Fabric ships that tier because mod code relies on
 Mixin and on registries that only exist once the loader is up, and the shared
-module has neither by construction.
+module has no registries and applies no mixins of its own. (It compiles against
+Mixin's API and ASM, since #25, to hold the check that tells a landed mixin from
+an empty one - which it tests with class files built by hand, no loader needed.)
 
 **The tier lives in the target modules instead**, where the game already is.
 `target-1.21.11/src/test/java/.../AshModMetadataTest.java` stands the real
@@ -129,11 +131,14 @@ records what they cost and what a headless runner does and does not provide.
 
 ## Mixins, and what happens when one stops matching
 
-A feature whose mixin does not land is left out and reported, never fatal -
-ADR-0017. Both targets' `ash.mixins.json` are `"required": false` with
+A feature whose mixin does not land is left out and reported rather than
+crashing the game - ADR-0017. Both targets' `ash.mixins.json` are `"required": false` with
 `defaultRequire: 0`, because `required: false` alone is not enough: an
 injector whose call site has gone throws an `InjectionError` that escapes
 Mixin's error handling and stops the game whatever the config says.
+
+(Not every Mixin error goes: an `allow` limit exceeded or a `CAPTURE_FAILHARD`
+mismatch still throws, which is why ash's mixins use neither.)
 
 That makes a missing match silent, so `AshMixinPlugin` (in `shared`, because
 Mixin and ASM are the same API on both targets) keeps each class ash's mixins

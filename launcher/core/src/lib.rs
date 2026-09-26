@@ -108,6 +108,10 @@ pub struct Ash {
     /// are what the player needs *after* a crash, and dropping the entry on
     /// exit would throw both away at the moment they matter.
     games: Mutex<HashMap<String, Box<dyn GameProcess>>>,
+    /// The last load-report line written to ash's log, by instance, so the
+    /// same report read again - by the notice, then by a launch - is logged
+    /// once, while a new session's report is logged even if it says the same.
+    reports_logged: Mutex<HashMap<String, String>>,
 }
 
 impl Ash {
@@ -130,6 +134,7 @@ impl Ash {
             client_id: client_id.into(),
             pending: Mutex::new(None),
             games: Mutex::new(HashMap::new()),
+            reports_logged: Mutex::new(HashMap::new()),
         }
     }
 
@@ -463,26 +468,67 @@ impl Ash {
 
     /// Which of ash's features did not load in this instance's last session,
     /// as the client reported it. `None` when every one loaded - or when the
-    /// client has not run yet to say.
+    /// client has not run yet to say, or did not say in the last session.
     pub fn degradation_notice(
         &self,
         id: &InstanceId,
     ) -> Result<Option<DegradationNotice>, AshError> {
-        self.instance(id)?;
-        Ok(self.load_report(id).and_then(|report| report.notice()))
+        let instance = self.instance(id)?;
+        Ok(self.load_report(&instance).and_then(|report| report.notice()))
     }
 
-    /// The client's last report for an instance, or `None` - with a line in
-    /// ash's log when there was one it could not read, because an unreadable
-    /// report is worth knowing about and never worth refusing a play over.
-    fn load_report(&self, id: &InstanceId) -> Option<load_report::LoadReport> {
-        match load_report::read(&self.game_directory(id)) {
-            Ok(report) => report,
-            Err(reason) => {
-                self.diagnostics.warn("load-report-unreadable", &format!("instance={id} {reason}"));
-                None
+    /// The client's report on this instance's last session, or `None`.
+    ///
+    /// Each report read goes into ash's own log once, so it arrives in
+    /// anything a player sends in - whether they read the notice straight
+    /// after a session or launch again first.
+    ///
+    /// A report written before the last launch is not about that session: its
+    /// client never wrote one, because it crashed before it could or could not
+    /// write. Its verdict belongs to an older session, and passing it off as
+    /// the last one's would say "all loaded" about a session nobody reported
+    /// on. So it is logged as missing and not returned.
+    fn load_report(&self, instance: &Instance) -> Option<load_report::LoadReport> {
+        let id = &instance.id;
+        let (event, line, report) = match load_report::read(&self.game_directory(id)) {
+            Ok(None) => return None,
+            Err(unreadable) => {
+                ("load-report-unreadable", format!("instance={id} {unreadable}"), None)
             }
+            Ok(Some(found)) => {
+                let stale = matches!(
+                    (found.written_ms, instance.last_played_ms),
+                    (Some(written), Some(played)) if written < played
+                );
+                if stale {
+                    let line = format!(
+                        "instance={id} the client did not report on the last session; the report \
+                         on disk is older than it"
+                    );
+                    ("load-report-stale", line, None)
+                } else {
+                    let line = format!(
+                        "instance={id} written_ms={} {}",
+                        found.written_ms.unwrap_or(0),
+                        found.report.describe()
+                    );
+                    let event = "load-report";
+                    (event, line, Some(found.report))
+                }
+            }
+        };
+
+        let mut logged = self.reports_logged.lock().unwrap();
+        if logged.get(id.as_str()) != Some(&line) {
+            let degraded = report.as_ref().is_some_and(|r| r.any_degraded());
+            if event == "load-report" && !degraded {
+                self.diagnostics.info(event, &line);
+            } else {
+                self.diagnostics.warn(event, &line);
+            }
+            logged.insert(id.as_str().to_owned(), line);
         }
+        report
     }
 
     /// Set this machine's settings for an instance.
@@ -551,17 +597,11 @@ impl Ash {
             ),
         );
 
-        // What the client said about the last session, into ash's own log, so
-        // it arrives in anything a player sends in - whether or not they read
-        // the notice. Once a launch, before the game this launch starts
-        // overwrites it.
-        if let Some(report) = self.load_report(id) {
-            let line = format!("instance={id} {}", report.describe());
-            if report.any_degraded() {
-                self.diagnostics.warn("load-report", &line);
-            } else {
-                self.diagnostics.info("load-report", &line);
-            }
+        // What the client said about the last session, into ash's own log if
+        // it is not there already - read before the game this launch starts
+        // replaces it.
+        if let Ok(instance) = self.instance(id) {
+            let _ = self.load_report(&instance);
         }
 
         let process = match self.process.spawn(&invocation) {

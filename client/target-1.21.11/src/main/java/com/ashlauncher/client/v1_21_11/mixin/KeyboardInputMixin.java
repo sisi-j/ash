@@ -49,7 +49,7 @@ abstract class KeyboardInputMixin {
     }
 
     @WrapOperation(method = "tick",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/KeyMapping;isDownInAFutureVersion()Z"))
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/KeyMapping;isDown()Z"))
     private boolean ash$sprintKeyDown(KeyMapping key, Operation<Boolean> original) {
         boolean down = original.call(key);
         if (key != options.keySprint) {

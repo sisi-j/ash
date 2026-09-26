@@ -105,6 +105,18 @@ class InjectorWiringTest {
     }
 
     @Test
+    void a_handler_named_with_ash_and_an_underscore_is_found_under_the_name_mixin_gives_it() {
+        // Fabric's MethodMapper.getHandlerName strips a leading "<modid>$" or
+        // "<modid>_" and puts "<modid>$" back, so `ash_readToggleKey` is merged
+        // as `handler$zza000$ash$readToggleKey`. Matching on the name as
+        // written would call it unwired, and report a working feature degraded.
+        ClassNode mixin = mixin("ash_readToggleKey", INJECT);
+        List<String> merged = List.of("handler$zza000$ash$readToggleKey");
+
+        assertEquals(List.of(), InjectorWiring.unwired(target(merged, merged), mixin));
+    }
+
+    @Test
     void an_injector_annotation_kept_only_in_the_class_file_still_counts() {
         ClassNode mixin = mixin("ash$sprintKeyDown", null);
         MethodNode handler = mixin.methods.get(0);

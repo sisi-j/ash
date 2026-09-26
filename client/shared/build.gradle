@@ -25,6 +25,7 @@ dependencies {
     compileOnly "net.fabricmc:sponge-mixin:${mixin_version}"
     compileOnly "org.ow2.asm:asm-tree:${asm_version}"
     testImplementation "org.ow2.asm:asm-tree:${asm_version}"
+    testImplementation "net.fabricmc:sponge-mixin:${mixin_version}"
     //
     // Plain JUnit, not Fabric Loader JUnit. Fabric ships that tier because
     // mods rely on Mixin and on registries that only exist once the loader is

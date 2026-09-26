@@ -840,6 +840,79 @@ async fn a_report_the_launcher_cannot_read_costs_the_notice_and_not_the_play() {
 }
 
 #[tokio::test]
+async fn text_ash_s_client_never_writes_never_reaches_ash_s_log() {
+    // The report sits where a player can edit it, and ash's log is what a
+    // player pastes into a support channel. Two ways text could ride from one
+    // to the other: a field ash logs, and the parser's own error message,
+    // which quotes a string it did not expect.
+    let f = fixture();
+    let id = f.modded().await;
+    let log = || std::fs::read_to_string(f.ash.diagnostics().path()).unwrap_or_default();
+
+    // One forgery per report, so each guard is tested on its own - with two
+    // in one report, whichever guard ran first would hide the other's absence.
+    for forged in [
+        r#"{ "client": "0.1.0 FORGED-IN-THE-VERSION", "features": [
+            { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "toggle sprint FORGED-IN-AN-ID", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "toggle-sprint", "name": "FORGED-IN-THE-NAME", "status": "degraded" } ] }"#,
+        r#"{ "client": "0.1.0", "features": [ "FORGED-IN-AN-ERROR" ] }"#,
+    ] {
+        write_load_report(&f, &id, forged);
+        f.ash.degradation_notice(&id).unwrap();
+    }
+
+    let written = log();
+    assert!(!written.contains("FORGED"), "the report's own text reached ash's log:\n{written}");
+    assert!(
+        written.contains("load-report-unreadable"),
+        "an unreadable report left no trace:\n{written}"
+    );
+}
+
+#[tokio::test]
+async fn reading_the_notice_puts_the_report_in_ash_s_log_once() {
+    // Straight after a degraded session is when a player reads the notice
+    // and opens the log - before they have launched anything again.
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+
+    f.ash.degradation_notice(&id).unwrap();
+    f.ash.degradation_notice(&id).unwrap();
+
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    let lines = log.lines().filter(|l| l.contains("toggle-sprint=degraded")).count();
+    assert_eq!(lines, 1, "expected the report once:\n{log}");
+}
+
+#[tokio::test]
+async fn a_report_from_before_the_last_launch_is_not_passed_off_as_that_session_s() {
+    // The client writes a report as it starts. A report older than the last
+    // launch means that session's client never wrote one - it crashed first,
+    // or could not write - and the verdict it still shows is somebody else's.
+    let f = fixture();
+    let id = f.modded().await;
+    f.prepare(&id).await;
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+    let report = f.ash.game_directory(&id).join("ash").join("load-report.json");
+    let an_hour_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    std::fs::File::options().write(true).open(&report).unwrap().set_modified(an_hour_ago).unwrap();
+
+    f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    assert_eq!(
+        f.ash.degradation_notice(&id).unwrap(),
+        None,
+        "a report from before the last launch was shown as the last session's"
+    );
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    assert!(log.contains("load-report-stale"), "the missing report left no trace:\n{log}");
+}
+
+#[tokio::test]
 async fn a_report_from_a_newer_client_still_surfaces_what_degraded() {
     // The client ships inside the installer, so the two never skew in a
     // released build - but a player can run a newer instance's game

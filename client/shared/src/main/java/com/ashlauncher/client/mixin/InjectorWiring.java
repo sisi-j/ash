@@ -20,12 +20,24 @@ import org.objectweb.asm.tree.MethodNode;
  * to every injector's handler. One with no caller is an injector that did not
  * land, and its feature is degraded.
  *
- * <p>Mixin renames a handler as it merges it, keeping the original name as the
- * end of the new one: {@code ash$readToggleKey} becomes
- * {@code handler$zza000$ash$readToggleKey}. So a call counts if the called
- * name is the handler's, or ends in {@code $} and the handler's.
+ * <p>Mixin renames a handler as it merges it, and the rule is Fabric's
+ * {@code MethodMapper.getHandlerName}: strip a leading {@code ash$} or
+ * {@code ash_} from the handler's name, then write
+ * {@code <prefix>$<unique id>$ash$<what is left>}. So {@code ash$readToggleKey}
+ * and {@code ash_readToggleKey} both become
+ * {@code handler$zza000$ash$readToggleKey}, and a call counts if the called
+ * name ends in {@code $ash$} and the handler's name with its prefix gone.
+ *
+ * <p>Necessary, not sufficient. A handler called from somewhere in the class
+ * proves the injection matched something, not that it matched the call the
+ * feature needs - if the sprint read moved, a wrap on every {@code isDown()}
+ * would still land on the other six. The real-game tests are what catch that;
+ * this catches the silence.
  */
 public final class InjectorWiring {
+
+    /** The mod id Fabric's Mixin writes into every handler it merges for ash. */
+    private static final String MOD = "ash";
 
     /** Where the annotations that make a method an injector live. */
     private static final String[] INJECTOR_PACKAGES = {
@@ -71,7 +83,7 @@ public final class InjectorWiring {
     }
 
     private static boolean called(ClassNode target, String handler) {
-        String renamed = "$" + handler;
+        String renamed = "$" + MOD + "$" + withoutModPrefix(handler);
         for (MethodNode method : target.methods) {
             for (AbstractInsnNode instruction : method.instructions) {
                 if (instruction instanceof MethodInsnNode) {
@@ -83,5 +95,12 @@ public final class InjectorWiring {
             }
         }
         return false;
+    }
+
+    /** What {@code MethodMapper.getHandlerName} keeps of a handler's own name. */
+    private static String withoutModPrefix(String handler) {
+        boolean prefixed = handler.startsWith(MOD) && handler.length() > MOD.length() + 1
+                && (handler.charAt(MOD.length()) == '$' || handler.charAt(MOD.length()) == '_');
+        return prefixed ? handler.substring(MOD.length() + 1) : handler;
     }
 }

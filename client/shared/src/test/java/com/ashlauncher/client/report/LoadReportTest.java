@@ -32,8 +32,8 @@ class LoadReportTest {
     @Test
     void it_writes_exactly_what_the_launcher_reads() throws IOException {
         new LoadReport("0.1.0")
-                .with(Feature.FPS_READOUT, FeatureState.LOADED)
-                .with(Feature.TOGGLE_SPRINT, FeatureState.DEGRADED)
+                .with(Feature.FPS_READOUT, FeatureStatus.LOADED)
+                .with(Feature.TOGGLE_SPRINT, FeatureStatus.DEGRADED)
                 .writeTo(gameDir);
 
         String written = Files.readString(gameDir.resolve("ash").resolve("load-report.json"));
@@ -44,7 +44,7 @@ class LoadReportTest {
     void a_value_with_a_quote_in_it_is_still_json_the_launcher_can_read() throws IOException {
         // The client version comes from the build, not from this class, and a
         // local build can call itself anything.
-        new LoadReport("0.1.0+\"local\"\\build").with(Feature.FPS_READOUT, FeatureState.LOADED).writeTo(gameDir);
+        new LoadReport("0.1.0+\"local\"\\build").with(Feature.FPS_READOUT, FeatureStatus.LOADED).writeTo(gameDir);
 
         String written = Files.readString(gameDir.resolve("ash").resolve("load-report.json"));
         assertTrue(written.contains("\"client\": \"0.1.0+\\\"local\\\"\\\\build\""), written);
@@ -54,8 +54,8 @@ class LoadReportTest {
     void each_session_replaces_the_last_one_s_report() throws IOException {
         // Which is what clears the launcher's notice once a feature loads
         // again: the notice is read from the last report, and nothing else.
-        new LoadReport("0.1.0").with(Feature.TOGGLE_SPRINT, FeatureState.DEGRADED).writeTo(gameDir);
-        new LoadReport("0.1.1").with(Feature.TOGGLE_SPRINT, FeatureState.LOADED).writeTo(gameDir);
+        new LoadReport("0.1.0").with(Feature.TOGGLE_SPRINT, FeatureStatus.DEGRADED).writeTo(gameDir);
+        new LoadReport("0.1.1").with(Feature.TOGGLE_SPRINT, FeatureStatus.LOADED).writeTo(gameDir);
 
         String written = Files.readString(gameDir.resolve("ash").resolve("load-report.json"));
         assertTrue(written.contains("\"status\": \"loaded\""), written);

@@ -33,13 +33,13 @@ public final class LoadReport {
     public static final String RELATIVE_PATH = "ash/load-report.json";
 
     private final String clientVersion;
-    private final Map<Feature, FeatureState> states = new EnumMap<>(Feature.class);
+    private final Map<Feature, FeatureStatus> states = new EnumMap<>(Feature.class);
 
     public LoadReport(String clientVersion) {
         this.clientVersion = clientVersion;
     }
 
-    public LoadReport with(Feature feature, FeatureState state) {
+    public LoadReport with(Feature feature, FeatureStatus state) {
         states.put(feature, state);
         return this;
     }
@@ -47,8 +47,8 @@ public final class LoadReport {
     /** The features that did not load, in the order they are reported. */
     public List<Feature> degraded() {
         List<Feature> degraded = new ArrayList<>();
-        for (Map.Entry<Feature, FeatureState> entry : states.entrySet()) {
-            if (entry.getValue() == FeatureState.DEGRADED) {
+        for (Map.Entry<Feature, FeatureStatus> entry : states.entrySet()) {
+            if (entry.getValue() == FeatureStatus.DEGRADED) {
                 degraded.add(entry.getKey());
             }
         }
@@ -78,7 +78,7 @@ public final class LoadReport {
         json.append("  \"client\": ").append(quoted(clientVersion)).append(",\n");
         json.append("  \"features\": [\n");
         int written = 0;
-        for (Map.Entry<Feature, FeatureState> entry : states.entrySet()) {
+        for (Map.Entry<Feature, FeatureStatus> entry : states.entrySet()) {
             json.append("    { \"id\": ").append(quoted(entry.getKey().id()))
                     .append(", \"name\": ").append(quoted(entry.getKey().displayName()))
                     .append(", \"status\": ").append(quoted(entry.getValue().word()))
