@@ -168,3 +168,5 @@ A good test here states a player-visible fact and would fail if that fact stoppe
 ## Tracker
 
 Filed as [#15](https://github.com/sisi-j/ash/issues/15), labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`. This file is the source of truth; the issue is the tracker entry. Keep them in step if either changes.
+
+Closed 2026-09-29, when manual acceptance passed on a real Windows machine on both version targets. Phase 3 is [#30](https://github.com/sisi-j/ash/issues/30), specified in `docs/specs/0003-phase-3-the-full-client.md`.
