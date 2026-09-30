@@ -22,14 +22,17 @@ Phase 3 covers four areas.
 - a **hit indicator**;
 - a **ping readout**;
 - **hit colour**;
-- **freelook**, if it passes the research below.
+- **freelook**, ~~if it passes the research below~~ switched off by ash on servers whose published rules ban it;
+- **snaplook**, a key that jumps straight to the game's own front-facing view while it is held.
+
+(*Amended 2026-09-30, after `docs/research/0006`, by the product owner's decision*: freelook ships with a per-server block rather than being cut, and snaplook is added.)
 
 Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrades on its own without costing the player their session (ADR-0017).
 
 **A settings screen in the game.** A key opens it, Right Shift by default and rebindable. Every feature is switched and set up there. Changes show at once and are saved as they are made. Readouts can be dragged where the player wants them, and put back where they started.
 
 **A faster game:**
-- Lithium ships as a bundled mod on 1.21.11.
+- Lithium ~~ships as a bundled mod on 1.21.11~~ is measured on 1.21.11, and ships as a bundled mod only if it makes the game measurably faster. (*Amended 2026-09-30, after `docs/research/0006`*: Lithium's own documentation credits its frame-rate gains to singleplayer's built-in server, not to play on a server.)
 - A player can opt an instance in to loading **third-party mods** they supply themselves, so that Sodium is one file away.
 - On 1.8.9, ash ships optimisations of its own. Each is chosen by measuring where the frame time goes on real hardware, and each ships only with a before and after from that measurement.
 
@@ -43,7 +46,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 2. As a player, I want to choose the crosshair's shape from a short list, so that I get a good crosshair without drawing one pixel by pixel.
 3. As a player, I want to set the crosshair's size, thickness, gap and colour, including how transparent it is, so that it suits my eyes and my screen.
 4. As a player, I want an outline option, so that a light crosshair stays visible against snow and sky.
-5. As a player, I want the crosshair to hide wherever the game's own crosshair hides, such as in third person or with the HUD hidden, so that it never floats where it should not.
+5. As a player, I want the crosshair to hide wherever the game's own crosshair hides, ~~such as in third person or with the HUD hidden~~ by the rules of the version I am playing, so that it never floats where it should not. (*Corrected 2026-09-29 by `docs/research/0004`*: 1.8.9's own crosshair shows in third person, and only 1.21.11's hides there.)
 6. As a player on 1.21.11, I want the attack cooldown indicator to keep working with ash's crosshair, so that I do not trade timing information for a nicer shape.
 7. As a player, I want the crosshair to look identical on 1.8.9 and 1.21.11 with the same settings, so that my aim does not change when I switch version targets.
 8. As a player, I want to see only one crosshair, never the game's and ash's on top of each other, so that I always know which one to aim with.
@@ -52,14 +55,14 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 ### Hit indicator
 
 10. As a player, I want a clear mark at my crosshair when my attack lands, so that I know my hit counted without watching the target.
-11. As a player, I want the mark to mean the server registered the hit, not that I clicked, so that it never tells me I hit when I missed.
+11. As a player, I want the mark to mean the server registered the hit, not that I clicked, so that it never tells me I hit when I missed. (*Qualified 2026-09-29 by `docs/research/0004`*: on 1.8.9 the server's "this entity was hurt" message names no attacker. So the mark means "an entity you just attacked was hurt", and someone else's hit on the same entity in the same instant can light it.)
 12. As a player, I want to choose the mark's colour and how long it shows, so that it is noticeable without being distracting.
 13. As a player, I want the hit indicator never to show damage numbers or anyone's health, so that no server has cause to call it an advantage.
 
 ### Ping readout
 
 14. As a player, I want my ping to the server on screen, so that I can tell lag from my own mistakes.
-15. As a player, I want the ping readout to show the number the server reports, the same one the tab list shows, so that the two never disagree.
+15. As a player, I want the ping readout to show the number the server reports, ~~the same one the tab list shows~~ the number behind the tab list's signal bars, so that the two never disagree. (*Corrected 2026-09-29 by `docs/research/0004`*: the tab list shows bars and never a number. A vanilla server refreshes the value about every 30 seconds, as a smoothed average, so the readout moves about twice a minute and not with each lag spike.)
 16. As a player in singleplayer, I want the ping readout to stay out of the way, so that I am not shown a number that means nothing.
 17. As a player, I want the ping and FPS readouts to sit together without overlapping, so that both stay readable.
 
@@ -73,7 +76,15 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 
 21. As a player, I want to hold a key and look around without turning my player, so that I can look behind me while running forward.
 22. As a player, I want the camera to return where it was when I let go, so that I never lose my heading.
-23. As a player, I want freelook to be offered only if the servers I play on allow it, so that I am never banned for a feature ash chose to ship.
+23. As a player, I want freelook ~~to be offered only if the servers I play on allow it~~ switched off by ash on servers whose rules ban it, so that I am never banned for a feature ash chose to ship.
+69. As a player on a server where freelook is switched off, I want to be told so when I press its key, so that I do not think the feature is broken.
+
+### Snaplook
+
+*Stories 69 to 71 were added on 2026-09-30, after the list was written. They are numbered after it so that references to 1–68 elsewhere stay true.*
+
+70. As a player, I want to hold a key and see myself from the front, the way the game's own third-person front view shows me, so that I can check behind me in one press instead of cycling F5 twice.
+71. As a player, I want the view to return to first person when I let go, so that I never end up stuck in the wrong view mid-fight.
 
 ### Setting features up in game
 
@@ -98,7 +109,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 
 ### Performance
 
-39. As a player on 1.21.11, I want Lithium included, so that the game runs faster without my doing anything.
+39. As a player on 1.21.11, I want Lithium included ~~, so that the game runs faster without my doing anything~~ if, and only if, it makes the game measurably faster, so that ash ships nothing it cannot show earns its place. (*Amended 2026-09-30, after `docs/research/0006`.*)
 40. As a player, I want Lithium fetched, verified and shared through the depot like every other file, so that it is as trustworthy as the game itself.
 41. As a player on 1.8.9, I want ash's own optimisations, so that the version most PvP is played on runs faster too.
 42. As a player, I want each optimisation to change only how fast the game draws, never what I or the server can see, so that no optimisation gives an advantage.
@@ -157,18 +168,48 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 ### The features
 
 - **Crosshair.** ash draws its own and suppresses the game's, so the player never sees two.
-  - On 1.21.11 the element registry can replace the game's crosshair element. Whether the attack-cooldown indicator is drawn inside that element, and would go with it, is unverified.
-  - On 1.8.9 the HUD callback is additive only, so suppressing the game's crosshair needs a mixin.
-  - A degraded crosshair leaves the game's crosshair in place: never none, never two. Suppression and drawing are therefore one feature that degrades as a unit.
-  - Visibility follows the game's own rules for its crosshair on each target.
-- **Hit indicator.** Fires on the server's confirmation that an entity the player attacked was hurt, never on the click. It reads only what the client already receives, and never shows an amount of damage or anyone's health. Showing health is information the game does not give, and it fails ADR-0006.
-- **Ping readout.** The latency the server reports for the player in the tab list, on both targets. It is hidden in singleplayer. It shares the readouts' layout with the FPS readout.
-- **Hit colour.** Changes the tint and strength of the hurt flash on entities. It is rendering only. Both targets need a mixin, and the hook is unverified on both.
-- **Freelook.** Ships only if two things hold:
-  - research shows it passes ADR-0006's test, "would a fair player be disadvantaged by not having it?";
-  - no major PvP server prohibits it.
+  - ~~On 1.21.11 the element registry can replace the game's crosshair element. Whether the attack-cooldown indicator is drawn inside that element, and would go with it, is unverified.~~ **On 1.21.11 it is a mixin inside the game's crosshair drawing, not a replacement of the element.** It wraps the one draw call that places the crosshair sprite and draws ash's shape there instead.
+    - The cooldown indicator is drawn in the same method straight after the crosshair, and replacing the element through Fabric's registry would lose it.
+    - A replacement would also keep only the HUD-hidden rule, because third person, spectator and the debug screen's 3D crosshair are all checked inside that method.
+    - Wrapping the one call keeps every rule and the indicator.
+    - *Corrected 2026-09-29 by `docs/research/0004`.*
+  - On 1.8.9 the HUD callback is additive only, so suppressing the game's crosshair needs a mixin: the same wrap, around the one call in the HUD's render that draws the crosshair. 1.8.9 has no cooldown indicator.
+  - So the crosshair is a mixin on both targets. That is what makes its degradation clean: a wrap that does not land leaves the game's own crosshair drawing, never none and never two. Suppression and drawing are one feature that degrades as a unit.
+  - Visibility follows each target's own rules for its crosshair. ash inherits them by wrapping the draw, not by restating them. So in third person the crosshair shows on 1.8.9 and hides on 1.21.11, as each game's own does. That is a deliberate exception to Phase 2's "consistent across targets" rule: a replacement belongs where the thing it replaces would have been.
+- **Hit indicator.** Fires on the server's confirmation that an entity the player attacked was hurt, never on the click. It reads only what the client already receives, and never shows an amount of damage or anyone's health. Showing health is information the game does not give, and it fails ADR-0006. *Settled 2026-09-29 by `docs/research/0004`:*
+  - **On 1.21.11 it is exact.** The damage-event packet names the attacker's entity id, so the indicator fires when that id is the local player's. The hook is inside the packet handler at its hand-off to the entity, because the handler runs twice per packet.
+  - **On 1.8.9 it is a match.** The hurt status names no attacker, so it is matched by entity id and a short time window to the player's own recent attack. Legacy Fabric API has no attack event, so recording the attack is a mixin too.
+  - Traps the ticket must avoid, all from the bytecode:
+    - on 1.21.11, entity event 2 is not "hurt";
+    - the hurt-animation packet goes only to the player who was hurt, about themselves;
+    - on both targets the client's own attack path reports success on the click against a player;
+    - Fabric's attack callback also fires on the integrated server.
+- **Ping readout.** The latency the server reports for the local player's tab-list entry, on both targets. A vanilla server refreshes it about every 30 seconds. ash shows that value and never measures latency itself: measuring would mean sending the server something vanilla does not. It shares the readouts' layout with the FPS readout.
+  - It is hidden in singleplayer.
+  - On 1.21.11 the test for that is whether the client is hosting the world. The game's own "is singleplayer" turns false once a world is opened to LAN (`docs/research/0004`).
+- **Hit colour.** Changes the tint and strength of the hurt flash on entities. It is rendering only, and armour never flashes on either target. *Settled 2026-09-29 by `docs/research/0004`:*
+  - On 1.21.11 the colour is baked into the game's small overlay texture, which every entity's flash samples. Changing it means rewriting those pixels and re-uploading, through an accessor mixin. The change is global and can be made live.
+  - On 1.8.9 it is four constants in the living-entity renderer, rewritten per draw by a mixin. That can also be made live.
+- **Freelook.** ~~Ships only if two things hold: research shows it passes ADR-0006's test, and no major PvP server prohibits it. If research confirms a ban, freelook is cut.~~ **Ships, switched off by ash on servers whose published rules ban it.** (*Amended 2026-09-30.*)
+  - Research 0006 confirmed the bans. Hypixel bans freelook in writing as *"a significant unfair advantage"*, and says the player is responsible for what their client does. MCC Island and Hoplite ban it by name. CubeCraft, PikaNetwork and PvPHQ list it, or an equivalent, as allowed.
+  - The product owner chose to ship it with a per-server block rather than cut it. ADR-0006 is amended to record that, and how it answers ADR-0006's test.
+  - **The block list ships inside the client:** Hypixel, MCC Island and Hoplite, each with the rules page that bans it.
+    - A server is matched by the address the player connected with, including its subdomains, and by the server's own name for itself where it gives one.
+    - On a listed server, freelook's key does nothing but say that freelook is off on this server and why. The settings screen shows freelook as unavailable there.
+    - Everywhere else it works as normal.
+  - **The residual risk is accepted, not solved.**
+    - A server that bans freelook but is not on the list, or a listed server reached by an address the match misses, is a ban for the player.
+    - The list changes only with an ash release until Phase 4's backend can serve it.
+    - The list is kept short and sourced so that it can be kept true.
+  - Freelook never changes what the server receives. The player's own rotation, which movement packets carry, is left untouched. A leak of the camera's rotation into movement would be a bug that fails ADR-0006.
 
-  At least one major server is reported to forbid freelook. If research confirms that, freelook is cut from the phase and ADR-0006 is amended to say so. It is not shipped behind a switch that a player could leave on where it is banned: a single banned feature gets the whole client blocked (ADR-0006).
+  1.8.9 costs more than 1.21.11 (`docs/research/0004`).
+  - On 1.21.11 the camera takes its rotation in one place, and the mouse reaches the player in one place.
+  - On 1.8.9 the camera reads the player's rotation directly, and so do terrain visibility and particle facing. A camera-only freelook there would turn the view without re-checking which chunks are visible.
+- **Snaplook.** Holding its key switches the game to its own front-facing third-person view, and letting go restores the view the player had. (*Added 2026-09-30.*)
+  - It uses the game's own camera modes and shows nothing F5 cannot, which is where the servers that draw a line draw it. MCC Island allows mods that skip between F5's modes by name (`docs/research/0006`).
+  - It needs no server block.
+  - Where each target keeps its camera mode is unverified (Further Notes, item 8).
 
 ### The settings model and the settings screen
 
@@ -187,14 +228,32 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 - **Changes apply at once and are saved as they are made.** Nothing waits for the screen to close.
 - **Each target draws the screen with its own vanilla widgets, thinly.** Layout and behaviour are the same on both targets, and the widgets look like each target's own. The decisions sit in the shared module: which options exist, their order, their bounds, what "reset" restores, and when an option is unavailable.
 - **The screen opens on a key binding, Right Shift by default**, registered like toggle sprint's and rebindable in Controls. A button on the title or pause screen is out of scope. The launcher names the key once, where a new player will see it.
+  - Right Shift is unbound by default on both targets.
+  - A key binding receives no presses while a screen is open, so the screen recognises its own key to close.
+  - *Settled 2026-09-29 by `docs/research/0005`.*
+- **The building blocks, per target** (*settled 2026-09-29 by `docs/research/0005`*):
+  - **1.21.11** has every widget the option kinds need: a cycling button, a checkbox, a slider, a text box and a scrolling list of rows. The key is polled on Fabric API's client tick event, which is already inside the Fabric API ash ships, so there are no new modules.
+    - The game's own options list is not used, because it rewrites the game's `options.txt` every time the screen closes.
+  - **1.8.9** has a slider, which works in fractions and is made whole-number by the shared module. It has a text box and a scrolling list like its Controls screen. It has no cycling button and no checkbox; the game's own screens use a plain button whose label changes, and so does ash.
+    - The key is polled from **ash's own small hook on the client tick**, not from Legacy Fabric's lifecycle-events module. That module would mean two more jars pinned and mirrored, and its code is required, so if it failed to apply the whole game would stop. ash's own hook degrades only the settings key.
+- **Colour options never go below the smallest opacity both targets draw the same way.** At near-zero opacity, 1.8.9 draws text fully opaque and 1.21.11 draws nothing (`HudSurface` records the same fault). The settings model clamps the value, so the same setting never looks opposite on the two targets.
 - **A feature that degraded is shown as unavailable** on the screen, with the same wording the launcher's notice uses. It is never a live switch.
 - **Readout positions are an anchor plus an offset.** The anchor is the nearest corner or edge, and the offset is in GUI units. That keeps a placed readout in place across resolution, window size and GUI-scale changes, and makes clamping on screen a pure calculation. Dragging is the only per-target part.
 
 ### Performance
 
-- **Lithium is a bundled mod on 1.21.11.** It is pinned, verified, stored in the depot and shipped the way Fabric API is.
-  - It is LGPL-3.0-only (ADR-0013), so its licence text and a written offer for its source ship with ash (ADR-0004).
-  - No ash mixin targets a Lithium class (ADR-0004).
+- **Lithium is ~~a bundled mod~~ measured on 1.21.11 first, and bundled only on a measured gain** (*amended 2026-09-30, after `docs/research/0006`*).
+  - Its own documentation credits its frame-rate gains to singleplayer's built-in server. It makes no claim for play on a server, and it sends players to Sodium for rendering.
+  - With a default config, its client-only mixins are four pieces of chunk and entity bookkeeping.
+  - So its ticket measures frame time with and without it, both in singleplayer and on a server, using the frame-time measurement. It bundles Lithium only if that shows a gain, the same rule the 1.8.9 optimisations follow. If it shows none, ADR-0013's "Lithium stays" is amended.
+  - If it ships, it is pinned, verified, stored in the depot and shipped the way Fabric API is.
+    - The candidate pin is `0.21.4+mc1.21.11`. It needs no Fabric API, accepts both loader pins, and was verified against Modrinth on 2026-09-30. Its branch has unreleased fixes, so the ticket re-queries Modrinth first.
+  - It is LGPL-3.0-only (ADR-0013, confirmed from the shipped jar). ~~so its licence text and a written offer for its source ship with ash (ADR-0004)~~ If ash ships it:
+    - the LGPL text **and the GPL text** ship with it, because the jar carries only the LGPL;
+    - ash gives clear directions to its source next to where it is offered (GPL-3.0 §6(d)). The "written offer" is for physical products.
+
+    *Corrected 2026-09-30 by `docs/research/0006`.*
+  - No ash mixin targets a Lithium class (ADR-0004). Its mixins are required, so an ash mixin that disturbed one of its methods would crash the game, not degrade. None of Phase 3's hooks is in its path. `Entity` and `LivingEntity` are the adjacent classes a later ticket must check.
   - Whether ash mirrors it is decided the way Legacy Fabric's mirroring was, in the mirror document.
 - **Optimisations on 1.8.9 are ash's own, and measured first.** Before any optimisation is written, the frame-time measurement profiles a fixed scene on real hardware to find where the time goes.
   - An optimisation ships only with a before and after from that measurement, recorded in its pull request.
@@ -210,8 +269,17 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
   - The instance's `mods` folder is where players expect to put mods, so it becomes the player's.
   - ash hands its client and its bundled mods to the loader from outside that folder.
   - With the setting off, the loader loads nothing from it.
-  - How to do both on both loaders is unverified: Fabric Loader has a documented way to add mod locations, and whether the pinned loader versions honour it, and how to stop the mods folder being read, must be confirmed first.
-  - Instances prepared in Phase 2 have ash's jars in that folder. Preparing them removes only the files ash itself put there, by name.
+  - ~~How to do both on both loaders is unverified: Fabric Loader has a documented way to add mod locations, and whether the pinned loader versions honour it, and how to stop the mods folder being read, must be confirmed first.~~ *Settled 2026-09-29 by `docs/research/0005`, run against the real launch on both targets.*
+    - ash's client and bundled mods always go to the loader by path, with `fabric.addMods`.
+    - The mods folder cannot be switched off, only moved. So "off" sets `fabric.modsFolder` to an empty directory ash owns, and "on" leaves it unset.
+    - Both properties are added where the launch sets memory, not in the loader pin's arguments. On 1.8.9, any JVM argument in the pin switches off the fallback that supplies the classpath, and the game does not start.
+    - A missing `addMods` path is only a warning to the loader. ash therefore checks that every one of its own jars exists before each launch, as it already does for the client.
+  - Instances prepared in Phase 2 have ash's jars in that folder. Preparing them removes only the files ash itself put there, ~~by name~~ by exact file name and pinned hash.
+  - **Phase 2's preparation already breaks this rule, and the fix belongs in this area's first ticket.** It removes any jar whose name starts with a bundled mod's artifact name. That includes a player's own download of the same mod, such as Modrinth's `legacy-fabric-api-1.20.1.jar`. Its comments also say the loader refuses to start when two files claim one mod id, and the research shows it does not (below).
+- **Two copies of one mod are neither a crash nor a warning.** The loader silently keeps the newest version that works, from wherever it came.
+  - So with third-party mods on, a player's newer Fabric API, or a newer Legacy Fabric API module, quietly replaces the one ash pinned and tested.
+  - The reverse happens too: a player's copy whose own dependencies are missing is quietly dropped for ash's.
+  - The load report therefore records which copy of each bundled mod actually loaded, ash's or the player's, which the client can read from the loader. A notice after a session where the player's copy replaced ash's says so.
 - **The launcher never deletes, moves, renames, vets or updates a third-party mod.** It opens the folder for the player, and that is all.
 - **A crash with third-party mods on names them as the likely cause** and offers to launch without them.
 - **The load report records whether third-party mods were loaded**, so the degradation notice can say that one of the player's mods may be the cause instead of claiming the fault is ash's. This amends ADR-0017, and the amendment is recorded as an ADR in the ticket that makes it.
@@ -220,6 +288,10 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 ### The launcher's look
 
 - **Sora 500, Inter 400 and 500, and JetBrains Mono 500 are bundled** as local font files, allowed by the app's content security policy, with their licences shipped alongside. No font is ever fetched at runtime.
+  - *Settled 2026-09-30 by `docs/research/0006`:* all three are under the SIL Open Font Licence 1.1, and none declares a Reserved Font Name.
+  - The official woff2 files ship unmodified, about 380 KB in all. Subsetting is allowed but would make a modified version, and it saves too little to be worth that.
+  - Sora publishes no static Medium, so its official variable font supplies the 500 weight. Sora has no releases, so it is pinned by commit.
+  - JetBrains Mono is taken from its v2.304 release, not from its repository head, which is ahead of the release.
 - **The brief's layout:**
   - the instance switcher down the left;
   - the selected instance's details (version target, loader, last played) and Play in the centre;
@@ -238,6 +310,8 @@ A good test states a player-visible fact and fails if that fact stops being true
 - the hit indicator's timing, and its refusal to fire on a click with no confirmation;
 - the ping readout's formatting and its absence in singleplayer;
 - freelook's camera state across hold, release and a screen opening mid-hold;
+- the freelook block list: a listed server's addresses and subdomains match, a look-alike domain does not, and a blocked press says why;
+- snaplook's hold-and-restore of the view the player had;
 - the settings model: every option round-trips through the file; an in-game change preserves comments, ordering and unknown keys; out-of-range and malformed values fall back without throwing;
 - readout anchoring across resolution and GUI-scale changes, and clamping on screen.
 
@@ -249,7 +323,7 @@ A good test states a player-visible fact and fails if that fact stops being true
 - 1.8.9's tier stays weaker than 1.21.11's (Phase 2, #22). A ticket that assumes the two targets have the same tier will be wrong about the weaker one.
 
 **Launcher.** Every new test drives `Ash` with the existing fakes. Prior art is the loader tests for pins, depot and preparation, and the instance tests for instance settings. What needs covering:
-- Lithium is planned, verified, resumed and shared through the depot, and a corrupt copy fails as a game file does;
+- if Lithium ships, it is planned, verified, resumed and shared through the depot, and a corrupt copy fails as a game file does;
 - third-party mods are off by default;
 - a player's file in the mods folder survives preparing, updating and deleting other instances;
 - the loader is told to load a player's mods only when the setting is on;
@@ -268,6 +342,7 @@ A good test states a player-visible fact and fails if that fact stops being true
 - each feature is changed through the settings screen and the change survives a restart;
 - a readout is moved and survives a resolution change;
 - Sodium is added as a third-party mod on 1.21.11 and the game is playable with ash's features working;
+- freelook is refused on Hypixel with its reason shown, and works on a server that allows it;
 - a 1.8.9 optimisation shows its measured gain;
 - the launcher is seen in its own typefaces.
 
@@ -282,7 +357,8 @@ No fixture substitutes for this.
 - Finding, downloading, vetting or updating third-party mods for the player.
 - Version targets other than 1.8.9 and 1.21.11 (ADR-0005).
 - Features outside the brief's list, such as keystrokes, clicks per second, armour and potion status, or coordinates.
-- A protocol for servers to switch ash's features off.
+- A protocol for servers to switch ash's features off. Freelook's block list is ash's own, shipped in the client.
+- Updating freelook's block list between ash releases. Phase 4's backend could serve it.
 - A button for ash's settings on the title or pause screen.
 - Shaders.
 - Self-update of the launcher or the client.
@@ -290,22 +366,39 @@ No fixture substitutes for this.
 
 ## Further Notes
 
-- **Seven things are unverified and must not be assumed while ticketing.** Phase 2 had three, and research settled each before its ticket needed it. Settling these is the next step after this spec.
-  1. **The game-side hooks for each feature on each target.** These are the crosshair and whether the 1.21.11 cooldown indicator goes with it, the packet or event that confirms a hit, the ping in the tab list, the hurt tint, and the camera for freelook. They need a decompiled-source pass like toggle sprint's.
-  2. **Freelook's standing with major PvP servers.** This decides whether it ships.
-  3. **Lithium for 1.21.11:** the version to pin, where it is published and with what hash, its licence as shipped, and whether any of its mixins touch what ash's do.
-  4. **How to load a player's mods and ash's own separately** on the pinned Fabric Loader, for both version targets.
+- **~~Seven~~ Eight things are unverified and must not be assumed while ticketing.** (*Item 8 added 2026-09-30.*) Phase 2 had three, and research settled each before its ticket needed it. Settling these is the next step after this spec.
+  1. ~~**The game-side hooks for each feature on each target.** These are the crosshair and whether the 1.21.11 cooldown indicator goes with it, the packet or event that confirms a hit, the ping in the tab list, the hurt tint, and the camera for freelook. They need a decompiled-source pass like toggle sprint's.~~ *Answered 2026-09-29 in `docs/research/0004-vanilla-hooks-for-phase-3-features.md`, read from this build's mapped jars.* Three findings changed the decisions above:
+     - the cooldown indicator is inside the crosshair method, so the crosshair is a mixin on both targets;
+     - the hit indicator is exact on 1.21.11 and a match on 1.8.9;
+     - the tab list shows bars, refreshed about every 30 seconds.
+
+     Still unchecked: whether Sodium touches the same targets. The Sodium run of the 1.21.11 real-game test is what will answer that.
+  2. ~~**Freelook's standing with major PvP servers.** This decides whether it ships.~~ *Answered 2026-09-30 in `docs/research/0006-freelook-lithium-and-launcher-typefaces.md`:* Hypixel, MCC Island and Hoplite ban it in their published rules. CubeCraft, PikaNetwork and PvPHQ allow it or an equivalent. It ships with a per-server block (see *The features*).
+
+     The same research found that Hypixel's page lists "auto-sprint" as disallowed automation without defining it. ADR-0006 now records why toggle sprint is not that.
+  3. ~~**Lithium for 1.21.11:** the version to pin, where it is published and with what hash, its licence as shipped, and whether any of its mixins touch what ash's do.~~ *Answered 2026-09-30 in `docs/research/0006`:* the pin, licence and mixin overlap are recorded above. Its frame-rate benefit is in singleplayer only, which is why it is now measured before it is bundled.
+  4. ~~**How to load a player's mods and ash's own separately** on the pinned Fabric Loader, for both version targets.~~ *Answered 2026-09-29 in `docs/research/0005-loading-third-party-mods-and-settings-screen-widgets.md`, by running the real launch on both targets.* The mechanism is `fabric.addMods` plus `fabric.modsFolder`.
+
+     The pins are not one loader: 1.21.11 pins Fabric Loader 0.19.5 and 1.8.9 pins 0.19.3. Their mod-discovery code is identical.
+
+     The research also overturned the belief that duplicate mods stop the game, and found Phase 2's preparation deleting by prefix. Both are in the decisions above.
   5. **Where 1.8.9's frame time goes.** This is measured, not guessed, and it decides which optimisations exist.
-  6. **Which widgets each target offers for the settings screen**, such as sliders and text fields, and whether 1.8.9 needs further Legacy Fabric API modules. Each module would be pinned, mirrored and shipped as toggle sprint's was.
-  7. **The typefaces' licences.** All three are expected to be under the SIL Open Font Licence. That needs confirming from each project's own repository.
+  6. ~~**Which widgets each target offers for the settings screen**, such as sliders and text fields, and whether 1.8.9 needs further Legacy Fabric API modules. Each module would be pinned, mirrored and shipped as toggle sprint's was.~~ *Answered 2026-09-29 in `docs/research/0005`, from the mapped jars.* Both targets have what the option kinds need. 1.8.9 lacks a cycling button and a checkbox, and uses a button whose label changes instead. No new Legacy Fabric module is needed, because ash hooks the client tick itself.
+  7. ~~**The typefaces' licences.** All three are expected to be under the SIL Open Font Licence. That needs confirming from each project's own repository.~~ *Answered 2026-09-30 in `docs/research/0006`:* all three are OFL 1.1, with no Reserved Font Name. Sora supplies 500 only as a variable font.
+  8. **Where freelook's block list and snaplook meet the game.** This means:
+     - the address the player connected with, and the server's own name for itself, on each target;
+     - whether the name each listed server gives identifies it reliably;
+     - where each target keeps its camera mode.
+
+     It needs a pass through the mapped jars like research 0004's, and a check against the listed servers themselves.
 - **Order.**
   - The settings model comes first, because every feature after it declares its options through it.
-  - Lithium is early, because it is small and changes the environment every later test runs in.
+  - Lithium ~~is early, because it is small and changes the environment every later test runs in~~ follows the frame-time measurement, since it ships only on a measured gain.
   - The features can then proceed in parallel.
   - The 1.8.9 optimisations start with the measurement and nothing else.
   - The launcher's look is independent of everything else and can go at any time.
 - **This phase is bigger than Phase 2.** It has four areas, where Phase 2 had one. If it needs splitting, the launcher's look and the 1.8.9 optimisations split off cleanly, since neither blocks nor is blocked by the features.
-- **Freelook is the likeliest feature to be cut, and cutting it is a success.** ADR-0006 exists so that ash never ships the feature that gets it banned.
+- ~~**Freelook is the likeliest feature to be cut, and cutting it is a success.**~~ **Freelook is the feature most likely to cost a player a ban**, which is why its block list is sourced and tested, and why missing a server is the accepted risk named in ADR-0006. ADR-0006 exists so that ash never ships the feature that gets it banned; for freelook it now does that server by server.
 - **Windows-only runtime failures still have no CI signal** (ADR-0016). Manual acceptance remains the only gate on them, and the settings screen and the third-party mod path are new places for them to hide.
 - Per the project brief, this phase does not begin until Phase 2 works end to end. It does: manual acceptance passed on 2026-09-29 and #15 is closed.
 
