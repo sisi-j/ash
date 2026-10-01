@@ -1,5 +1,8 @@
 package com.ashlauncher.client.v1_8_9;
 
+import com.ashlauncher.client.crosshair.Cross;
+import com.ashlauncher.client.crosshair.Crosshair;
+import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
@@ -17,6 +20,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.legacyfabric.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.legacyfabric.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
@@ -45,6 +49,8 @@ public final class AshClient implements ClientModInitializer {
     private static final String TOGGLE_SPRINT_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerEntityMixin";
 
     private static final String SETTINGS_KEY_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientMixin";
+
+    private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
     /**
      * The FPS readout this session draws, so the real-game test can ask it -
@@ -78,6 +84,16 @@ public final class AshClient implements ClientModInitializer {
                 why -> LOG.warn(MixinFeature.didNotLoad(Feature.TOGGLE_SPRINT.displayName(), why)));
         if (!toggleSprintLanded) {
             landed.remove(Feature.TOGGLE_SPRINT);
+        }
+
+        // ash's crosshair, drawn from inside the game's own crosshair drawing
+        // so that every rule the game has about when to show one still holds.
+        boolean crosshairLanded = MixinFeature.landed(() -> InGameHud.class, CROSSHAIR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.CROSSHAIR.displayName(), why)));
+        if (crosshairLanded) {
+            CrosshairHook.install(new Crosshair(() -> settings.get(Settings.CROSSHAIR), Cross.DEFAULT));
+        } else {
+            landed.remove(Feature.CROSSHAIR);
         }
 
         // R, in the game's own Movement category beside Sprint - free by

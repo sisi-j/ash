@@ -18,6 +18,21 @@ class SettingsTest {
     @TempDir
     Path configDir;
 
+    /**
+     * {@code file} with every declared setting it does not mention added at
+     * the end, at its default - so a test about a complete file stays about
+     * a complete file when the next feature declares a setting.
+     */
+    private static String complete(String file) {
+        StringBuilder whole = new StringBuilder(file);
+        for (OnOff setting : Settings.declared()) {
+            if (!file.contains(setting.key())) {
+                whole.append(setting.key()).append('=').append(setting.fallback()).append('\n');
+            }
+        }
+        return whole.toString();
+    }
+
     @Test
     void a_first_run_gets_the_defaults_and_a_file_to_edit() throws IOException {
         Settings settings = Settings.load(configDir);
@@ -48,7 +63,7 @@ class SettingsTest {
         Path file = configDir.resolve("ash.properties");
         // Complete - every setting present - so nothing needs adding and the
         // file has no reason to change.
-        String mine = "# turned off for recording\nfps-readout.enabled=false\ntoggle-sprint.enabled=true\n";
+        String mine = complete("# turned off for recording\nfps-readout.enabled=false\ntoggle-sprint.enabled=true\n");
         Files.writeString(file, mine);
 
         Settings settings = Settings.load(configDir);
@@ -79,7 +94,7 @@ class SettingsTest {
         // `Boolean.parseBoolean("yes")` is false, so the obvious reading of
         // this file would switch the readout off without a word.
         Path file = configDir.resolve("ash.properties");
-        String mine = "fps-readout.enabled=yes\ntoggle-sprint.enabled=true\n";
+        String mine = complete("fps-readout.enabled=yes\ntoggle-sprint.enabled=true\n");
         Files.writeString(file, mine);
 
         Settings settings = Settings.load(configDir);
@@ -129,17 +144,20 @@ class SettingsTest {
 
     @Test
     void every_setting_is_declared_once_in_the_order_a_first_run_writes_them() throws IOException {
-        assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT), Settings.declared());
+        assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR), Settings.declared());
 
         Settings.load(configDir);
 
-        // Byte for byte what Phase 2's client wrote, so moving to a
-        // declaration changed nothing a player can see.
+        // Byte for byte what Phase 2's client wrote, then each setting since
+        // in the order it arrived - so moving to a declaration changed nothing
+        // a player can see, and a new setting only ever adds to the end.
         assertEquals("# Show the frame rate in the top-left corner. true or false.\n"
                         + "fps-readout.enabled=true\n"
                         + "# Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
                         + " true or false.\n"
-                        + "toggle-sprint.enabled=true\n",
+                        + "toggle-sprint.enabled=true\n"
+                        + "# Draw ash's crosshair in place of the game's. true or false.\n"
+                        + "crosshair.enabled=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 
@@ -170,6 +188,7 @@ class SettingsTest {
                 + "some-future.setting: 42\r\n"
                 + "  fps-readout.enabled : true   \r\n"
                 + "\r\n";
+        mine = complete(mine);
         Files.writeString(file, mine);
         Settings settings = Settings.load(configDir);
 
@@ -186,7 +205,7 @@ class SettingsTest {
         Path file = configDir.resolve("ash.properties");
         for (String separated : List.of("toggle-sprint.enabled=true", "toggle-sprint.enabled:true",
                 "toggle-sprint.enabled true", "toggle-sprint.enabled\t=\ttrue", "\ttoggle-sprint.enabled  true")) {
-            String before = "fps-readout.enabled=true\n" + separated + "\n";
+            String before = complete("fps-readout.enabled=true\n" + separated + "\n");
             Files.writeString(file, before);
             Settings settings = Settings.load(configDir);
 
@@ -206,12 +225,12 @@ class SettingsTest {
         // settings screen. Writing the value straight after the key would make
         // "fps-readout.enabledfalse", a different setting.
         Path file = configDir.resolve("ash.properties");
-        Files.writeString(file, "fps-readout.enabled\ntoggle-sprint.enabled=true\n");
+        Files.writeString(file, complete("fps-readout.enabled\ntoggle-sprint.enabled=true\n"));
         Settings settings = Settings.load(configDir);
 
         settings.set(Settings.FPS_READOUT, false);
 
-        assertEquals("fps-readout.enabled=false\ntoggle-sprint.enabled=true\n", Files.readString(file));
+        assertEquals(complete("fps-readout.enabled=false\ntoggle-sprint.enabled=true\n"), Files.readString(file));
         assertFalse(Settings.load(configDir).get(Settings.FPS_READOUT));
     }
 
@@ -239,25 +258,26 @@ class SettingsTest {
         // setting - and replacing only its first line would leave "ue" behind
         // as the start of a key.
         Path file = configDir.resolve("ash.properties");
-        Files.writeString(file, "fps-readout.enabled=tr\\\n    ue\ntoggle-sprint.enabled=true\n");
+        Files.writeString(file, complete("fps-readout.enabled=tr\\\n    ue\ntoggle-sprint.enabled=true\n"));
         Settings settings = Settings.load(configDir);
         assertTrue(settings.get(Settings.FPS_READOUT), "the test file does not say what it means to");
 
         settings.set(Settings.FPS_READOUT, false);
 
-        assertEquals("fps-readout.enabled=false\ntoggle-sprint.enabled=true\n", Files.readString(file));
+        assertEquals(complete("fps-readout.enabled=false\ntoggle-sprint.enabled=true\n"), Files.readString(file));
     }
 
     @Test
     void of_two_lines_for_one_setting_the_one_that_counts_is_the_one_changed() throws IOException {
         // Properties keeps the last, so changing the first would change nothing.
         Path file = configDir.resolve("ash.properties");
-        Files.writeString(file, "fps-readout.enabled=true\ntoggle-sprint.enabled=true\nfps-readout.enabled=true\n");
+        Files.writeString(file,
+                complete("fps-readout.enabled=true\ntoggle-sprint.enabled=true\nfps-readout.enabled=true\n"));
         Settings settings = Settings.load(configDir);
 
         settings.set(Settings.FPS_READOUT, false);
 
-        assertEquals("fps-readout.enabled=true\ntoggle-sprint.enabled=true\nfps-readout.enabled=false\n",
+        assertEquals(complete("fps-readout.enabled=true\ntoggle-sprint.enabled=true\nfps-readout.enabled=false\n"),
                 Files.readString(file));
         assertFalse(Settings.load(configDir).get(Settings.FPS_READOUT));
     }
@@ -265,8 +285,8 @@ class SettingsTest {
     @Test
     void a_comment_that_mentions_a_setting_is_not_mistaken_for_it() throws IOException {
         Path file = configDir.resolve("ash.properties");
-        String mine = "# fps-readout.enabled=true was too distracting\nfps-readout.enabled=true\n"
-                + "toggle-sprint.enabled=true\n";
+        String mine = complete("# fps-readout.enabled=true was too distracting\nfps-readout.enabled=true\n"
+                + "toggle-sprint.enabled=true\n");
         Files.writeString(file, mine);
         Settings settings = Settings.load(configDir);
 
@@ -324,7 +344,7 @@ class SettingsTest {
         // decode to UTF-8 and back would replace it; the player never asked
         // ash to touch that line.
         Path file = configDir.resolve("ash.properties");
-        String mine = "# caf\u00e9\nfps-readout.enabled=true\ntoggle-sprint.enabled=true\n";
+        String mine = complete("# caf\u00e9\nfps-readout.enabled=true\ntoggle-sprint.enabled=true\n");
         Files.write(file, mine.getBytes(StandardCharsets.ISO_8859_1));
         Settings settings = Settings.load(configDir);
 

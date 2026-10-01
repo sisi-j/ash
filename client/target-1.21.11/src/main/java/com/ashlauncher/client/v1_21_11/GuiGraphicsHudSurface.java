@@ -14,12 +14,17 @@ import net.minecraft.client.gui.GuiGraphics;
  * <p>Nothing here decides anything. Every method is a line over the game's own
  * API, because this class is reviewed by eye and nothing else.
  */
-final class GuiGraphicsHudSurface implements HudSurface {
+public final class GuiGraphicsHudSurface implements HudSurface {
 
     private final GuiGraphics graphics;
 
-    GuiGraphicsHudSurface(GuiGraphics graphics) {
+    public GuiGraphicsHudSurface(GuiGraphics graphics) {
         this.graphics = graphics;
+    }
+
+    @Override
+    public int width() {
+        return graphics.guiWidth();
     }
 
     @Override
@@ -38,6 +43,13 @@ final class GuiGraphicsHudSurface implements HudSurface {
         // bytecode, not assumed - which is what 1.8.9's `drawWithShadow` does,
         // so the two targets draw the same text the same way.
         graphics.drawString(Minecraft.getInstance().font, text, x, y, colour);
+    }
+
+    @Override
+    public void fill(int x, int y, int width, int height, int colour) {
+        // GuiGraphics.fill takes corners, not a size, and draws with the GUI
+        // pipeline's ordinary blending - never the crosshair's invert.
+        graphics.fill(x, y, x + width, y + height, colour);
     }
 
     @Override

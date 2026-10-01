@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_8_9;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -12,6 +13,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javax.imageio.ImageIO;
+import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
@@ -23,6 +26,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
+import net.minecraft.client.util.Window;
 import net.minecraft.world.level.LevelGeneratorType;
 import net.minecraft.world.level.LevelInfo;
 import org.lwjgl.input.Keyboard;
@@ -112,10 +116,12 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         toggleSprintWorks(client);
         settingsScreenWorks(client);
+        crosshairWorks(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
-                + " opened on their key and switched the FPS readout off and on");
+                + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
+                + " of the game's and gave way to it when switched off");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -166,6 +172,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         for (String feature : new String[] {
             "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
+            "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -241,6 +248,64 @@ public final class AshSmokeTest implements ClientModInitializer {
         expectReadoutDraws(client, true, "the FPS readout did not come back when it was switched on");
         keyIntoScreen(client, again, Keyboard.KEY_ESCAPE);
         await("close ash's settings on Escape", () -> client.currentScreen == null ? client : null);
+    }
+
+    /**
+     * ash's crosshair, in a real world: the live crosshair draws, and the
+     * pixel at the centre of the screen is its white - a colour, where the
+     * game's own crosshair inverts what is behind it. Switched off on the
+     * settings screen, it hands the frame back to the game's, and the centre
+     * is no longer ash's white. The screenshots show both by eye as well.
+     */
+    private static void crosshairWorks(MinecraftClient client) {
+        Boolean drew = onClient(client, () -> {
+            RecordingSurface surface = new RecordingSurface();
+            return CrosshairHook.draw(surface) && surface.fills > 0;
+        });
+        if (drew == null || !drew) {
+            fail("ash's crosshair is on but drew nothing");
+        }
+        int centre = centrePixel(client, "ash-crosshair.png");
+        if ((centre & 0xFFFFFF) != 0xFFFFFF) {
+            fail("the centre of the screen is not ash's white crosshair but #" + Integer.toHexString(centre & 0xFFFFFF));
+        }
+
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings for the crosshair", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        click(client, screen, "Crosshair: On");
+        pause(500L);
+        expectFileSays("crosshair.enabled=false");
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings after the crosshair", () -> client.currentScreen == null ? client : null);
+
+        Boolean stillDraws = onClient(client, () -> CrosshairHook.draw(new RecordingSurface()));
+        if (stillDraws == null || stillDraws) {
+            fail("ash's crosshair still draws after it was switched off");
+        }
+        int off = centrePixel(client, "ash-crosshair-off.png");
+        if ((off & 0xFFFFFF) == 0xFFFFFF) {
+            fail("the centre of the screen is still white with ash's crosshair off");
+        }
+    }
+
+    /** The colour of the centre of the crosshair's middle GUI pixel, read back from a screenshot. */
+    private static int centrePixel(MinecraftClient client, String name) {
+        pause(500L);
+        screenshot(client, name);
+        int[] at = onClient(client, () -> {
+            Window window = new Window(client);
+            int scale = window.getScaleFactor();
+            return new int[] {(window.getWidth() / 2) * scale + scale / 2, (window.getHeight() / 2) * scale + scale / 2};
+        });
+        File shot = new File(new File(client.runDirectory, "screenshots"), name);
+        try {
+            return ImageIO.read(shot).getRGB(at[0], at[1]);
+        } catch (IOException unreadable) {
+            fail("could not read the screenshot " + shot + " (" + unreadable + ")");
+            return 0;
+        }
     }
 
     /** A binding by name, checked against every other binding's default key. */
@@ -471,6 +536,12 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
+        int fills;
+
+        @Override
+        public int width() {
+            return 427;
+        }
 
         @Override
         public int height() {
@@ -485,6 +556,11 @@ public final class AshSmokeTest implements ClientModInitializer {
         @Override
         public void drawText(String text, int x, int y, int colour) {
             drawn.add(text);
+        }
+
+        @Override
+        public void fill(int x, int y, int width, int height, int colour) {
+            fills++;
         }
 
         @Override

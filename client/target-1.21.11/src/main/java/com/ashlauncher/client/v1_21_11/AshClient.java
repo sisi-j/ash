@@ -1,5 +1,8 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.crosshair.Cross;
+import com.ashlauncher.client.crosshair.Crosshair;
+import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
@@ -20,6 +23,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.player.KeyboardInput;
 import net.minecraft.resources.Identifier;
 import org.apache.logging.log4j.LogManager;
@@ -49,6 +53,8 @@ public final class AshClient implements ClientModInitializer {
 
     /** By name: a mixin class cannot be named by a class literal, because loading one directly is an error. */
     private static final String TOGGLE_SPRINT_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.KeyboardInputMixin";
+
+    private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.GuiCrosshairMixin";
 
     /**
      * The FPS readout this session draws, so the real-game test can ask it -
@@ -84,6 +90,16 @@ public final class AshClient implements ClientModInitializer {
                 why -> LOG.warn(MixinFeature.didNotLoad(Feature.TOGGLE_SPRINT.displayName(), why)));
         if (!toggleSprintLanded) {
             landed.remove(Feature.TOGGLE_SPRINT);
+        }
+
+        // ash's crosshair, drawn from inside the game's own crosshair drawing
+        // so that every rule the game has about when to show one still holds.
+        boolean crosshairLanded = MixinFeature.landed(() -> Gui.class, CROSSHAIR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.CROSSHAIR.displayName(), why)));
+        if (crosshairLanded) {
+            CrosshairHook.install(new Crosshair(() -> settings.get(Settings.CROSSHAIR), Cross.DEFAULT));
+        } else {
+            landed.remove(Feature.CROSSHAIR);
         }
 
         // R, under Movement beside the game's own Sprint. Free by default on

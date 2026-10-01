@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
@@ -9,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
@@ -76,6 +78,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         for (String feature : new String[] {
             "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
+            "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             assertReportSays(feature);
@@ -109,6 +112,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
             toggleSprintWorks(context, server);
             settingsScreenWorks(context);
+            crosshairWorks(context);
         }
     }
 
@@ -157,6 +161,69 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.waitTicks(5);
         if (context.computeOnClient(client -> client.screen != null)) {
             throw new AssertionError("Escape did not close ash's settings");
+        }
+    }
+
+    /**
+     * ash's crosshair, in a real world: the live crosshair draws, and the
+     * pixel at the centre of the screen is its white - a colour, where the
+     * game's own crosshair inverts what is behind it. Switched off on the
+     * settings screen, it hands the frame back to the game's, and the centre
+     * is no longer ash's white. The screenshots show both by eye as well.
+     */
+    private static void crosshairWorks(ClientGameTestContext context) {
+        boolean drew = context.computeOnClient(client -> {
+            RecordingSurface surface = new RecordingSurface();
+            return CrosshairHook.draw(surface) && surface.fills > 0;
+        });
+        if (!drew) {
+            throw new AssertionError("ash's crosshair is on but drew nothing");
+        }
+        int centre = centrePixel(context, "ash-crosshair");
+        if ((centre & 0xFFFFFF) != 0xFFFFFF) {
+            throw new AssertionError("the centre of the screen is not ash's white crosshair but #"
+                    + Integer.toHexString(centre & 0xFFFFFF));
+        }
+
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickButton(context, "Crosshair: On");
+        context.waitTicks(5);
+        assertFileSays("crosshair.enabled=false");
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+
+        if (context.computeOnClient(client -> CrosshairHook.draw(new RecordingSurface()))) {
+            throw new AssertionError("ash's crosshair still draws after it was switched off");
+        }
+        int off = centrePixel(context, "ash-crosshair-off");
+        if ((off & 0xFFFFFF) == 0xFFFFFF) {
+            throw new AssertionError("the centre of the screen is still white with ash's crosshair off");
+        }
+
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickButton(context, "Crosshair: Off");
+        context.waitTicks(5);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+    }
+
+    /** The colour of the centre of the crosshair's middle GUI pixel, read back from a screenshot. */
+    private static int centrePixel(ClientGameTestContext context, String name) {
+        int[] at = context.computeOnClient(client -> {
+            var window = client.getWindow();
+            int scale = window.getGuiScale();
+            return new int[] {
+                (window.getGuiScaledWidth() / 2) * scale + scale / 2, (window.getGuiScaledHeight() / 2) * scale + scale / 2
+            };
+        });
+        Path shot = context.takeScreenshot(name);
+        try {
+            return ImageIO.read(shot.toFile()).getRGB(at[0], at[1]);
+        } catch (IOException unreadable) {
+            throw new AssertionError("could not read the screenshot " + shot, unreadable);
         }
     }
 
@@ -319,6 +386,12 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
+        int fills;
+
+        @Override
+        public int width() {
+            return 427;
+        }
 
         @Override
         public int height() {
@@ -333,6 +406,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         @Override
         public void drawText(String text, int x, int y, int colour) {
             drawn.add(text);
+        }
+
+        @Override
+        public void fill(int x, int y, int width, int height, int colour) {
+            fills++;
         }
 
         @Override

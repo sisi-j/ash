@@ -63,7 +63,7 @@ class FpsReadoutTest {
 
     @Test
     void it_sits_in_the_top_left_clear_of_the_crosshair_the_hotbar_and_the_chat() {
-        FakeHudSurface surface = new FakeHudSurface(SMALLEST_GUI_HEIGHT, 9);
+        FakeHudSurface surface = new FakeHudSurface(320, SMALLEST_GUI_HEIGHT, 9);
 
         new FpsReadout(() -> 144, () -> true).draw(surface);
 

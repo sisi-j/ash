@@ -22,6 +22,9 @@ package com.ashlauncher.client.hud;
  */
 public interface HudSurface {
 
+    /** Width of the drawable area, in the game's scaled GUI units. The crosshair centres on it. */
+    int width();
+
     /** Height of the drawable area, in the game's scaled GUI units. */
     int height();
 
@@ -42,6 +45,15 @@ public interface HudSurface {
      *     read from the bytecode.
      */
     void drawText(String text, int x, int y, int colour);
+
+    /**
+     * Fill a rectangle with one colour, drawn over what is there - never
+     * blended any other way. The game's own crosshair inverts what is behind
+     * it on both targets; ash's draws the colour the player chose.
+     *
+     * @param colour packed ARGB, with the alpha set
+     */
+    void fill(int x, int y, int width, int height, int colour);
 
     /**
      * Whether the game's debug text is on screen - the F3 overlay itself.

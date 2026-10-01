@@ -137,7 +137,7 @@ class SettingsScreenTest {
         // first would tell a different story about the same session.
         SettingsScreen screen = new SettingsScreen(Settings.load(configDir), feature -> false, () -> { });
 
-        assertEquals("FPS readout and Toggle sprint did not load. That is a problem with ash, not with your game or"
+        assertEquals("FPS readout, Toggle sprint and Crosshair did not load. That is a problem with ash, not with your game or"
                 + " your setup, and an update to ash will fix it.", screen.footer());
     }
 }

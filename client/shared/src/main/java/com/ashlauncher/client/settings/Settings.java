@@ -69,7 +69,11 @@ public final class Settings {
      * left out of it is not quietly read and never written, it has no value
      * at all, and the first test to ask for it fails.
      */
-    private static final List<OnOff> DECLARED = Collections.unmodifiableList(Arrays.asList(FPS_READOUT, TOGGLE_SPRINT));
+    public static final OnOff CROSSHAIR = new OnOff(Feature.CROSSHAIR, "crosshair.enabled", true,
+            "Draw ash's crosshair in place of the game's. true or false.");
+
+    private static final List<OnOff> DECLARED = Collections.unmodifiableList(
+            Arrays.asList(FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR));
 
     private final Path file;
     private final Map<OnOff, Boolean> values;
