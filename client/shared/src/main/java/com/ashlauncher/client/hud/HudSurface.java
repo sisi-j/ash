@@ -44,6 +44,15 @@ public interface HudSurface {
     void drawText(String text, int x, int y, int colour);
 
     /**
+     * Fill a rectangle with one colour, drawn over what is there - never
+     * blended any other way. The game's own crosshair inverts what is behind
+     * it on both targets; ash's draws the colour the player chose.
+     *
+     * @param colour packed ARGB, with the alpha set
+     */
+    void fill(int x, int y, int width, int height, int colour);
+
+    /**
      * Whether the game's debug text is on screen - the F3 overlay itself.
      *
      * <p>It fills the top-left with text of its own, so anything ash draws

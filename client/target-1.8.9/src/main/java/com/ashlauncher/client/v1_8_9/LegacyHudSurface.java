@@ -1,7 +1,9 @@
 package com.ashlauncher.client.v1_8_9;
 
 import com.ashlauncher.client.hud.HudSurface;
+import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawableHelper;
 import net.minecraft.client.util.Window;
 
 /**
@@ -14,12 +16,12 @@ import net.minecraft.client.util.Window;
  * <p>Nothing here decides anything. Every method is a line over the game's own
  * API, because this class is reviewed by eye and nothing else.
  */
-final class LegacyHudSurface implements HudSurface {
+public final class LegacyHudSurface implements HudSurface {
 
     private final MinecraftClient minecraft;
     private final Window window;
 
-    LegacyHudSurface(MinecraftClient minecraft) {
+    public LegacyHudSurface(MinecraftClient minecraft) {
         this.minecraft = minecraft;
         this.window = new Window(minecraft);
     }
@@ -40,6 +42,16 @@ final class LegacyHudSurface implements HudSurface {
     @Override
     public void drawText(String text, int x, int y, int colour) {
         minecraft.textRenderer.drawWithShadow(text, x, y, colour);
+    }
+
+    @Override
+    public void fill(int x, int y, int width, int height, int colour) {
+        // Corners, not a size. DrawableHelper.fill sets ordinary blending for
+        // itself - so it draws the colour even where the game has set the
+        // crosshair's invert - and leaves the GL colour at the fill's, which
+        // would tint whatever the game draws next. Put back to white.
+        DrawableHelper.fill(x, y, x + width, y + height, colour);
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     @Override

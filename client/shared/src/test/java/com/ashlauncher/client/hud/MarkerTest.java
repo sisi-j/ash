@@ -23,8 +23,8 @@ class MarkerTest {
     void it_follows_the_bottom_of_the_surface_rather_than_a_fixed_height() {
         // The window is resizable and the GUI scale is the player's to change,
         // so a marker placed at a remembered height leaves the screen.
-        FakeHudSurface small = new FakeHudSurface(120, 9);
-        FakeHudSurface large = new FakeHudSurface(480, 9);
+        FakeHudSurface small = new FakeHudSurface(213, 120, 9);
+        FakeHudSurface large = new FakeHudSurface(853, 480, 9);
 
         new Marker().draw(small);
         new Marker().draw(large);

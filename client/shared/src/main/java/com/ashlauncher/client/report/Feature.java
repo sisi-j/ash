@@ -9,6 +9,7 @@ package com.ashlauncher.client.report;
 public enum Feature {
     FPS_READOUT("fps-readout", "FPS readout"),
     TOGGLE_SPRINT("toggle-sprint", "Toggle sprint"),
+    CROSSHAIR("crosshair", "Crosshair"),
     /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can

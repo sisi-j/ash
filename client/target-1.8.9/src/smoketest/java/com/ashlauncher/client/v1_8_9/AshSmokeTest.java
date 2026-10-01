@@ -1,5 +1,7 @@
 package com.ashlauncher.client.v1_8_9;
 
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -12,6 +14,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javax.imageio.ImageIO;
+import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
@@ -23,6 +27,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
+import net.minecraft.client.util.Window;
 import net.minecraft.world.level.LevelGeneratorType;
 import net.minecraft.world.level.LevelInfo;
 import org.lwjgl.input.Keyboard;
@@ -112,10 +117,12 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         toggleSprintWorks(client);
         settingsScreenWorks(client);
+        crosshairWorks(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
-                + " opened on their key and switched the FPS readout off and on");
+                + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
+                + " of the game's and gave way to it when switched off");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -166,6 +173,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         for (String feature : new String[] {
             "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
+            "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -241,6 +249,136 @@ public final class AshSmokeTest implements ClientModInitializer {
         expectReadoutDraws(client, true, "the FPS readout did not come back when it was switched on");
         keyIntoScreen(client, again, Keyboard.KEY_ESCAPE);
         await("close ash's settings on Escape", () -> client.currentScreen == null ? client : null);
+    }
+
+    /**
+     * ash's crosshair, in a real world, judged by pixels against a frame with
+     * no crosshair in it at all (F1).
+     *
+     * <p>On: the centre and all four arm tips are exactly ash's white, and
+     * the pixel past a tip is exactly its outline. ash's default plus covers
+     * the game's own pixel for pixel, so the game's drawn as well would have
+     * inverted them.
+     *
+     * <p>Off, on the settings screen: the game's crosshair is back, which
+     * inverts what is behind it - so its centre is the inverse of the same
+     * pixel with no crosshair. "Not white" would not do: it is also what no
+     * crosshair at all looks like. Switched back on at the end, so a second
+     * run in the same directory starts as the first did.
+     */
+    private static void crosshairWorks(MinecraftClient client) {
+        Boolean drew = onClient(client, () -> {
+            RecordingSurface surface = new RecordingSurface();
+            return CrosshairHook.draw(surface, 0, 0) && surface.fills > 0;
+        });
+        if (drew == null || !drew) {
+            fail("ash's crosshair is on but drew nothing");
+        }
+
+        Frame none = frame(client, "ash-crosshair-none.png", true);
+        Frame ash = frame(client, "ash-crosshair.png", false);
+        for (int[] at : new int[][] {{0, 0}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}}) {
+            ash.expect(at[0], at[1], 0xFFFFFF, "ash's white crosshair");
+        }
+        ash.expect(5, 0, 0x000000, "ash's crosshair's outline");
+
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
+        switchCrosshair(client, settingsKey, "Crosshair: On", "crosshair.enabled=false");
+        Boolean stillDraws = onClient(client, () -> CrosshairHook.draw(new RecordingSurface(), 0, 0));
+        if (stillDraws == null || stillDraws) {
+            fail("ash's crosshair still draws after it was switched off");
+        }
+
+        Frame game = frame(client, "ash-crosshair-off.png", false);
+        for (int[] at : new int[][] {{0, 0}, {4, 0}}) {
+            game.expectInverseOf(none, at[0], at[1]);
+        }
+
+        switchCrosshair(client, settingsKey, "Crosshair: Off", "crosshair.enabled=true");
+    }
+
+    /** Opens ash's settings, presses one switch, checks the file, and closes them again. */
+    private static void switchCrosshair(MinecraftClient client, KeyBinding settingsKey, String label, String fileSays) {
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings for the crosshair", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        click(client, screen, label);
+        pause(500L);
+        expectFileSays(fileSays);
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings after the crosshair", () -> client.currentScreen == null ? client : null);
+    }
+
+    /**
+     * A screenshot, optionally with the HUD hidden, and where the game's own
+     * crosshair centre is in it: (width / 2, height / 2) in GUI units, as
+     * 1.8.9 draws its crosshair from width / 2 - 7.
+     */
+    private static Frame frame(MinecraftClient client, String name, boolean hudHidden) {
+        onClient(client, () -> {
+            client.options.hudHidden = hudHidden;
+            return null;
+        });
+        pause(500L);
+        screenshot(client, name);
+        onClient(client, () -> {
+            client.options.hudHidden = false;
+            return null;
+        });
+        int[] geometry = onClient(client, () -> {
+            Window window = new Window(client);
+            return new int[] {window.getWidth() / 2, window.getHeight() / 2, window.getScaleFactor()};
+        });
+        File shot = new File(new File(client.runDirectory, "screenshots"), name);
+        try {
+            return new Frame(ImageIO.read(shot), geometry[0], geometry[1], geometry[2], name);
+        } catch (IOException unreadable) {
+            fail("could not read the screenshot " + shot + " (" + unreadable + ")");
+            return null;
+        }
+    }
+
+    /** One screenshot, read by GUI pixel around the crosshair's centre. */
+    private static final class Frame {
+
+        final BufferedImage image;
+        final int centreX;
+        final int centreY;
+        final int scale;
+        final String name;
+
+        Frame(BufferedImage image, int centreX, int centreY, int scale, String name) {
+            this.image = image;
+            this.centreX = centreX;
+            this.centreY = centreY;
+            this.scale = scale;
+            this.name = name;
+        }
+
+        /** The colour of the middle of the GUI pixel this far from the centre. */
+        int at(int dx, int dy) {
+            return image.getRGB((centreX + dx) * scale + scale / 2, (centreY + dy) * scale + scale / 2) & 0xFFFFFF;
+        }
+
+        void expect(int dx, int dy, int colour, String what) {
+            if (at(dx, dy) != colour) {
+                fail(name + ": at " + dx + "," + dy + " from the centre, expected " + what + " #"
+                        + Integer.toHexString(colour) + " but found #" + Integer.toHexString(at(dx, dy)));
+            }
+        }
+
+        /** Each channel within a few levels of the inverse: the game's crosshair over the same world. */
+        void expectInverseOf(Frame without, int dx, int dy) {
+            int found = at(dx, dy);
+            int inverse = ~without.at(dx, dy) & 0xFFFFFF;
+            for (int shift = 0; shift <= 16; shift += 8) {
+                if (Math.abs(((found >> shift) & 0xFF) - ((inverse >> shift) & 0xFF)) > 24) {
+                    fail(name + ": at " + dx + "," + dy + " from the centre, expected the game's inverting crosshair, #"
+                            + Integer.toHexString(inverse) + ", but found #" + Integer.toHexString(found)
+                            + " - with none it is #" + Integer.toHexString(without.at(dx, dy)));
+                }
+            }
+        }
     }
 
     /** A binding by name, checked against every other binding's default key. */
@@ -471,6 +609,7 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
+        int fills;
 
         @Override
         public int height() {
@@ -485,6 +624,11 @@ public final class AshSmokeTest implements ClientModInitializer {
         @Override
         public void drawText(String text, int x, int y, int colour) {
             drawn.add(text);
+        }
+
+        @Override
+        public void fill(int x, int y, int width, int height, int colour) {
+            fills++;
         }
 
         @Override

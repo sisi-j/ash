@@ -5,6 +5,7 @@
   "plugin": "com.ashlauncher.client.mixin.AshMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "GuiCrosshairMixin",
     "KeyboardInputMixin"
   ],
   "injectors": {
