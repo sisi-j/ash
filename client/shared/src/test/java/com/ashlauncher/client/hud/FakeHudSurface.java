@@ -93,7 +93,7 @@ public final class FakeHudSurface implements HudSurface {
         return drawn.get(0);
     }
 
-    @Override
+    /** Not part of {@link HudSurface}: only tests need to know how wide the screen is. */
     public int width() {
         return width;
     }

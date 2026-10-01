@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_8_9;
 
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -251,60 +252,132 @@ public final class AshSmokeTest implements ClientModInitializer {
     }
 
     /**
-     * ash's crosshair, in a real world: the live crosshair draws, and the
-     * pixel at the centre of the screen is its white - a colour, where the
-     * game's own crosshair inverts what is behind it. Switched off on the
-     * settings screen, it hands the frame back to the game's, and the centre
-     * is no longer ash's white. The screenshots show both by eye as well.
+     * ash's crosshair, in a real world, judged by pixels against a frame with
+     * no crosshair in it at all (F1).
+     *
+     * <p>On: the centre and all four arm tips are exactly ash's white, and
+     * the pixel past a tip is exactly its outline. ash's default plus covers
+     * the game's own pixel for pixel, so the game's drawn as well would have
+     * inverted them.
+     *
+     * <p>Off, on the settings screen: the game's crosshair is back, which
+     * inverts what is behind it - so its centre is the inverse of the same
+     * pixel with no crosshair. "Not white" would not do: it is also what no
+     * crosshair at all looks like. Switched back on at the end, so a second
+     * run in the same directory starts as the first did.
      */
     private static void crosshairWorks(MinecraftClient client) {
         Boolean drew = onClient(client, () -> {
             RecordingSurface surface = new RecordingSurface();
-            return CrosshairHook.draw(surface) && surface.fills > 0;
+            return CrosshairHook.draw(surface, 0, 0) && surface.fills > 0;
         });
         if (drew == null || !drew) {
             fail("ash's crosshair is on but drew nothing");
         }
-        int centre = centrePixel(client, "ash-crosshair.png");
-        if ((centre & 0xFFFFFF) != 0xFFFFFF) {
-            fail("the centre of the screen is not ash's white crosshair but #" + Integer.toHexString(centre & 0xFFFFFF));
+
+        Frame none = frame(client, "ash-crosshair-none.png", true);
+        Frame ash = frame(client, "ash-crosshair.png", false);
+        for (int[] at : new int[][] {{0, 0}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}}) {
+            ash.expect(at[0], at[1], 0xFFFFFF, "ash's white crosshair");
         }
+        ash.expect(5, 0, 0x000000, "ash's crosshair's outline");
 
         KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
-        tap(client, settingsKey.getCode());
-        AshSettingsScreen screen = await("open ash's settings for the crosshair", () ->
-                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
-        click(client, screen, "Crosshair: On");
-        pause(500L);
-        expectFileSays("crosshair.enabled=false");
-        keyIntoScreen(client, screen, settingsKey.getCode());
-        await("close ash's settings after the crosshair", () -> client.currentScreen == null ? client : null);
-
-        Boolean stillDraws = onClient(client, () -> CrosshairHook.draw(new RecordingSurface()));
+        switchCrosshair(client, settingsKey, "Crosshair: On", "crosshair.enabled=false");
+        Boolean stillDraws = onClient(client, () -> CrosshairHook.draw(new RecordingSurface(), 0, 0));
         if (stillDraws == null || stillDraws) {
             fail("ash's crosshair still draws after it was switched off");
         }
-        int off = centrePixel(client, "ash-crosshair-off.png");
-        if ((off & 0xFFFFFF) == 0xFFFFFF) {
-            fail("the centre of the screen is still white with ash's crosshair off");
+
+        Frame game = frame(client, "ash-crosshair-off.png", false);
+        for (int[] at : new int[][] {{0, 0}, {4, 0}}) {
+            game.expectInverseOf(none, at[0], at[1]);
         }
+
+        switchCrosshair(client, settingsKey, "Crosshair: Off", "crosshair.enabled=true");
     }
 
-    /** The colour of the centre of the crosshair's middle GUI pixel, read back from a screenshot. */
-    private static int centrePixel(MinecraftClient client, String name) {
+    /** Opens ash's settings, presses one switch, checks the file, and closes them again. */
+    private static void switchCrosshair(MinecraftClient client, KeyBinding settingsKey, String label, String fileSays) {
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings for the crosshair", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        click(client, screen, label);
+        pause(500L);
+        expectFileSays(fileSays);
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings after the crosshair", () -> client.currentScreen == null ? client : null);
+    }
+
+    /**
+     * A screenshot, optionally with the HUD hidden, and where the game's own
+     * crosshair centre is in it: (width / 2, height / 2) in GUI units, as
+     * 1.8.9 draws its crosshair from width / 2 - 7.
+     */
+    private static Frame frame(MinecraftClient client, String name, boolean hudHidden) {
+        onClient(client, () -> {
+            client.options.hudHidden = hudHidden;
+            return null;
+        });
         pause(500L);
         screenshot(client, name);
-        int[] at = onClient(client, () -> {
+        onClient(client, () -> {
+            client.options.hudHidden = false;
+            return null;
+        });
+        int[] geometry = onClient(client, () -> {
             Window window = new Window(client);
-            int scale = window.getScaleFactor();
-            return new int[] {(window.getWidth() / 2) * scale + scale / 2, (window.getHeight() / 2) * scale + scale / 2};
+            return new int[] {window.getWidth() / 2, window.getHeight() / 2, window.getScaleFactor()};
         });
         File shot = new File(new File(client.runDirectory, "screenshots"), name);
         try {
-            return ImageIO.read(shot).getRGB(at[0], at[1]);
+            return new Frame(ImageIO.read(shot), geometry[0], geometry[1], geometry[2], name);
         } catch (IOException unreadable) {
             fail("could not read the screenshot " + shot + " (" + unreadable + ")");
-            return 0;
+            return null;
+        }
+    }
+
+    /** One screenshot, read by GUI pixel around the crosshair's centre. */
+    private static final class Frame {
+
+        final BufferedImage image;
+        final int centreX;
+        final int centreY;
+        final int scale;
+        final String name;
+
+        Frame(BufferedImage image, int centreX, int centreY, int scale, String name) {
+            this.image = image;
+            this.centreX = centreX;
+            this.centreY = centreY;
+            this.scale = scale;
+            this.name = name;
+        }
+
+        /** The colour of the middle of the GUI pixel this far from the centre. */
+        int at(int dx, int dy) {
+            return image.getRGB((centreX + dx) * scale + scale / 2, (centreY + dy) * scale + scale / 2) & 0xFFFFFF;
+        }
+
+        void expect(int dx, int dy, int colour, String what) {
+            if (at(dx, dy) != colour) {
+                fail(name + ": at " + dx + "," + dy + " from the centre, expected " + what + " #"
+                        + Integer.toHexString(colour) + " but found #" + Integer.toHexString(at(dx, dy)));
+            }
+        }
+
+        /** Each channel within a few levels of the inverse: the game's crosshair over the same world. */
+        void expectInverseOf(Frame without, int dx, int dy) {
+            int found = at(dx, dy);
+            int inverse = ~without.at(dx, dy) & 0xFFFFFF;
+            for (int shift = 0; shift <= 16; shift += 8) {
+                if (Math.abs(((found >> shift) & 0xFF) - ((inverse >> shift) & 0xFF)) > 24) {
+                    fail(name + ": at " + dx + "," + dy + " from the centre, expected the game's inverting crosshair, #"
+                            + Integer.toHexString(inverse) + ", but found #" + Integer.toHexString(found)
+                            + " - with none it is #" + Integer.toHexString(without.at(dx, dy)));
+                }
+            }
         }
     }
 
@@ -537,11 +610,6 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         final List<String> drawn = new ArrayList<>();
         int fills;
-
-        @Override
-        public int width() {
-            return 427;
-        }
 
         @Override
         public int height() {

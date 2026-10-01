@@ -37,7 +37,11 @@ abstract class GuiCrosshairMixin {
     private void ash$drawCrosshair(GuiGraphics graphics, RenderPipeline pipeline, Identifier sprite, int x, int y,
             int width, int height, Operation<Void> original) {
         boolean theCrosshair = "minecraft".equals(sprite.getNamespace()) && "hud/crosshair".equals(sprite.getPath());
-        if (!theCrosshair || !CrosshairHook.draw(new GuiGraphicsHudSurface(graphics))) {
+        // The sprite is 15 square, drawn at ((width - 15) / 2, (height - 15)
+        // / 2), with its plus centred on pixel 7 - read from the sprite
+        // itself. So the game's own centre is x + 7, y + 7, which on an
+        // even-sized screen is one pixel up and left of the middle.
+        if (!theCrosshair || !CrosshairHook.draw(new GuiGraphicsHudSurface(graphics), x + 7, y + 7)) {
             original.call(graphics, pipeline, sprite, x, y, width, height);
         }
     }

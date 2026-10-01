@@ -30,7 +30,9 @@ abstract class InGameHudMixin {
             target = "Lnet/minecraft/client/gui/hud/InGameHud;drawTexture(IIIIII)V"))
     private void ash$drawCrosshair(InGameHud hud, int x, int y, int u, int v, int width, int height,
             Operation<Void> original) {
-        if (CrosshairHook.draw(new LegacyHudSurface(MinecraftClient.getInstance()))) {
+        // Drawn at (width / 2 - 7, height / 2 - 7) from the icons sheet, with
+        // its plus centred on pixel 7: the game's own centre is x + 7, y + 7.
+        if (CrosshairHook.draw(new LegacyHudSurface(MinecraftClient.getInstance()), x + 7, y + 7)) {
             // The game turned blending on before its crosshair and turns it off
             // itself further down; ash's fill leaves it off, so it goes back
             // on for everything the game draws in between.

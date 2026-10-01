@@ -28,21 +28,22 @@ public final class Crosshair {
     }
 
     /**
-     * Draws ash's crosshair centred where the game's would be, if the player
-     * has it on.
+     * Draws ash's crosshair centred on the given pixel, if the player has it
+     * on.
      *
+     * @param centreX the middle pixel of the game's own crosshair, from the
+     *     call the mixin wraps. Not worked out here: the two targets place
+     *     theirs differently - 1.8.9 at {@code width / 2 - 7}, 1.21.11 at
+     *     {@code (width - 15) / 2}, one pixel up and left on an even-sized
+     *     screen - and taking it from the game means agreeing with both.
      * @return whether it drew - and so whether the game's own crosshair must
      *     not. False means the caller draws the game's, so there is always
      *     exactly one.
      */
-    public boolean draw(HudSurface surface) {
+    public boolean draw(HudSurface surface, int centreX, int centreY) {
         if (!on.getAsBoolean()) {
             return false;
         }
-        // Half the GUI size, rounded down: the pixel the game's own 15-wide
-        // crosshair has in its middle (it is drawn from width / 2 - 7).
-        int centreX = surface.width() / 2;
-        int centreY = surface.height() / 2;
         for (Cross.Piece piece : cross.pieces()) {
             surface.fill(centreX + piece.x, centreY + piece.y, piece.width, piece.height, piece.colour);
         }

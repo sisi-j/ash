@@ -5,6 +5,7 @@ import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -165,65 +166,114 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     }
 
     /**
-     * ash's crosshair, in a real world: the live crosshair draws, and the
-     * pixel at the centre of the screen is its white - a colour, where the
-     * game's own crosshair inverts what is behind it. Switched off on the
-     * settings screen, it hands the frame back to the game's, and the centre
-     * is no longer ash's white. The screenshots show both by eye as well.
+     * ash's crosshair, in a real world, judged by pixels against a frame with
+     * no crosshair in it at all (F1).
+     *
+     * <p>On: the centre and all four arm tips are exactly ash's white, and
+     * the pixel past a tip is exactly its outline. ash's default plus covers
+     * the game's own pixel for pixel - arms of four around the same centre -
+     * so the game's crosshair drawn as well would have inverted them.
+     *
+     * <p>Off, on the settings screen: the game's crosshair is back, which
+     * inverts what is behind it - so its centre is the inverse of the same
+     * pixel with no crosshair. "Not white" would not do: it is also what no
+     * crosshair at all looks like.
      */
     private static void crosshairWorks(ClientGameTestContext context) {
         boolean drew = context.computeOnClient(client -> {
             RecordingSurface surface = new RecordingSurface();
-            return CrosshairHook.draw(surface) && surface.fills > 0;
+            return CrosshairHook.draw(surface, 0, 0) && surface.fills > 0;
         });
         if (!drew) {
             throw new AssertionError("ash's crosshair is on but drew nothing");
         }
-        int centre = centrePixel(context, "ash-crosshair");
-        if ((centre & 0xFFFFFF) != 0xFFFFFF) {
-            throw new AssertionError("the centre of the screen is not ash's white crosshair but #"
-                    + Integer.toHexString(centre & 0xFFFFFF));
+
+        Frame none = frame(context, "ash-crosshair-none", true);
+        Frame ash = frame(context, "ash-crosshair", false);
+        for (int[] at : new int[][] {{0, 0}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}}) {
+            ash.expect(at[0], at[1], 0xFFFFFF, "ash's white crosshair");
         }
+        ash.expect(5, 0, 0x000000, "ash's crosshair's outline");
 
         KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
-        context.getInput().pressKey(settingsKey);
-        context.waitTicks(5);
-        clickButton(context, "Crosshair: On");
-        context.waitTicks(5);
-        assertFileSays("crosshair.enabled=false");
-        context.getInput().pressKey(settingsKey);
-        context.waitTicks(5);
-
-        if (context.computeOnClient(client -> CrosshairHook.draw(new RecordingSurface()))) {
+        switchCrosshair(context, settingsKey, "Crosshair: On", "crosshair.enabled=false");
+        if (context.computeOnClient(client -> CrosshairHook.draw(new RecordingSurface(), 0, 0))) {
             throw new AssertionError("ash's crosshair still draws after it was switched off");
         }
-        int off = centrePixel(context, "ash-crosshair-off");
-        if ((off & 0xFFFFFF) == 0xFFFFFF) {
-            throw new AssertionError("the centre of the screen is still white with ash's crosshair off");
+
+        Frame game = frame(context, "ash-crosshair-off", false);
+        for (int[] at : new int[][] {{0, 0}, {4, 0}}) {
+            game.expectInverseOf(none, at[0], at[1]);
         }
 
-        context.getInput().pressKey(settingsKey);
-        context.waitTicks(5);
-        clickButton(context, "Crosshair: Off");
-        context.waitTicks(5);
-        context.getInput().pressKey(settingsKey);
-        context.waitTicks(5);
+        switchCrosshair(context, settingsKey, "Crosshair: Off", "crosshair.enabled=true");
     }
 
-    /** The colour of the centre of the crosshair's middle GUI pixel, read back from a screenshot. */
-    private static int centrePixel(ClientGameTestContext context, String name) {
-        int[] at = context.computeOnClient(client -> {
+    /** Opens ash's settings, presses one switch, checks the file, and closes them again. */
+    private static void switchCrosshair(ClientGameTestContext context, KeyMapping settingsKey, String label,
+            String fileSays) {
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickButton(context, label);
+        context.waitTicks(5);
+        assertFileSays(fileSays);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        if (context.computeOnClient(client -> client.screen != null)) {
+            throw new AssertionError("ash's settings did not close, so the next frame is not of the world");
+        }
+    }
+
+    /**
+     * A screenshot, optionally with the HUD hidden, and where the game's own
+     * crosshair centre is in it: ((width - 15) / 2 + 7, (height - 15) / 2 +
+     * 7) in GUI units, as the game places its 15-square sprite.
+     */
+    private static Frame frame(ClientGameTestContext context, String name, boolean hudHidden) {
+        context.runOnClient(client -> client.options.hideGui = hudHidden);
+        context.waitTicks(3);
+        int[] geometry = context.computeOnClient(client -> {
             var window = client.getWindow();
-            int scale = window.getGuiScale();
             return new int[] {
-                (window.getGuiScaledWidth() / 2) * scale + scale / 2, (window.getGuiScaledHeight() / 2) * scale + scale / 2
+                (window.getGuiScaledWidth() - 15) / 2 + 7, (window.getGuiScaledHeight() - 15) / 2 + 7, window.getGuiScale()
             };
         });
         Path shot = context.takeScreenshot(name);
+        context.runOnClient(client -> client.options.hideGui = false);
         try {
-            return ImageIO.read(shot.toFile()).getRGB(at[0], at[1]);
+            return new Frame(ImageIO.read(shot.toFile()), geometry[0], geometry[1], geometry[2], name);
         } catch (IOException unreadable) {
             throw new AssertionError("could not read the screenshot " + shot, unreadable);
+        }
+    }
+
+    /** One screenshot, read by GUI pixel around the crosshair's centre. */
+    private record Frame(BufferedImage image, int centreX, int centreY, int scale, String name) {
+
+        /** The colour of the middle of the GUI pixel this far from the centre. */
+        int at(int dx, int dy) {
+            return image.getRGB((centreX + dx) * scale + scale / 2, (centreY + dy) * scale + scale / 2) & 0xFFFFFF;
+        }
+
+        void expect(int dx, int dy, int colour, String what) {
+            if (at(dx, dy) != colour) {
+                throw new AssertionError(name + ": at " + dx + "," + dy + " from the centre, expected " + what
+                        + " #" + Integer.toHexString(colour) + " but found #" + Integer.toHexString(at(dx, dy)));
+            }
+        }
+
+        /** Each channel within a few levels of the inverse: the game's crosshair over the same world. */
+        void expectInverseOf(Frame without, int dx, int dy) {
+            int found = at(dx, dy);
+            int inverse = ~without.at(dx, dy) & 0xFFFFFF;
+            for (int shift = 0; shift <= 16; shift += 8) {
+                if (Math.abs(((found >> shift) & 0xFF) - ((inverse >> shift) & 0xFF)) > 24) {
+                    throw new AssertionError(name + ": at " + dx + "," + dy + " from the centre, expected the game's"
+                            + " inverting crosshair, #" + Integer.toHexString(inverse) + ", but found #"
+                            + Integer.toHexString(found) + " - with none it is #"
+                            + Integer.toHexString(without.at(dx, dy)));
+                }
+            }
         }
     }
 
@@ -387,11 +437,6 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
         final List<String> drawn = new ArrayList<>();
         int fills;
-
-        @Override
-        public int width() {
-            return 427;
-        }
 
         @Override
         public int height() {

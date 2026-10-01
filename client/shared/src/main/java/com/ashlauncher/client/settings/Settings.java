@@ -63,15 +63,15 @@ public final class Settings {
             "Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
                     + " true or false.");
 
+    public static final OnOff CROSSHAIR = new OnOff(Feature.CROSSHAIR, "crosshair.enabled", true,
+            "Draw ash's crosshair in place of the game's. true or false.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
      * left out of it is not quietly read and never written, it has no value
      * at all, and the first test to ask for it fails.
      */
-    public static final OnOff CROSSHAIR = new OnOff(Feature.CROSSHAIR, "crosshair.enabled", true,
-            "Draw ash's crosshair in place of the game's. true or false.");
-
     private static final List<OnOff> DECLARED = Collections.unmodifiableList(
             Arrays.asList(FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR));
 

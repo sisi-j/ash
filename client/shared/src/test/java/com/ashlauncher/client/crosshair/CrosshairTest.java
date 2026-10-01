@@ -18,7 +18,11 @@ class CrosshairTest {
     private static final int OUTLINE = Cross.OUTLINE_COLOUR;
     private static final int EMPTY = FakeHudSurface.EMPTY;
 
-    /** Where the game centres its own crosshair: half the GUI size, rounded down. */
+    /**
+     * Any centre will do: the mixin passes the centre of the game's own
+     * crosshair, which each target places differently, and the crosshair
+     * draws on whatever it is given.
+     */
     private static int centreX(FakeHudSurface surface) {
         return surface.width() / 2;
     }
@@ -27,11 +31,15 @@ class CrosshairTest {
         return surface.height() / 2;
     }
 
+    private static boolean draw(Crosshair crosshair, FakeHudSurface surface) {
+        return crosshair.draw(surface, centreX(surface), centreY(surface));
+    }
+
     @Test
     void switched_off_it_draws_nothing_and_leaves_the_game_s_crosshair_to_draw() {
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-        boolean drew = new Crosshair(() -> false, Cross.DEFAULT).draw(surface);
+        boolean drew = draw(new Crosshair(() -> false, Cross.DEFAULT), surface);
 
         assertFalse(drew, "said it drew, so the game's crosshair would have been suppressed for nothing");
         assertEquals(0, surface.fills().size());
@@ -43,7 +51,7 @@ class CrosshairTest {
         int cx = centreX(surface);
         int cy = centreY(surface);
 
-        boolean drew = new Crosshair(() -> true, Cross.DEFAULT).draw(surface);
+        boolean drew = draw(new Crosshair(() -> true, Cross.DEFAULT), surface);
 
         assertTrue(drew);
         int arm = Cross.DEFAULT.arm();
@@ -60,13 +68,18 @@ class CrosshairTest {
     }
 
     @Test
-    void it_follows_the_screen_s_centre_on_any_size() {
-        for (int[] size : new int[][] {{427, 240}, {320, 180}, {641, 361}}) {
-            FakeHudSurface surface = new FakeHudSurface(size[0], size[1], 9);
+    void it_centres_on_the_pixel_it_is_given_even_off_the_middle_of_the_screen() {
+        // 1.21.11 puts its crosshair one pixel up and left of the middle of
+        // an even-sized screen, and 1.8.9 on it. The crosshair takes the
+        // centre from the game's own crosshair call rather than working one
+        // out, so it cannot disagree with either.
+        for (int[] centre : new int[][] {{213, 120}, {212, 119}, {5, 5}}) {
+            FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-            new Crosshair(() -> true, Cross.DEFAULT).draw(surface);
+            new Crosshair(() -> true, Cross.DEFAULT).draw(surface, centre[0], centre[1]);
 
-            assertEquals(WHITE, surface.pixelAt(size[0] / 2, size[1] / 2), "on " + size[0] + "x" + size[1]);
+            assertEquals(WHITE, surface.pixelAt(centre[0], centre[1]), "at " + centre[0] + "," + centre[1]);
+            assertEquals(OUTLINE, surface.pixelAt(centre[0] + 1, centre[1] + 1), "at " + centre[0] + "," + centre[1]);
         }
     }
 
@@ -77,7 +90,7 @@ class CrosshairTest {
         int cy = centreY(surface);
         Cross gapped = new Cross(3, 2, 1, WHITE, false);
 
-        new Crosshair(() -> true, gapped).draw(surface);
+        draw(new Crosshair(() -> true, gapped), surface);
 
         assertEquals(EMPTY, surface.pixelAt(cx, cy), "the centre of a gapped cross was filled");
         assertEquals(EMPTY, surface.pixelAt(cx + 2, cy), "the gap was filled");
@@ -95,7 +108,7 @@ class CrosshairTest {
             for (int gap = 0; gap <= 2; gap++) {
                 for (int arm = 1; arm <= 6; arm++) {
                     FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
-                    new Crosshair(() -> true, new Cross(arm, gap, thickness, WHITE, false)).draw(surface);
+                    draw(new Crosshair(() -> true, new Cross(arm, gap, thickness, WHITE, false)), surface);
 
                     int expected = 2 * (arm + gap) + thickness;
                     String size = "arm " + arm + ", gap " + gap + ", thickness " + thickness;
@@ -112,7 +125,7 @@ class CrosshairTest {
         int cx = centreX(surface);
         int cy = centreY(surface);
 
-        new Crosshair(() -> true, new Cross(4, 1, 3, WHITE, false)).draw(surface);
+        draw(new Crosshair(() -> true, new Cross(4, 1, 3, WHITE, false)), surface);
 
         for (int offset = -1; offset <= 1; offset++) {
             assertEquals(WHITE, surface.pixelAt(cx + 3, cy + offset), "row " + offset + " of the right arm");
@@ -125,7 +138,7 @@ class CrosshairTest {
     void without_an_outline_nothing_dark_is_drawn() {
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-        new Crosshair(() -> true, new Cross(4, 0, 1, WHITE, false)).draw(surface);
+        draw(new Crosshair(() -> true, new Cross(4, 0, 1, WHITE, false)), surface);
 
         assertFalse(surface.fills().isEmpty(), "the test proves nothing if nothing was drawn");
         for (FakeHudSurface.Fill fill : surface.fills()) {
@@ -137,18 +150,18 @@ class CrosshairTest {
     void switching_it_off_in_game_hands_the_next_frame_back_to_the_game() {
         AtomicBoolean on = new AtomicBoolean(true);
         Crosshair crosshair = new Crosshair(on::get, Cross.DEFAULT);
-        assertTrue(crosshair.draw(FakeHudSurface.ofTypicalSize()), "the test proves nothing if it never drew");
+        assertTrue(draw(crosshair, FakeHudSurface.ofTypicalSize()), "the test proves nothing if it never drew");
 
         on.set(false);
 
-        assertFalse(crosshair.draw(FakeHudSurface.ofTypicalSize()));
+        assertFalse(draw(crosshair, FakeHudSurface.ofTypicalSize()));
     }
 
     @Test
     void with_no_crosshair_installed_the_hook_leaves_the_game_s_crosshair_alone() {
         CrosshairHook.install(null);
 
-        assertFalse(CrosshairHook.draw(FakeHudSurface.ofTypicalSize()));
+        assertFalse(CrosshairHook.draw(FakeHudSurface.ofTypicalSize(), 213, 120));
     }
 
     /**

@@ -21,11 +21,12 @@ public final class CrosshairHook {
     }
 
     /**
-     * Draws ash's crosshair if there is one and it is on.
+     * Draws ash's crosshair if there is one and it is on, centred on the
+     * middle pixel of the game's own.
      *
      * @return whether it drew; false means the game must draw its own
      */
-    public static boolean draw(HudSurface surface) {
-        return crosshair != null && crosshair.draw(surface);
+    public static boolean draw(HudSurface surface, int centreX, int centreY) {
+        return crosshair != null && crosshair.draw(surface, centreX, centreY);
     }
 }

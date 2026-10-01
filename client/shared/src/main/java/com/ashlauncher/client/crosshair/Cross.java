@@ -76,24 +76,22 @@ public final class Cross {
         int low = -(thickness / 2);
         int near = low + thickness + gap;
         int far = low - gap - arm;
-        List<int[]> bars = new ArrayList<>();
-        bars.add(new int[] {near, low, arm, thickness});
-        bars.add(new int[] {far, low, arm, thickness});
-        bars.add(new int[] {low, near, thickness, arm});
-        bars.add(new int[] {low, far, thickness, arm});
+        List<Piece> bars = new ArrayList<>();
+        bars.add(new Piece(near, low, arm, thickness, colour));
+        bars.add(new Piece(far, low, arm, thickness, colour));
+        bars.add(new Piece(low, near, thickness, arm, colour));
+        bars.add(new Piece(low, far, thickness, arm, colour));
         if (gap == 0) {
-            bars.add(new int[] {low, low, thickness, thickness});
+            bars.add(new Piece(low, low, thickness, thickness, colour));
         }
 
         List<Piece> pieces = new ArrayList<>();
         if (outlined) {
-            for (int[] bar : bars) {
-                pieces.add(new Piece(bar[0] - 1, bar[1] - 1, bar[2] + 2, bar[3] + 2, OUTLINE_COLOUR));
+            for (Piece bar : bars) {
+                pieces.add(new Piece(bar.x - 1, bar.y - 1, bar.width + 2, bar.height + 2, OUTLINE_COLOUR));
             }
         }
-        for (int[] bar : bars) {
-            pieces.add(new Piece(bar[0], bar[1], bar[2], bar[3], colour));
-        }
+        pieces.addAll(bars);
         return Collections.unmodifiableList(pieces);
     }
 }

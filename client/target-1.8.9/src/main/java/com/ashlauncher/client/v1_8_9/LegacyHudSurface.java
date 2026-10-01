@@ -27,11 +27,6 @@ public final class LegacyHudSurface implements HudSurface {
     }
 
     @Override
-    public int width() {
-        return window.getWidth();
-    }
-
-    @Override
     public int height() {
         // Scaled units, matching what the modern target's `guiHeight` gives -
         // the raw display height is several times larger and would put the
