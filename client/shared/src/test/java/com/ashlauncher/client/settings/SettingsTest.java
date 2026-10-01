@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -150,8 +149,9 @@ class SettingsTest {
         // `get` cannot answer is a setting the screen would show and break on.
         Settings settings = Settings.load(configDir);
 
+        assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
         for (OnOff setting : Settings.declared()) {
-            assertTrue(settings.get(setting), setting.key() + " is not at its default on a first run");
+            assertEquals(setting.fallback(), settings.get(setting), setting.key() + " is not at its default on a first run");
         }
     }
 
@@ -173,9 +173,9 @@ class SettingsTest {
         Files.writeString(file, mine);
         Settings settings = Settings.load(configDir);
 
-        Optional<String> problem = settings.set(Settings.FPS_READOUT, false);
+        Saved saved = settings.set(Settings.FPS_READOUT, false);
 
-        assertEquals(Optional.empty(), problem);
+        assertEquals(Saved.SAVED, saved);
         assertEquals(mine.replace("  fps-readout.enabled : true   \r\n", "  fps-readout.enabled : false\r\n"),
                 Files.readString(file));
         assertFalse(settings.get(Settings.FPS_READOUT), "the change did not reach the running game");
@@ -200,14 +200,37 @@ class SettingsTest {
     }
 
     @Test
-    void a_changed_value_is_what_the_next_session_reads() throws IOException {
-        Settings.load(configDir).set(Settings.TOGGLE_SPRINT, false);
+    void a_key_with_no_value_gets_one_rather_than_a_longer_key() throws IOException {
+        // A bare key reads as an empty value, which load reports as neither
+        // true nor false - so this is exactly the line a player fixes from the
+        // settings screen. Writing the value straight after the key would make
+        // "fps-readout.enabledfalse", a different setting.
+        Path file = configDir.resolve("ash.properties");
+        Files.writeString(file, "fps-readout.enabled\ntoggle-sprint.enabled=true\n");
+        Settings settings = Settings.load(configDir);
 
-        Settings next = Settings.load(configDir);
+        settings.set(Settings.FPS_READOUT, false);
 
-        assertFalse(next.get(Settings.TOGGLE_SPRINT));
-        assertTrue(next.get(Settings.FPS_READOUT));
-        assertEquals(List.of(), next.problems());
+        assertEquals("fps-readout.enabled=false\ntoggle-sprint.enabled=true\n", Files.readString(file));
+        assertFalse(Settings.load(configDir).get(Settings.FPS_READOUT));
+    }
+
+    @Test
+    void every_setting_changed_in_game_is_what_the_next_session_reads() throws IOException {
+        // Each one alone, so a setting that saved into another's line would show.
+        assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
+        for (OnOff changed : Settings.declared()) {
+            Files.deleteIfExists(configDir.resolve("ash.properties"));
+            assertEquals(Saved.SAVED, Settings.load(configDir).set(changed, !changed.fallback()), changed.key());
+
+            Settings next = Settings.load(configDir);
+
+            for (OnOff setting : Settings.declared()) {
+                boolean expected = setting == changed ? !setting.fallback() : setting.fallback();
+                assertEquals(expected, next.get(setting), "after changing " + changed.key() + ", " + setting.key());
+            }
+            assertEquals(List.of(), next.problems());
+        }
     }
 
     @Test
@@ -288,41 +311,53 @@ class SettingsTest {
         String broken = Files.readString(file) + "note=C:\\users\\me\n";
         Files.writeString(file, broken);
 
-        Optional<String> problem = settings.set(Settings.FPS_READOUT, false);
+        Saved saved = settings.set(Settings.FPS_READOUT, false);
 
-        assertTrue(problem.isPresent(), "a file ash could not read was written to anyway");
+        assertEquals(Saved.FILE_UNREADABLE, saved, "a file ash could not read was written to anyway");
         assertEquals(broken, Files.readString(file));
         assertFalse(settings.get(Settings.FPS_READOUT), "the running game ignored the player's choice");
     }
 
     @Test
-    void a_file_that_is_not_utf8_is_not_rewritten_through_a_lossy_decode() throws IOException {
-        // Decoding replaces bytes it cannot read, so writing the decoded text
-        // back would change bytes the player never asked ash to touch.
+    void a_file_a_windows_editor_saved_as_ansi_is_changed_without_touching_its_other_bytes() throws IOException {
+        // Notepad's "ANSI" puts an \u00e9 in one byte that is not valid UTF-8. A
+        // decode to UTF-8 and back would replace it; the player never asked
+        // ash to touch that line.
         Path file = configDir.resolve("ash.properties");
-        byte[] mine = "# caf\u00e9\nfps-readout.enabled=true\ntoggle-sprint.enabled=true\n"
-                .getBytes(StandardCharsets.ISO_8859_1);
-        Files.write(file, mine);
+        String mine = "# caf\u00e9\nfps-readout.enabled=true\ntoggle-sprint.enabled=true\n";
+        Files.write(file, mine.getBytes(StandardCharsets.ISO_8859_1));
         Settings settings = Settings.load(configDir);
 
-        Optional<String> problem = settings.set(Settings.FPS_READOUT, false);
+        Saved saved = settings.set(Settings.FPS_READOUT, false);
 
-        assertTrue(problem.isPresent());
-        assertArrayEquals(mine, Files.readAllBytes(file));
+        assertEquals(Saved.SAVED, saved);
+        assertArrayEquals(mine.replace("fps-readout.enabled=true", "fps-readout.enabled=false")
+                .getBytes(StandardCharsets.ISO_8859_1), Files.readAllBytes(file));
     }
 
     @Test
     void a_change_that_cannot_be_saved_leaves_the_file_as_it_was_and_says_so() throws IOException {
-        // The write goes through a temporary file first. Make that impossible
-        // and the player's file must come out untouched.
+        // This cannot prove the write is atomic - nothing here can stop a write
+        // halfway - but it does prove the write goes through a temporary file
+        // first: block that file, and a direct write would have succeeded.
         Path file = configDir.resolve("ash.properties");
         Settings settings = Settings.load(configDir);
         String before = Files.readString(file);
         Files.createDirectory(configDir.resolve("ash.properties.partial"));
 
-        Optional<String> problem = settings.set(Settings.FPS_READOUT, false);
+        Saved saved = settings.set(Settings.FPS_READOUT, false);
 
-        assertTrue(problem.isPresent());
+        assertEquals(Saved.FILE_UNWRITABLE, saved);
         assertEquals(before, Files.readString(file));
+        assertFalse(settings.get(Settings.FPS_READOUT), "the change did not last for the session");
+    }
+
+    @Test
+    void what_the_player_is_told_names_no_path_and_quotes_no_exception() {
+        for (Saved saved : Saved.values()) {
+            assertFalse(saved.message().contains("\\") || saved.message().contains("/")
+                    || saved.message().contains("Exception"), saved + ": " + saved.message());
+        }
+        assertEquals("", Saved.SAVED.message());
     }
 }

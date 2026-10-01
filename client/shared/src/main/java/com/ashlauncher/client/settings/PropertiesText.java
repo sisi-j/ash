@@ -39,6 +39,7 @@ final class PropertiesText {
         int replaceFrom = -1;
         int replaceTo = -1;
         boolean wholeLine = false;
+        boolean bareKey = false;
 
         int position = 0;
         while (position < text.length()) {
@@ -64,6 +65,10 @@ final class PropertiesText {
                 // A key continued onto another line is too odd a thing to edit
                 // around: the whole setting is rewritten, still on its own line.
                 wholeLine = containsTerminator(text, start, valueStart);
+                // A key alone on its line has nothing between it and where the
+                // value goes, so the value would join the key and make it
+                // another. It needs a separator of its own.
+                bareKey = valueStart == keyEnd;
                 replaceFrom = wholeLine ? start : valueStart;
                 replaceTo = end;
             }
@@ -73,7 +78,7 @@ final class PropertiesText {
         if (replaceFrom < 0) {
             return null;
         }
-        String replacement = wholeLine ? key + "=" + value : value;
+        String replacement = wholeLine ? key + "=" + value : bareKey ? "=" + value : value;
         return text.substring(0, replaceFrom) + replacement + text.substring(replaceTo);
     }
 

@@ -5,10 +5,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -18,7 +16,6 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 
 /**
@@ -144,38 +141,34 @@ public final class Settings {
      * game started, so an edit the player made by hand in the meantime
      * survives it. A setting the file has lost is added back at the end.
      *
-     * <p>Never thrown from. When the file cannot be changed safely - it no
-     * longer reads, it is not UTF-8 and so could not be written back byte for
-     * byte, or the write fails - it is left exactly as it was, the change
-     * lasts until the game closes, and the reason comes back for whoever
-     * asked to say so.
+     * <p>The file is edited as bytes, seen one character per byte (ISO-8859-1),
+     * not as UTF-8. Everything the edit looks for - keys, separators, line
+     * endings, backslashes - is ASCII, and ASCII bytes mean the same in UTF-8
+     * and in whatever "ANSI" a Windows editor saved, so the edit finds the
+     * same line either way. Every other byte goes back exactly as it came,
+     * which a decode to UTF-8 and back would not promise for a file that is
+     * not UTF-8.
      *
-     * @return why the change was not saved, or empty when it was
+     * <p>Never thrown from. When the file cannot be changed safely it is left
+     * exactly as it was, the change lasts until the game closes, and what to
+     * do about it comes back for whoever asked to say so.
      */
-    public Optional<String> set(OnOff setting, boolean value) {
+    public Saved set(OnOff setting, boolean value) {
         values.put(setting, value);
-        String unsaved = setting.key() + " was changed for this session but not saved to " + FILE_NAME;
         try {
             byte[] current = Files.exists(file) ? Files.readAllBytes(file) : new byte[0];
-            String text = StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(current))
-                    .toString();
+            String text = new String(current, StandardCharsets.ISO_8859_1);
             new Properties().load(new StringReader(text));
 
             String changed = PropertiesText.withValue(text, setting.key(), Boolean.toString(value));
-            if (changed == null) {
-                changed = text + (endsMidLine(current) ? "\n" : "") + entry(setting, value);
-            }
-            writeWhole(file, changed.getBytes(StandardCharsets.UTF_8));
-            return Optional.empty();
-        } catch (CharacterCodingException notUtf8) {
-            return Optional.of(unsaved + ", because the file is not UTF-8 and could not be written back unchanged");
+            writeWhole(file, changed != null
+                    ? changed.getBytes(StandardCharsets.ISO_8859_1)
+                    : appended(current, entry(setting, value)));
+            return Saved.SAVED;
         } catch (IllegalArgumentException unreadable) {
-            return Optional.of(unsaved + ", because the file no longer reads (" + unreadable + ")");
+            return Saved.FILE_UNREADABLE;
         } catch (IOException unwritable) {
-            return Optional.of(unsaved + ", because it could not be written (" + unwritable + ")");
+            return Saved.FILE_UNWRITABLE;
         }
     }
 
@@ -190,12 +183,7 @@ public final class Settings {
         return problems;
     }
 
-    /**
-     * Adds every setting the file lacks to its end, on lines of their own.
-     *
-     * <p>A hand-edited file often has no newline at the end, and appending to
-     * one would glue the first new setting onto the player's last line.
-     */
+    /** Adds every setting the file lacks to its end. */
     private static void appendMissing(Path file, byte[] original, Properties properties, List<String> problems) {
         StringBuilder missing = new StringBuilder();
         for (OnOff setting : DECLARED) {
@@ -207,11 +195,8 @@ public final class Settings {
             return;
         }
 
-        byte[] added = ((endsMidLine(original) ? "\n" : "") + missing).getBytes(StandardCharsets.UTF_8);
-        byte[] whole = Arrays.copyOf(original, original.length + added.length);
-        System.arraycopy(added, 0, whole, original.length, added.length);
         try {
-            writeWhole(file, whole);
+            writeWhole(file, appended(original, missing.toString()));
         } catch (IOException unwritable) {
             problems.add(FILE_NAME + " could not be written (" + unwritable
                     + "), so settings it lacks are at their defaults and will not appear in it");
@@ -223,8 +208,18 @@ public final class Settings {
         return "# " + setting.comment() + "\n" + setting.key() + "=" + value + "\n";
     }
 
-    private static boolean endsMidLine(byte[] file) {
-        return file.length > 0 && file[file.length - 1] != '\n';
+    /**
+     * The file's bytes with {@code entries} after them, on lines of their own.
+     *
+     * <p>A hand-edited file often has no newline at the end, and appending to
+     * one would glue the first new setting onto the player's last line.
+     */
+    private static byte[] appended(byte[] file, String entries) {
+        boolean endsMidLine = file.length > 0 && file[file.length - 1] != '\n';
+        byte[] added = ((endsMidLine ? "\n" : "") + entries).getBytes(StandardCharsets.UTF_8);
+        byte[] whole = Arrays.copyOf(file, file.length + added.length);
+        System.arraycopy(added, 0, whole, file.length, added.length);
+        return whole;
     }
 
     /**
@@ -235,7 +230,19 @@ public final class Settings {
         Files.createDirectories(file.getParent());
         Path partial = file.resolveSibling(file.getFileName() + ".partial");
         Files.write(partial, bytes);
-        Files.move(partial, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        try {
+            try {
+                Files.move(partial, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException noAtomicMove) {
+                // A file system that cannot move atomically still gets its
+                // settings - a plain append always worked there before.
+                Files.move(partial, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException notMoved) {
+            // Not left lying in the player's config folder for them to wonder about.
+            Files.deleteIfExists(partial);
+            throw notMoved;
+        }
     }
 
     /**

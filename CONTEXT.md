@@ -81,7 +81,7 @@ The tier that launches a real vanilla client with ash in it and asserts what loa
 _Avoid_: integration test, e2e test, game test (that is Minecraft's server-side framework, a different tier)
 
 **Client settings**:
-The client's own configuration file, `config/ash.properties` in an instance's game directory. The client writes it on first run and appends settings an older file lacks; nothing else writes it - the launcher least of all, until synced settings define a second writer and the rules that come with one.
+The client's own configuration file, `config/ash.properties` in an instance's game directory. The client writes it on first run, appends settings an older file lacks, and changes a value in place - that value and not one other byte - when the player changes it in game; nothing else writes it - the launcher least of all, until synced settings define a second writer and the rules that come with one.
 _Avoid_: config (unqualified), options (that is the game's own `options.txt`), synced settings (Phase 4, and a different thing)
 
 **Third-party mod**:
