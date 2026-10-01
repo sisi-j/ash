@@ -54,7 +54,7 @@ public final class AshClient implements ClientModInitializer {
 
         Marker marker = new Marker();
         FpsReadout fpsReadout = new FpsReadout(
-                () -> Minecraft.getInstance().getFps(), settings.fpsReadoutEnabled());
+                () -> Minecraft.getInstance().getFps(), settings.get(Settings.FPS_READOUT));
 
         // Last, so nothing vanilla draws over them. That is a decision about
         // this target's element registry rather than about either feature, so
@@ -67,7 +67,7 @@ public final class AshClient implements ClientModInitializer {
         HudElementRegistry.addLast(FPS_READOUT, (graphics, tickCounter) ->
                 fpsReadout.draw(new GuiGraphicsHudSurface(graphics)));
 
-        FeatureStatus toggleSprint = MixinFeature.status(settings.toggleSprintEnabled(),
+        FeatureStatus toggleSprint = MixinFeature.status(settings.get(Settings.TOGGLE_SPRINT),
                 () -> KeyboardInput.class, TOGGLE_SPRINT_MIXIN,
                 why -> LOG.warn("ash: " + Feature.TOGGLE_SPRINT.displayName() + " did not load - " + why
                         + ". The game runs without it, and the launcher will say so before the next play."));
@@ -85,7 +85,7 @@ public final class AshClient implements ClientModInitializer {
         }
 
         LoadReport report = new LoadReport(clientVersion())
-                .with(Feature.FPS_READOUT, settings.fpsReadoutEnabled() ? FeatureStatus.LOADED : FeatureStatus.OFF)
+                .with(Feature.FPS_READOUT, settings.get(Settings.FPS_READOUT) ? FeatureStatus.LOADED : FeatureStatus.OFF)
                 .with(Feature.TOGGLE_SPRINT, toggleSprint);
         try {
             report.writeTo(FabricLoader.getInstance().getGameDir());

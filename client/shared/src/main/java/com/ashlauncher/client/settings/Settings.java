@@ -4,15 +4,21 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.StringReader;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 
 /**
@@ -24,8 +30,9 @@ import java.util.Properties;
  * belong to that design; inventing the format early would mean inventing it
  * twice. See {@code docs/specs/0002-phase-2-client.md}.
  *
- * <p>There is no in-game editor yet, so the file is also the interface: a
- * player opens it in a text editor. That decides most of what follows.
+ * <p>The file is also an interface: a player can open it in a text editor,
+ * and ash's settings screen changes it too. Two editors, one writer - the
+ * client. That decides most of what follows.
  *
  * <ul>
  *   <li><b>Properties</b>, because it is in Java 8 - this runs on 1.8.9's JVM -
@@ -34,10 +41,13 @@ import java.util.Properties;
  *   <li><b>Written on a first run</b>, so the setting exists somewhere a
  *       player can find it. A default that lives only in code cannot be
  *       changed by anyone who does not read code.
- *   <li><b>Appended to, never rewritten.</b> A setting the file does not have
- *       yet - because it was written by an older ash - is added at the end.
- *       Nothing already there is touched, so the player's values, comments
- *       and ordering survive every upgrade.
+ *   <li><b>Appended to, and changed only in place.</b> A setting the file
+ *       does not have yet - because it was written by an older ash - is added
+ *       at the end. A setting changed in game has its value rewritten on its
+ *       own line and nothing else is touched, so the player's values,
+ *       comments and ordering survive every upgrade and every change.
+ *   <li><b>Written whole or not at all</b>, through a temporary file and a
+ *       move, so a game that dies mid-write leaves the last complete file.
  *   <li><b>Never thrown from.</b> This runs while the game is starting, and a
  *       setting ash cannot read should cost the player that setting, not the
  *       session. What went wrong is in {@link #problems()}.
@@ -48,27 +58,34 @@ public final class Settings {
     /** In the loader's config directory, named for the mod id, as Fabric mods do. */
     static final String FILE_NAME = "ash.properties";
 
-    private static final Flag FPS_READOUT = new Flag("fps-readout.enabled", true,
+    public static final OnOff FPS_READOUT = new OnOff("fps-readout.enabled", true,
             "Show the frame rate in the top-left corner. true or false.");
 
-    private static final Flag TOGGLE_SPRINT = new Flag("toggle-sprint.enabled", true,
+    public static final OnOff TOGGLE_SPRINT = new OnOff("toggle-sprint.enabled", true,
             "Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
                     + " true or false.");
 
     /**
      * Every setting, in the order a first run writes them. One list, and
-     * every setting is both read and written by walking it - so a setting
+     * every setting is read, written and shown by walking it - so a setting
      * left out of it is not quietly read and never written, it has no value
      * at all, and the first test to ask for it fails.
      */
-    private static final Flag[] FLAGS = {FPS_READOUT, TOGGLE_SPRINT};
+    private static final List<OnOff> DECLARED = Collections.unmodifiableList(Arrays.asList(FPS_READOUT, TOGGLE_SPRINT));
 
-    private final Map<Flag, Boolean> values;
+    private final Path file;
+    private final Map<OnOff, Boolean> values;
     private final List<String> problems;
 
-    private Settings(Map<Flag, Boolean> values, List<String> problems) {
+    private Settings(Path file, Map<OnOff, Boolean> values, List<String> problems) {
+        this.file = file;
         this.values = values;
         this.problems = Collections.unmodifiableList(problems);
+    }
+
+    /** Every setting there is, in the order the file lists them. */
+    public static List<OnOff> declared() {
+        return DECLARED;
     }
 
     /**
@@ -107,23 +124,64 @@ public final class Settings {
             appendMissing(file, original, properties, problems);
         }
 
-        Map<Flag, Boolean> values = new IdentityHashMap<>();
-        for (Flag flag : FLAGS) {
-            values.put(flag, read(properties, flag, problems));
+        Map<OnOff, Boolean> values = new IdentityHashMap<>();
+        for (OnOff setting : DECLARED) {
+            values.put(setting, read(properties, setting, problems));
         }
-        return new Settings(values, problems);
+        return new Settings(file, values, problems);
     }
 
-    public boolean fpsReadoutEnabled() {
-        return values.get(FPS_READOUT);
-    }
-
-    public boolean toggleSprintEnabled() {
-        return values.get(TOGGLE_SPRINT);
+    /** The setting's value this session: as read, or as last changed in game. */
+    public boolean get(OnOff setting) {
+        return values.get(setting);
     }
 
     /**
-     * What was wrong with the file, one sentence each, for the game's log.
+     * Changes a setting for this session and in the file, rewriting its value
+     * in place and nothing else.
+     *
+     * <p>The change is made to the file as it is now, not as it was when the
+     * game started, so an edit the player made by hand in the meantime
+     * survives it. A setting the file has lost is added back at the end.
+     *
+     * <p>Never thrown from. When the file cannot be changed safely - it no
+     * longer reads, it is not UTF-8 and so could not be written back byte for
+     * byte, or the write fails - it is left exactly as it was, the change
+     * lasts until the game closes, and the reason comes back for whoever
+     * asked to say so.
+     *
+     * @return why the change was not saved, or empty when it was
+     */
+    public Optional<String> set(OnOff setting, boolean value) {
+        values.put(setting, value);
+        String unsaved = setting.key() + " was changed for this session but not saved to " + FILE_NAME;
+        try {
+            byte[] current = Files.exists(file) ? Files.readAllBytes(file) : new byte[0];
+            String text = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(current))
+                    .toString();
+            new Properties().load(new StringReader(text));
+
+            String changed = PropertiesText.withValue(text, setting.key(), Boolean.toString(value));
+            if (changed == null) {
+                changed = text + (endsMidLine(current) ? "\n" : "") + entry(setting, value);
+            }
+            writeWhole(file, changed.getBytes(StandardCharsets.UTF_8));
+            return Optional.empty();
+        } catch (CharacterCodingException notUtf8) {
+            return Optional.of(unsaved + ", because the file is not UTF-8 and could not be written back unchanged");
+        } catch (IllegalArgumentException unreadable) {
+            return Optional.of(unsaved + ", because the file no longer reads (" + unreadable + ")");
+        } catch (IOException unwritable) {
+            return Optional.of(unsaved + ", because it could not be written (" + unwritable + ")");
+        }
+    }
+
+    /**
+     * What was wrong with the file when the game started, one sentence each,
+     * for the game's log.
      *
      * <p>Never thrown: a setting ash cannot read costs the player that setting,
      * not their session.
@@ -140,25 +198,44 @@ public final class Settings {
      */
     private static void appendMissing(Path file, byte[] original, Properties properties, List<String> problems) {
         StringBuilder missing = new StringBuilder();
-        for (Flag flag : FLAGS) {
-            if (!properties.containsKey(flag.key)) {
-                missing.append("# ").append(flag.comment).append('\n')
-                        .append(flag.key).append('=').append(flag.fallback).append('\n');
+        for (OnOff setting : DECLARED) {
+            if (!properties.containsKey(setting.key())) {
+                missing.append(entry(setting, setting.fallback()));
             }
         }
         if (missing.length() == 0) {
             return;
         }
 
-        boolean endsMidLine = original.length > 0 && original[original.length - 1] != '\n';
+        byte[] added = ((endsMidLine(original) ? "\n" : "") + missing).getBytes(StandardCharsets.UTF_8);
+        byte[] whole = Arrays.copyOf(original, original.length + added.length);
+        System.arraycopy(added, 0, whole, original.length, added.length);
         try {
-            Files.createDirectories(file.getParent());
-            Files.write(file, ((endsMidLine ? "\n" : "") + missing).getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            writeWhole(file, whole);
         } catch (IOException unwritable) {
             problems.add(FILE_NAME + " could not be written (" + unwritable
                     + "), so settings it lacks are at their defaults and will not appear in it");
         }
+    }
+
+    /** A setting as a first run writes it: its comment, then its line. */
+    private static String entry(OnOff setting, boolean value) {
+        return "# " + setting.comment() + "\n" + setting.key() + "=" + value + "\n";
+    }
+
+    private static boolean endsMidLine(byte[] file) {
+        return file.length > 0 && file[file.length - 1] != '\n';
+    }
+
+    /**
+     * Through a temporary file and a move, so that a game that dies while this
+     * is being written leaves the last complete file, never half of one.
+     */
+    private static void writeWhole(Path file, byte[] bytes) throws IOException {
+        Files.createDirectories(file.getParent());
+        Path partial = file.resolveSibling(file.getFileName() + ".partial");
+        Files.write(partial, bytes);
+        Files.move(partial, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
     /**
@@ -168,10 +245,10 @@ public final class Settings {
      * calls anything that is not "true" false, so a player who writes "yes"
      * would switch the feature off without a word.
      */
-    private static boolean read(Properties properties, Flag flag, List<String> problems) {
-        String value = properties.getProperty(flag.key);
+    private static boolean read(Properties properties, OnOff setting, List<String> problems) {
+        String value = properties.getProperty(setting.key());
         if (value == null) {
-            return flag.fallback;
+            return setting.fallback();
         }
         String trimmed = value.trim();
         if (trimmed.equalsIgnoreCase("true")) {
@@ -180,21 +257,8 @@ public final class Settings {
         if (trimmed.equalsIgnoreCase("false")) {
             return false;
         }
-        problems.add(flag.key + " is \"" + value + "\" in " + FILE_NAME
-                + ", which is neither true nor false, so it is " + flag.fallback + " until that is fixed");
-        return flag.fallback;
-    }
-
-    /** One on/off setting: its key, what it is when unset, and what it does. */
-    private static final class Flag {
-        final String key;
-        final boolean fallback;
-        final String comment;
-
-        Flag(String key, boolean fallback, String comment) {
-            this.key = key;
-            this.fallback = fallback;
-            this.comment = comment;
-        }
+        problems.add(setting.key() + " is \"" + value + "\" in " + FILE_NAME
+                + ", which is neither true nor false, so it is " + setting.fallback() + " until that is fixed");
+        return setting.fallback();
     }
 }

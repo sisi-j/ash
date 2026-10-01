@@ -50,7 +50,7 @@ public final class AshClient implements ClientModInitializer {
         }
 
         Marker marker = new Marker();
-        FpsReadout fpsReadout = new FpsReadout(MinecraftClient::getCurrentFps, settings.fpsReadoutEnabled());
+        FpsReadout fpsReadout = new FpsReadout(MinecraftClient::getCurrentFps, settings.get(Settings.FPS_READOUT));
 
         HudRenderCallback.EVENT.register((minecraft, tickDelta) -> {
             // One surface for both: constructing it reads the window size and
@@ -60,7 +60,7 @@ public final class AshClient implements ClientModInitializer {
             fpsReadout.draw(surface);
         });
 
-        FeatureStatus toggleSprint = MixinFeature.status(settings.toggleSprintEnabled(),
+        FeatureStatus toggleSprint = MixinFeature.status(settings.get(Settings.TOGGLE_SPRINT),
                 () -> ClientPlayerEntity.class, TOGGLE_SPRINT_MIXIN,
                 why -> LOG.warn("ash: " + Feature.TOGGLE_SPRINT.displayName() + " did not load - " + why
                         + ". The game runs without it, and the launcher will say so before the next play."));
@@ -76,7 +76,7 @@ public final class AshClient implements ClientModInitializer {
         }
 
         LoadReport report = new LoadReport(clientVersion())
-                .with(Feature.FPS_READOUT, settings.fpsReadoutEnabled() ? FeatureStatus.LOADED : FeatureStatus.OFF)
+                .with(Feature.FPS_READOUT, settings.get(Settings.FPS_READOUT) ? FeatureStatus.LOADED : FeatureStatus.OFF)
                 .with(Feature.TOGGLE_SPRINT, toggleSprint);
         try {
             report.writeTo(FabricLoader.getInstance().getGameDir());
