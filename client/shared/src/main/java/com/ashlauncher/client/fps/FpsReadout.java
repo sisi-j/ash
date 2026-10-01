@@ -1,6 +1,7 @@
 package com.ashlauncher.client.fps;
 
 import com.ashlauncher.client.hud.HudSurface;
+import java.util.function.BooleanSupplier;
 
 /**
  * The frame rate, on screen, without the debug screen.
@@ -32,16 +33,15 @@ public final class FpsReadout {
     static final int COLOUR = 0xFFFFFFFF;
 
     private final FrameRate frameRate;
-    private final boolean enabled;
+    private final BooleanSupplier on;
 
     /**
-     * @param enabled whether the player wants it, from their settings. Read
-     *     once, at startup: there is no in-game editor yet, so the file only
-     *     changes between sessions.
+     * @param on whether the player wants it, from their settings. Asked every
+     *     frame, so switching it on the settings screen shows at once.
      */
-    public FpsReadout(FrameRate frameRate, boolean enabled) {
+    public FpsReadout(FrameRate frameRate, BooleanSupplier on) {
         this.frameRate = frameRate;
-        this.enabled = enabled;
+        this.on = on;
     }
 
     /**
@@ -49,7 +49,7 @@ public final class FpsReadout {
      * debug screen - which draws its own frame rate from this same corner.
      */
     public void draw(HudSurface surface) {
-        if (!enabled || surface.hudHidden() || surface.debugScreenShown()) {
+        if (!on.getAsBoolean() || surface.hudHidden() || surface.debugScreenShown()) {
             return;
         }
         surface.drawText(frameRate.perSecond() + " FPS", MARGIN, MARGIN, COLOUR);

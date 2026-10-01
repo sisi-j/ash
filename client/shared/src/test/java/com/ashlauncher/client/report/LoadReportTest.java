@@ -61,4 +61,24 @@ class LoadReportTest {
         assertTrue(written.contains("\"status\": \"loaded\""), written);
         assertFalse(written.contains("degraded"), "the last session's report survived:\n" + written);
     }
+
+    @Test
+    void a_session_s_report_has_every_feature_there_is_from_what_landed_and_what_is_on() {
+        // Walked, not listed: a feature added to the enum is in every report
+        // without either target's entrypoint learning its name.
+        LoadReport report = LoadReport.forSession("0.1.0",
+                feature -> feature != Feature.TOGGLE_SPRINT,
+                feature -> feature != Feature.FPS_READOUT);
+
+        String json = report.toJson();
+
+        for (Feature feature : Feature.values()) {
+            assertTrue(json.contains("\"id\": \"" + feature.id() + "\""), feature + " is missing:\n" + json);
+        }
+        assertTrue(json.contains("\"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"off\""), json);
+        assertTrue(json.contains("\"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"degraded\""),
+                json);
+        assertTrue(json.contains("\"id\": \"settings-screen\", \"name\": \"ash's settings screen\","
+                + " \"status\": \"loaded\""), json);
+    }
 }

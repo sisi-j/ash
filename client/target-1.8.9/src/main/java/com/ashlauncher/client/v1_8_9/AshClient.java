@@ -4,12 +4,14 @@ import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
 import com.ashlauncher.client.report.Feature;
-import com.ashlauncher.client.report.FeatureStatus;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.Settings;
+import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.sprint.ToggleSprintHook;
 import java.io.IOException;
+import java.util.EnumSet;
+import java.util.Set;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.legacyfabric.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -42,6 +44,14 @@ public final class AshClient implements ClientModInitializer {
     /** By name: a mixin class cannot be named by a class literal, because loading one directly is an error. */
     private static final String TOGGLE_SPRINT_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerEntityMixin";
 
+    private static final String SETTINGS_KEY_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientMixin";
+
+    /**
+     * The FPS readout this session draws, so the real-game test can ask it -
+     * not the screenshot - whether it draws. Package-private and set once.
+     */
+    static FpsReadout fpsReadout;
+
     @Override
     public void onInitializeClient() {
         Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
@@ -50,7 +60,8 @@ public final class AshClient implements ClientModInitializer {
         }
 
         Marker marker = new Marker();
-        FpsReadout fpsReadout = new FpsReadout(MinecraftClient::getCurrentFps, settings.get(Settings.FPS_READOUT));
+        FpsReadout fpsReadout = new FpsReadout(MinecraftClient::getCurrentFps, () -> settings.get(Settings.FPS_READOUT));
+        AshClient.fpsReadout = fpsReadout;
 
         HudRenderCallback.EVENT.register((minecraft, tickDelta) -> {
             // One surface for both: constructing it reads the window size and
@@ -60,26 +71,57 @@ public final class AshClient implements ClientModInitializer {
             fpsReadout.draw(surface);
         });
 
-        FeatureStatus toggleSprint = MixinFeature.status(settings.get(Settings.TOGGLE_SPRINT),
-                () -> ClientPlayerEntity.class, TOGGLE_SPRINT_MIXIN,
-                why -> LOG.warn("ash: " + Feature.TOGGLE_SPRINT.displayName() + " did not load - " + why
-                        + ". The game runs without it, and the launcher will say so before the next play."));
-
-        // R, in the game's own Movement category beside Sprint - free by
-        // default on both targets, and rebindable in Controls. Only when the
-        // feature is wanted and its mixin landed, so a binding that does
-        // nothing is not holding a key.
-        if (toggleSprint == FeatureStatus.LOADED) {
-            KeyBinding toggleSprintKey = KeyBindingHelper.registerKeyBinding(
-                    new KeyBinding(ToggleSprint.BINDING_NAME, Keyboard.KEY_R, "key.categories.movement"));
-            ToggleSprintHook.install(new ToggleSprint(new KeyBindingToggleKey(toggleSprintKey), true));
+        // Every feature, less any whose mixin did not land. The settings
+        // screen and the load report both read this one set.
+        Set<Feature> landed = EnumSet.allOf(Feature.class);
+        boolean toggleSprintLanded = MixinFeature.landed(() -> ClientPlayerEntity.class, TOGGLE_SPRINT_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.TOGGLE_SPRINT.displayName(), why)));
+        if (!toggleSprintLanded) {
+            landed.remove(Feature.TOGGLE_SPRINT);
         }
 
-        LoadReport report = new LoadReport(clientVersion())
-                .with(Feature.FPS_READOUT, settings.get(Settings.FPS_READOUT) ? FeatureStatus.LOADED : FeatureStatus.OFF)
-                .with(Feature.TOGGLE_SPRINT, toggleSprint);
+        // R, in the game's own Movement category beside Sprint - free by
+        // default on both targets, and rebindable in Controls. Registered
+        // whenever the mixin landed, on or off: bindings can only be
+        // registered now, at startup, and the player can switch the feature
+        // on from the settings screen mid-session. While it is off, the key
+        // does nothing.
+        if (toggleSprintLanded) {
+            KeyBinding toggleSprintKey = KeyBindingHelper.registerKeyBinding(
+                    new KeyBinding(ToggleSprint.BINDING_NAME, Keyboard.KEY_R, "key.categories.movement"));
+            ToggleSprintHook.install(new ToggleSprint(new KeyBindingToggleKey(toggleSprintKey),
+                    () -> settings.get(Settings.TOGGLE_SPRINT)));
+        }
+
+        // Right Shift, which neither target binds by default, read by ash's
+        // own tick mixin. MinecraftClient is loaded long before this runs, so
+        // asking whether that mixin landed loads nothing new.
+        boolean settingsKeyLanded = MixinFeature.landed(() -> MinecraftClient.class, SETTINGS_KEY_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.SETTINGS_SCREEN.displayName(), why)));
+        if (!settingsKeyLanded) {
+            landed.remove(Feature.SETTINGS_SCREEN);
+        }
+
+        Runnable writeReport = () -> writeLoadReport(settings, landed);
+        if (settingsKeyLanded) {
+            SettingsScreen settingsScreen = new SettingsScreen(settings, landed::contains, writeReport);
+            KeyBinding settingsKey = KeyBindingHelper.registerKeyBinding(
+                    new KeyBinding(SettingsScreen.BINDING_NAME, Keyboard.KEY_RSHIFT, "key.categories.misc"));
+            SettingsKey.install(settingsKey, settingsScreen);
+        }
+
+        writeReport.run();
+    }
+
+    /**
+     * What this session is running, for the launcher - written at startup and
+     * again whenever a setting changes, so the report says what the session
+     * ended with.
+     */
+    private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
-            report.writeTo(FabricLoader.getInstance().getGameDir());
+            LoadReport.forSession(clientVersion(), landed::contains, settings::on)
+                    .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {
             LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
         }

@@ -65,11 +65,11 @@ _Avoid_: .minecraft, instance folder
 ### Client
 
 **Feature**:
-One toggleable ash capability, such as toggle sprint or the custom crosshair. Presentation layer only.
+One ash capability that loads, or degrades, on its own, such as toggle sprint or the custom crosshair. Most have a switch the player can turn off; ash's settings screen has none, since nothing switches off the way to switch things. Presentation layer only.
 _Avoid_: mod, module, tweak, hack
 
 **Load report**:
-The record the client writes saying which features loaded, which degraded, and which the player switched off - `ash/load-report.json` in the game directory, replaced each time the client starts. Written by the client, read by the launcher before the next play and into ash's own log, never the other way.
+The record the client writes saying which features loaded, which degraded, and which the player switched off - `ash/load-report.json` in the game directory, replaced each time the client starts and again whenever the player changes a setting in game, so it says what the session ended with. Written by the client, read by the launcher before the next play and into ash's own log, never the other way.
 _Avoid_: health check, status file, diagnostics
 
 **Bundled mod**:
@@ -83,6 +83,10 @@ _Avoid_: integration test, e2e test, game test (that is Minecraft's server-side 
 **Client settings**:
 The client's own configuration file, `config/ash.properties` in an instance's game directory. The client writes it on first run, appends settings an older file lacks, and changes a value in place - that value and not one other byte - when the player changes it in game; nothing else writes it - the launcher least of all, until synced settings define a second writer and the rules that come with one.
 _Avoid_: config (unqualified), options (that is the game's own `options.txt`), synced settings (Phase 4, and a different thing)
+
+**Settings screen**:
+ash's in-game screen for its own features, opened with Right Shift by default and rebindable in Controls. One switch per feature, built by walking the declared client settings, so a feature declared there appears on it with no screen code of its own; a feature that did not load is shown as such and cannot be switched. A change takes effect at once and is saved as it is made, into the client settings - the screen is a second editor of that file, never a second writer.
+_Avoid_: menu, mod menu, options (that is the game's own screen), config screen
 
 **Third-party mod**:
 A mod the player supplies themselves, loaded only when they opt in.

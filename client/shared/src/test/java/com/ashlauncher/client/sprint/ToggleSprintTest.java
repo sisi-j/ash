@@ -3,12 +3,14 @@ package com.ashlauncher.client.sprint;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 class ToggleSprintTest {
 
     private final FakeToggleKey key = new FakeToggleKey();
-    private final ToggleSprint toggleSprint = new ToggleSprint(key, true);
+    private final AtomicBoolean on = new AtomicBoolean(true);
+    private final ToggleSprint toggleSprint = new ToggleSprint(key, on::get);
 
     /** Whatever the game uses for the local player. Only its identity matters. */
     private Object player = new Object();
@@ -136,13 +138,40 @@ class ToggleSprintTest {
     @Test
     void a_player_who_turned_it_off_gets_the_game_s_own_sprint_and_nothing_else() {
         FakeToggleKey unused = new FakeToggleKey();
-        ToggleSprint off = new ToggleSprint(unused, false);
+        ToggleSprint off = new ToggleSprint(unused, () -> false);
 
         unused.press();
         off.tick(player);
 
         assertFalse(off.sprintKeyDown(false, false), "a press latched sprint with the feature turned off");
         assertTrue(off.sprintKeyDown(true, false), "the game's own sprint key stopped working");
+    }
+
+    @Test
+    void switching_it_off_mid_sprint_releases_the_sprint_key_at_once() {
+        key.press();
+        assertTrue(tick(false), "the test proves nothing if the latch never set");
+
+        on.set(false);
+
+        assertFalse(tick(false), "the sprint key still read as held after toggle sprint was switched off");
+    }
+
+    @Test
+    void switching_it_back_on_starts_unlatched_whatever_was_pressed_while_it_was_off() {
+        // The key stays bound while the feature is off, so a player can press
+        // it then. Those presses were not toggle sprint's to count.
+        on.set(false);
+        key.press();
+        tick(false);
+        key.release();
+        tick(false);
+
+        on.set(true);
+
+        assertFalse(tick(false), "a press made while it was off turned sprint on");
+        key.press();
+        assertTrue(tick(false), "the first press after switching it on did nothing");
     }
 
     @Test

@@ -1,10 +1,14 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.LoadReport;
+import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
@@ -12,6 +16,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 
 /**
@@ -67,19 +73,12 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // In a build where every mixin lands, every feature reports loaded -
         // and a mixin that stopped matching this game version fails here, by
         // feature, with the game still running rather than crashed.
-        Path report = FabricLoader.getInstance().getGameDir().resolve(LoadReport.RELATIVE_PATH);
-        try {
-            String written = Files.readString(report);
-            for (String feature : new String[] {
-                "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
-                "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
-            }) {
-                if (!written.contains(feature)) {
-                    throw new AssertionError("the load report does not say " + feature + ":\n" + written);
-                }
-            }
-        } catch (IOException missing) {
-            throw new AssertionError("the client started without writing its load report", missing);
+        for (String feature : new String[] {
+            "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
+            "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
+            "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
+        }) {
+            assertReportSays(feature);
         }
 
         context.takeScreenshot("ash-loaded");
@@ -109,6 +108,138 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             context.takeScreenshot("ash-in-world");
 
             toggleSprintWorks(context, server);
+            settingsScreenWorks(context);
+        }
+    }
+
+    /**
+     * ash's settings screen, opened with its key and pressed with the mouse,
+     * as a player would: switching the FPS readout off reaches the file, the
+     * load report and the HUD, and the same key - then Escape - closes it.
+     */
+    private static void settingsScreenWorks(ClientGameTestContext context) {
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        boolean opened = context.computeOnClient(client -> client.screen instanceof AshSettingsScreen);
+        if (!opened) {
+            throw new AssertionError("Right Shift did not open ash's settings");
+        }
+        context.takeScreenshot("ash-settings");
+
+        clickButton(context, "FPS readout: On");
+        context.waitTicks(5);
+        String label = context.computeOnClient(client -> buttonLabels(client.screen));
+        if (!label.contains("FPS readout: Off")) {
+            throw new AssertionError("the FPS readout's switch did not change: " + label);
+        }
+        assertFileSays("fps-readout.enabled=false");
+        assertReportSays("{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"off\" }");
+        assertReadoutDraws(context, false, "the FPS readout still draws after it was switched off");
+        // By eye: no frame rate top-left, the marker still bottom-left, the
+        // HUD readable through the screen.
+        context.takeScreenshot("ash-settings-fps-readout-off");
+
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        if (context.computeOnClient(client -> client.screen != null)) {
+            throw new AssertionError("the key that opened ash's settings did not close them");
+        }
+
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickButton(context, "FPS readout: Off");
+        context.waitTicks(5);
+        assertFileSays("fps-readout.enabled=true");
+        assertReadoutDraws(context, true, "the FPS readout did not come back when it was switched on");
+        context.getInput().pressKey(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE);
+        context.waitTicks(5);
+        if (context.computeOnClient(client -> client.screen != null)) {
+            throw new AssertionError("Escape did not close ash's settings");
+        }
+    }
+
+    /** A binding by name, checked against every other binding's default key. */
+    private static KeyMapping binding(ClientGameTestContext context, String name) {
+        return context.computeOnClient(client -> {
+            KeyMapping found = null;
+            for (KeyMapping mapping : client.options.keyMappings) {
+                if (mapping.getName().equals(name)) {
+                    found = mapping;
+                }
+            }
+            if (found == null) {
+                throw new AssertionError("no \"" + name + "\" binding in Controls");
+            }
+            for (KeyMapping other : client.options.keyMappings) {
+                if (other != found && other.getDefaultKey().equals(found.getDefaultKey())) {
+                    throw new AssertionError(name + "'s default key is also " + other.getName() + "'s");
+                }
+            }
+            return found;
+        });
+    }
+
+    /** Moves the real cursor onto the button with this label and clicks, as a player would. */
+    private static void clickButton(ClientGameTestContext context, String label) {
+        double[] at = context.computeOnClient(client -> {
+            for (var child : client.screen.children()) {
+                if (child instanceof AbstractWidget widget && widget.getMessage().getString().equals(label)) {
+                    double scale = client.getWindow().getGuiScale();
+                    return new double[] {
+                        (widget.getX() + widget.getWidth() / 2.0) * scale, (widget.getY() + widget.getHeight() / 2.0) * scale
+                    };
+                }
+            }
+            throw new AssertionError("no \"" + label + "\" button on the screen: " + buttonLabels(client.screen));
+        });
+        context.getInput().setCursorPos(at[0], at[1]);
+        context.getInput().pressMouse(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT);
+    }
+
+    private static String buttonLabels(Screen screen) {
+        StringBuilder labels = new StringBuilder();
+        for (var child : screen.children()) {
+            if (child instanceof AbstractWidget widget) {
+                labels.append('[').append(widget.getMessage().getString()).append(']');
+            }
+        }
+        return labels.toString();
+    }
+
+    private static void assertReadoutDraws(ClientGameTestContext context, boolean expected, String otherwise) {
+        List<String> drawn = context.computeOnClient(client -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.fpsReadout.draw(surface);
+            return surface.drawn;
+        });
+        if (drawn.isEmpty() == expected) {
+            throw new AssertionError(otherwise + " (drew " + drawn + ")");
+        }
+    }
+
+    private static void assertFileSays(String line) {
+        Path settings = FabricLoader.getInstance().getConfigDir().resolve("ash.properties");
+        try {
+            String written = Files.readString(settings);
+            if (!written.contains("\n" + line + "\n")) {
+                throw new AssertionError("ash.properties does not say " + line + ":\n" + written);
+            }
+        } catch (IOException unreadable) {
+            throw new AssertionError("ash.properties could not be read", unreadable);
+        }
+    }
+
+    private static void assertReportSays(String entry) {
+        Path report = FabricLoader.getInstance().getGameDir().resolve(LoadReport.RELATIVE_PATH);
+        try {
+            String written = Files.readString(report);
+            if (!written.contains(entry)) {
+                throw new AssertionError("the load report does not say " + entry + ":\n" + written);
+            }
+        } catch (IOException unreadable) {
+            throw new AssertionError("the load report could not be read", unreadable);
         }
     }
 
@@ -126,25 +257,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
      * inventory cannot send "sprint held".
      */
     private static void toggleSprintWorks(ClientGameTestContext context, TestDedicatedServerContext server) {
-        KeyMapping toggle = context.computeOnClient(client -> {
-            KeyMapping found = null;
-            for (KeyMapping mapping : client.options.keyMappings) {
-                if (mapping.getName().equals(ToggleSprint.BINDING_NAME)) {
-                    found = mapping;
-                }
-            }
-            if (found == null) {
-                throw new AssertionError("no \"" + ToggleSprint.BINDING_NAME + "\" binding in Controls");
-            }
-            // Against every binding the game has, the F3 combinations
-            // included, rather than against a list someone wrote down.
-            for (KeyMapping other : client.options.keyMappings) {
-                if (other != found && other.getDefaultKey().equals(found.getDefaultKey())) {
-                    throw new AssertionError("toggle sprint's default key is also " + other.getName() + "'s");
-                }
-            }
-            return found;
-        });
+        KeyMapping toggle = binding(context, ToggleSprint.BINDING_NAME);
 
         context.getInput().holdKey(options -> options.keyUp);
         context.waitTicks(20);
@@ -195,6 +308,41 @@ public class AshLoadsGameTest implements FabricClientGameTest {
                 s -> s.getPlayerList().getPlayers().get(0).getLastClientInput().sprint());
         if (built != expected || received != expected) {
             throw new AssertionError(otherwise + " (client built: " + built + ", server received: " + received + ")");
+        }
+    }
+
+    /**
+     * Records what a feature draws, with nothing hidden: the HUD shown, no
+     * debug screen. So whether ash's own FPS readout draws onto it turns on
+     * its setting alone - the feature itself, asked in the running game.
+     */
+    private static final class RecordingSurface implements HudSurface {
+
+        final List<String> drawn = new ArrayList<>();
+
+        @Override
+        public int height() {
+            return 240;
+        }
+
+        @Override
+        public int lineHeight() {
+            return 9;
+        }
+
+        @Override
+        public void drawText(String text, int x, int y, int colour) {
+            drawn.add(text);
+        }
+
+        @Override
+        public boolean debugScreenShown() {
+            return false;
+        }
+
+        @Override
+        public boolean hudHidden() {
+            return false;
         }
     }
 }

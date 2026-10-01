@@ -14,6 +14,18 @@ public enum FeatureStatus {
         this.word = word;
     }
 
+    /**
+     * A feature's status from whether the player has it on and whether its
+     * mixins landed. Off wins: a feature the player did not want is never a
+     * problem to tell them about, whatever became of its mixins.
+     */
+    public static FeatureStatus of(boolean on, boolean landed) {
+        if (!on) {
+            return OFF;
+        }
+        return landed ? LOADED : DEGRADED;
+    }
+
     String word() {
         return word;
     }
