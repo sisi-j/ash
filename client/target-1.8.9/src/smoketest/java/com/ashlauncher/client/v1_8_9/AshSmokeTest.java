@@ -13,15 +13,18 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import com.ashlauncher.client.report.LoadReport;
+import com.ashlauncher.client.settings.SettingsMenu;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.world.level.LevelGeneratorType;
 import net.minecraft.world.level.LevelInfo;
+import org.lwjgl.input.Keyboard;
 
 /**
  * ash's own miniature of Fabric's client game tests, for the target that has
@@ -107,9 +110,11 @@ public final class AshSmokeTest implements ClientModInitializer {
         screenshot(client, "ash-in-world.png");
 
         toggleSprintWorks(client);
+        settingsScreenWorks(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
-                + " drew its HUD in a world, and toggle sprint started and stopped a sprint");
+                + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
+                + " opened on their key and switched the FPS readout off and on");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -160,6 +165,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         String[] loaded = {
             "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
+            "{ \"id\": \"settings-screen\", \"name\": \"The settings screen\", \"status\": \"loaded\" }",
         };
         for (String feature : loaded) {
             if (!reported.contains(feature)) {
@@ -175,31 +181,7 @@ public final class AshSmokeTest implements ClientModInitializer {
      * on this target, so this is as close to a keyboard as it gets.
      */
     private static void toggleSprintWorks(MinecraftClient client) {
-        KeyBinding toggle = onClient(client, () -> {
-            for (KeyBinding binding : client.options.allKeys) {
-                if (binding.getTranslationKey().equals(ToggleSprint.BINDING_NAME)) {
-                    return binding;
-                }
-            }
-            return null;
-        });
-        if (toggle == null) {
-            fail("there is no \"" + ToggleSprint.BINDING_NAME + "\" binding in Controls");
-            return;
-        }
-        // Against every binding the game has, rather than against a list
-        // someone wrote down.
-        String sharedWith = onClient(client, () -> {
-            for (KeyBinding other : client.options.allKeys) {
-                if (other != toggle && other.getDefaultCode() == toggle.getDefaultCode()) {
-                    return other.getTranslationKey();
-                }
-            }
-            return null;
-        });
-        if (sharedWith != null) {
-            fail("toggle sprint's default key is also " + sharedWith + "'s");
-        }
+        KeyBinding toggle = binding(client, ToggleSprint.BINDING_NAME);
 
         int forward = client.options.forwardKey.getCode();
         int toggleKey = toggle.getCode();
@@ -219,6 +201,122 @@ public final class AshSmokeTest implements ClientModInitializer {
         pause(1_000L);
         expectSprinting(client, false, "a second press of the toggle key did not turn it off");
         hold(client, forward, false);
+    }
+
+    /**
+     * ash's settings screen: opened by its key through the same statics a
+     * keyboard drives, then clicked and keyed the way the game's input loop
+     * delivers a click and a key to an open screen. Switching the FPS readout
+     * off reaches the file and the load report; the same key, then Escape,
+     * closes it.
+     */
+    private static void settingsScreenWorks(MinecraftClient client) {
+        KeyBinding settingsKey = binding(client, SettingsMenu.BINDING_NAME);
+
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings on their key", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        pause(500L);
+        screenshot(client, "ash-settings.png");
+
+        click(client, screen, "FPS readout: On");
+        pause(500L);
+        expectFileSays("fps-readout.enabled=false");
+        expectReportSays("{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"off\" }");
+        if (onClient(client, () -> screen.buttonLabelled("FPS readout: Off")) == null) {
+            fail("the FPS readout's switch did not change its label");
+        }
+        // By eye: no frame rate top-left, the marker still bottom-left, the
+        // HUD readable through the screen.
+        screenshot(client, "ash-settings-fps-readout-off.png");
+
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings on the key that opened them", () -> client.currentScreen == null ? client : null);
+
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen again = await("open ash's settings a second time", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        click(client, again, "FPS readout: Off");
+        pause(500L);
+        expectFileSays("fps-readout.enabled=true");
+        keyIntoScreen(client, again, Keyboard.KEY_ESCAPE);
+        await("close ash's settings on Escape", () -> client.currentScreen == null ? client : null);
+    }
+
+    /** A binding by name, checked against every other binding's default key. */
+    private static KeyBinding binding(MinecraftClient client, String name) {
+        KeyBinding found = onClient(client, () -> {
+            for (KeyBinding binding : client.options.allKeys) {
+                if (binding.getTranslationKey().equals(name)) {
+                    return binding;
+                }
+            }
+            return null;
+        });
+        if (found == null) {
+            fail("there is no \"" + name + "\" binding in Controls");
+            return null;
+        }
+        // Against every binding the game has, rather than against a list
+        // someone wrote down.
+        String sharedWith = onClient(client, () -> {
+            for (KeyBinding other : client.options.allKeys) {
+                if (other != found && other.getDefaultCode() == found.getDefaultCode()) {
+                    return other.getTranslationKey();
+                }
+            }
+            return null;
+        });
+        if (sharedWith != null) {
+            fail(name + "'s default key is also " + sharedWith + "'s");
+        }
+        return found;
+    }
+
+    /** A left click in the middle of the button with this label, as the game's input loop delivers one. */
+    private static void click(MinecraftClient client, AshSettingsScreen screen, String label) {
+        Boolean clicked = onClient(client, () -> {
+            ButtonWidget button = screen.buttonLabelled(label);
+            if (button == null) {
+                return false;
+            }
+            screen.mouseClicked(button.x + button.getWidth() / 2, button.y + 10, 0);
+            return true;
+        });
+        if (clicked == null || !clicked) {
+            fail("there is no \"" + label + "\" button on ash's settings screen");
+        }
+    }
+
+    private static void keyIntoScreen(MinecraftClient client, AshSettingsScreen screen, int keyCode) {
+        onClient(client, () -> {
+            screen.keyPressed((char) 0, keyCode);
+            return null;
+        });
+    }
+
+    private static void expectFileSays(String line) {
+        Path settings = FabricLoader.getInstance().getConfigDir().resolve("ash.properties");
+        try {
+            String written = new String(Files.readAllBytes(settings), StandardCharsets.UTF_8);
+            if (!written.contains("\n" + line + "\n")) {
+                fail("ash.properties does not say " + line + ": " + written);
+            }
+        } catch (IOException unreadable) {
+            fail("ash.properties could not be read (" + unreadable + ")");
+        }
+    }
+
+    private static void expectReportSays(String entry) {
+        Path report = FabricLoader.getInstance().getGameDir().resolve(LoadReport.RELATIVE_PATH);
+        try {
+            String written = new String(Files.readAllBytes(report), StandardCharsets.UTF_8);
+            if (!written.contains(entry)) {
+                fail("the load report does not say " + entry + ": " + written);
+            }
+        } catch (IOException unreadable) {
+            fail("the load report could not be read (" + unreadable + ")");
+        }
     }
 
     private static void hold(MinecraftClient client, int key, boolean down) {

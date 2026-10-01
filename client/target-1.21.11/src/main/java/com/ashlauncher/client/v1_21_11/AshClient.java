@@ -7,11 +7,13 @@ import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.FeatureStatus;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.Settings;
+import com.ashlauncher.client.settings.SettingsMenu;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.sprint.ToggleSprintHook;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.io.IOException;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.loader.api.FabricLoader;
@@ -54,7 +56,7 @@ public final class AshClient implements ClientModInitializer {
 
         Marker marker = new Marker();
         FpsReadout fpsReadout = new FpsReadout(
-                () -> Minecraft.getInstance().getFps(), settings.get(Settings.FPS_READOUT));
+                () -> Minecraft.getInstance().getFps(), () -> settings.get(Settings.FPS_READOUT));
 
         // Last, so nothing vanilla draws over them. That is a decision about
         // this target's element registry rather than about either feature, so
@@ -67,26 +69,56 @@ public final class AshClient implements ClientModInitializer {
         HudElementRegistry.addLast(FPS_READOUT, (graphics, tickCounter) ->
                 fpsReadout.draw(new GuiGraphicsHudSurface(graphics)));
 
-        FeatureStatus toggleSprint = MixinFeature.status(settings.get(Settings.TOGGLE_SPRINT),
-                () -> KeyboardInput.class, TOGGLE_SPRINT_MIXIN,
+        boolean toggleSprintLanded = MixinFeature.landed(() -> KeyboardInput.class, TOGGLE_SPRINT_MIXIN,
                 why -> LOG.warn("ash: " + Feature.TOGGLE_SPRINT.displayName() + " did not load - " + why
                         + ". The game runs without it, and the launcher will say so before the next play."));
 
         // R, under Movement beside the game's own Sprint. Free by default on
         // both targets - read from each game's options, not from a list - and
-        // rebindable in Controls like any other key. Only registered when the
-        // feature is wanted and its mixin landed: a binding that does nothing
-        // should not be holding a key.
-        if (toggleSprint == FeatureStatus.LOADED) {
+        // rebindable in Controls. Registered whenever the mixin landed, on or
+        // off: bindings can only be registered now, at startup, and the player
+        // can switch the feature on from the settings screen mid-session.
+        // While it is off, the key does nothing.
+        if (toggleSprintLanded) {
             KeyMapping toggleSprintKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                     ToggleSprint.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_R,
                     KeyMapping.Category.MOVEMENT));
-            ToggleSprintHook.install(new ToggleSprint(new KeyMappingToggleKey(toggleSprintKey), true));
+            ToggleSprintHook.install(new ToggleSprint(new KeyMappingToggleKey(toggleSprintKey),
+                    () -> settings.get(Settings.TOGGLE_SPRINT)));
         }
 
+        Runnable writeReport = () -> writeLoadReport(settings, toggleSprintLanded);
+        SettingsMenu menu = new SettingsMenu(settings,
+                feature -> feature != Feature.TOGGLE_SPRINT || toggleSprintLanded, writeReport);
+
+        // Right Shift, which neither target binds by default. Polled on Fabric
+        // API's client tick, which is inside the Fabric API ash already ships.
+        // A binding gets no presses while a screen is open, so this only ever
+        // opens the screen; the screen closes itself on the same key.
+        KeyMapping settingsKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                SettingsMenu.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_SHIFT,
+                KeyMapping.Category.MISC));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (settingsKey.consumeClick()) {
+                if (client.screen == null) {
+                    client.setScreen(new AshSettingsScreen(menu, settingsKey));
+                }
+            }
+        });
+
+        writeReport.run();
+    }
+
+    /**
+     * What this session is running, for the launcher - written at startup and
+     * again whenever a setting changes, so the report says what the session
+     * ended with.
+     */
+    private static void writeLoadReport(Settings settings, boolean toggleSprintLanded) {
         LoadReport report = new LoadReport(clientVersion())
-                .with(Feature.FPS_READOUT, settings.get(Settings.FPS_READOUT) ? FeatureStatus.LOADED : FeatureStatus.OFF)
-                .with(Feature.TOGGLE_SPRINT, toggleSprint);
+                .with(Feature.FPS_READOUT, FeatureStatus.of(settings.get(Settings.FPS_READOUT), true))
+                .with(Feature.TOGGLE_SPRINT, FeatureStatus.of(settings.get(Settings.TOGGLE_SPRINT), toggleSprintLanded))
+                .with(Feature.SETTINGS_SCREEN, FeatureStatus.of(true, true));
         try {
             report.writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {

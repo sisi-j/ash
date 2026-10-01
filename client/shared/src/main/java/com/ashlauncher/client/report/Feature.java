@@ -8,7 +8,13 @@ package com.ashlauncher.client.report;
  */
 public enum Feature {
     FPS_READOUT("fps-readout", "FPS readout"),
-    TOGGLE_SPRINT("toggle-sprint", "Toggle sprint");
+    TOGGLE_SPRINT("toggle-sprint", "Toggle sprint"),
+    /**
+     * The key that opens ash's settings, and so the screen behind it. Not a
+     * setting - nothing switches off the way to switch things - but it can
+     * still fail to load: on 1.8.9 the key is read by a mixin of ash's own.
+     */
+    SETTINGS_SCREEN("settings-screen", "The settings screen");
 
     private final String id;
     private final String displayName;

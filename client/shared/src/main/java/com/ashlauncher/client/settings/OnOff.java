@@ -1,8 +1,14 @@
 package com.ashlauncher.client.settings;
 
+import com.ashlauncher.client.report.Feature;
+
 /**
- * One on/off setting, as it is declared: its key in the file, its value when
- * the file does not say, and the comment a first run writes above it.
+ * One on/off setting, as it is declared: the feature it switches, its key in
+ * the file, its value when the file does not say, and the comment a first run
+ * writes above it.
+ *
+ * <p>The feature is what the settings screen calls it, and how the screen knows
+ * a switch would do nothing: a feature that did not load is shown as such.
  *
  * <p>Declared only in {@link Settings}, which is why the constructor is not
  * public - a setting that is not in {@link Settings#declared()} would have no
@@ -14,14 +20,21 @@ package com.ashlauncher.client.settings;
  */
 public final class OnOff {
 
+    private final Feature feature;
     private final String key;
     private final boolean fallback;
     private final String comment;
 
-    OnOff(String key, boolean fallback, String comment) {
+    OnOff(Feature feature, String key, boolean fallback, String comment) {
+        this.feature = feature;
         this.key = key;
         this.fallback = fallback;
         this.comment = comment;
+    }
+
+    /** The feature this switches on and off. */
+    public Feature feature() {
+        return feature;
     }
 
     /** Its key in the settings file, such as {@code fps-readout.enabled}. */

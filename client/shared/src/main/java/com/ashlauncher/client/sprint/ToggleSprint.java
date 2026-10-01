@@ -1,6 +1,7 @@
 package com.ashlauncher.client.sprint;
 
 import java.lang.ref.WeakReference;
+import java.util.function.BooleanSupplier;
 
 /**
  * Sprint on a key press rather than a key held for a whole session.
@@ -43,7 +44,7 @@ public final class ToggleSprint {
     public static final String BINDING_NAME = "Toggle Sprint";
 
     private final ToggleKey key;
-    private final boolean enabled;
+    private final BooleanSupplier on;
     private boolean latched;
     private boolean wasHeld;
 
@@ -51,12 +52,13 @@ public final class ToggleSprint {
     private WeakReference<Object> player = new WeakReference<>(null);
 
     /**
-     * @param enabled whether the player wants it, from their settings. Read
-     *     once, at startup; with it off, the game's sprint is untouched.
+     * @param on whether the player wants it, from their settings. Asked every
+     *     tick, so it can be switched mid-sprint; with it off, the game's
+     *     sprint is untouched.
      */
-    public ToggleSprint(ToggleKey key, boolean enabled) {
+    public ToggleSprint(ToggleKey key, BooleanSupplier on) {
         this.key = key;
-        this.enabled = enabled;
+        this.on = on;
     }
 
     /**
@@ -67,7 +69,14 @@ public final class ToggleSprint {
      *     the latch off.
      */
     public void tick(Object player) {
-        if (!enabled) {
+        if (!on.getAsBoolean()) {
+            // Off means off at once, even mid-sprint. The key stays bound
+            // while the feature is off - bindings are registered once, at
+            // startup - so presses made now are drained here rather than left
+            // to flip the latch the moment it is switched back on.
+            latched = false;
+            key.takePresses();
+            wasHeld = key.held();
             return;
         }
         if (this.player.get() != player) {
@@ -94,6 +103,6 @@ public final class ToggleSprint {
      *     released every key and the latch reads as released with them
      */
     public boolean sprintKeyDown(boolean reallyDown, boolean menuOpen) {
-        return reallyDown || (latched && !menuOpen);
+        return reallyDown || (latched && !menuOpen && on.getAsBoolean());
     }
 }

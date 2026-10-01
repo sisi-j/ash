@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import com.ashlauncher.client.report.Feature;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -55,10 +56,10 @@ public final class Settings {
     /** In the loader's config directory, named for the mod id, as Fabric mods do. */
     static final String FILE_NAME = "ash.properties";
 
-    public static final OnOff FPS_READOUT = new OnOff("fps-readout.enabled", true,
+    public static final OnOff FPS_READOUT = new OnOff(Feature.FPS_READOUT, "fps-readout.enabled", true,
             "Show the frame rate in the top-left corner. true or false.");
 
-    public static final OnOff TOGGLE_SPRINT = new OnOff("toggle-sprint.enabled", true,
+    public static final OnOff TOGGLE_SPRINT = new OnOff(Feature.TOGGLE_SPRINT, "toggle-sprint.enabled", true,
             "Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
                     + " true or false.");
 

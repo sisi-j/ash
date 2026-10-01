@@ -307,6 +307,16 @@ function InstanceDetail(props: {
               created and there is no operation that changes it. */}
           <dd>{LOADER_LABELS[instance.loader]}</dd>
         </div>
+        {instance.loader !== "vanilla" && (
+          <div>
+            <dt>ash settings</dt>
+            {/* The default key, said once where a new player looks. It is
+                rebindable in the game's Controls, and the launcher never
+                reads the game's own options, so a player who moved it knows
+                where it went. */}
+            <dd>Right Shift, in game</dd>
+          </div>
+        )}
         <div>
           <dt>Last played</dt>
           <dd>{instance.last_played_ms ? describeAge(instance.last_played_ms) : "never"}</dd>
