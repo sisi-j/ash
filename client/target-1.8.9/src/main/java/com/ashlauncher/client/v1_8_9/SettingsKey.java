@@ -1,6 +1,6 @@
 package com.ashlauncher.client.v1_8_9;
 
-import com.ashlauncher.client.settings.SettingsMenu;
+import com.ashlauncher.client.settings.SettingsScreen;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 
@@ -14,14 +14,14 @@ import net.minecraft.client.option.KeyBinding;
 public final class SettingsKey {
 
     private static KeyBinding key;
-    private static SettingsMenu menu;
+    private static SettingsScreen settingsScreen;
 
     private SettingsKey() {
     }
 
-    static void install(KeyBinding key, SettingsMenu menu) {
+    static void install(KeyBinding key, SettingsScreen settingsScreen) {
         SettingsKey.key = key;
-        SettingsKey.menu = menu;
+        SettingsKey.settingsScreen = settingsScreen;
     }
 
     /**
@@ -35,7 +35,7 @@ public final class SettingsKey {
         while (key.wasPressed()) {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.currentScreen == null) {
-                client.setScreen(new AshSettingsScreen(menu, key));
+                client.setScreen(new AshSettingsScreen(settingsScreen, key));
             }
         }
     }

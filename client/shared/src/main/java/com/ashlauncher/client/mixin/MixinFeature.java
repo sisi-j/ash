@@ -25,6 +25,15 @@ public final class MixinFeature {
     }
 
     /**
+     * What to log when a feature's mixin did not land. True whether or not the
+     * player has it on: the launcher only says so if they do.
+     */
+    public static String didNotLoad(String featureName, String why) {
+        return "ash: " + featureName + " did not load - " + why + ". The game runs without it; ash's settings"
+                + " show it as unavailable, and if it is switched on the launcher says so before the next play.";
+    }
+
+    /**
      * @param target loads the class the mixin targets
      * @param mixin the mixin's dotted class name, as in the config
      * @param log where to say why, when it did not land

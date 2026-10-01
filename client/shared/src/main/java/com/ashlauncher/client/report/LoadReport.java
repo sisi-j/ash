@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * What this session's start made of each of ash's features, for the launcher.
@@ -39,6 +40,24 @@ public final class LoadReport {
         this.clientVersion = clientVersion;
     }
 
+    /**
+     * The report on this session: every feature there is, each from whether
+     * its mixins landed and whether the player has it on.
+     *
+     * <p>Walked rather than listed, so a feature added to {@link Feature} is
+     * in every report without either target's entrypoint having to name it.
+     *
+     * @param landed whether a feature's mixins landed; true for one with none
+     * @param on whether the player has it on; true for one with no switch
+     */
+    public static LoadReport forSession(String clientVersion, Predicate<Feature> landed, Predicate<Feature> on) {
+        LoadReport report = new LoadReport(clientVersion);
+        for (Feature feature : Feature.values()) {
+            report.with(feature, FeatureStatus.of(on.test(feature), landed.test(feature)));
+        }
+        return report;
+    }
+
     public LoadReport with(Feature feature, FeatureStatus state) {
         states.put(feature, state);
         return this;
@@ -56,7 +75,9 @@ public final class LoadReport {
     }
 
     /**
-     * Writes the report, replacing the last session's.
+     * Writes the report, replacing the last one - at startup, and again
+     * whenever the player changes a setting in game, so that it says what
+     * the session ended with.
      *
      * <p>Through a temporary file and a move, so that a game that dies while
      * this is being written leaves the last complete report or this one, and

@@ -12,8 +12,9 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.LoadReport;
-import com.ashlauncher.client.settings.SettingsMenu;
+import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
@@ -162,15 +163,12 @@ public final class AshSmokeTest implements ClientModInitializer {
             return;
         }
         System.out.println("ash smoke test: load report " + reported.replace('\n', ' '));
-        String[] loaded = {
+        for (String feature : new String[] {
             "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
-            "{ \"id\": \"settings-screen\", \"name\": \"The settings screen\", \"status\": \"loaded\" }",
-        };
-        for (String feature : loaded) {
-            if (!reported.contains(feature)) {
-                fail("the load report does not say " + feature);
-            }
+            "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
+        }) {
+            expectReportSays(feature);
         }
     }
 
@@ -211,7 +209,7 @@ public final class AshSmokeTest implements ClientModInitializer {
      * closes it.
      */
     private static void settingsScreenWorks(MinecraftClient client) {
-        KeyBinding settingsKey = binding(client, SettingsMenu.BINDING_NAME);
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
 
         tap(client, settingsKey.getCode());
         AshSettingsScreen screen = await("open ash's settings on their key", () ->
@@ -223,6 +221,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         pause(500L);
         expectFileSays("fps-readout.enabled=false");
         expectReportSays("{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"off\" }");
+        expectReadoutDraws(client, false, "the FPS readout still draws after it was switched off");
         if (onClient(client, () -> screen.buttonLabelled("FPS readout: Off")) == null) {
             fail("the FPS readout's switch did not change its label");
         }
@@ -239,6 +238,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         click(client, again, "FPS readout: Off");
         pause(500L);
         expectFileSays("fps-readout.enabled=true");
+        expectReadoutDraws(client, true, "the FPS readout did not come back when it was switched on");
         keyIntoScreen(client, again, Keyboard.KEY_ESCAPE);
         await("close ash's settings on Escape", () -> client.currentScreen == null ? client : null);
     }
@@ -288,11 +288,28 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
     }
 
+    /**
+     * A key delivered to the open screen as the game's input loop delivers
+     * one. This tier cannot press a real key: it proves the screen closes on
+     * its key and on Escape, not that the game routes the key to it - which
+     * the 1.21.11 test, pressing real keys, does prove.
+     */
     private static void keyIntoScreen(MinecraftClient client, AshSettingsScreen screen, int keyCode) {
         onClient(client, () -> {
             screen.keyPressed((char) 0, keyCode);
             return null;
         });
+    }
+
+    private static void expectReadoutDraws(MinecraftClient client, boolean expected, String otherwise) {
+        List<String> drawn = onClient(client, () -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.fpsReadout.draw(surface);
+            return surface.drawn;
+        });
+        if (drawn == null || drawn.isEmpty() == expected) {
+            fail(otherwise + " (drew " + drawn + ")");
+        }
     }
 
     private static void expectFileSays(String line) {
@@ -443,6 +460,41 @@ public final class AshSmokeTest implements ClientModInitializer {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             fail("interrupted while waiting for the vanilla client");
+        }
+    }
+
+    /**
+     * Records what a feature draws, with nothing hidden: the HUD shown, no
+     * debug screen. So whether ash's own FPS readout draws onto it turns on
+     * its setting alone - the feature itself, asked in the running game.
+     */
+    private static final class RecordingSurface implements HudSurface {
+
+        final List<String> drawn = new ArrayList<>();
+
+        @Override
+        public int height() {
+            return 240;
+        }
+
+        @Override
+        public int lineHeight() {
+            return 9;
+        }
+
+        @Override
+        public void drawText(String text, int x, int y, int colour) {
+            drawn.add(text);
+        }
+
+        @Override
+        public boolean debugScreenShown() {
+            return false;
+        }
+
+        @Override
+        public boolean hudHidden() {
+            return false;
         }
     }
 }

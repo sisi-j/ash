@@ -18,22 +18,32 @@ import org.junit.jupiter.api.io.TempDir;
  * are, what each says, and what pressing one does. Each version target draws
  * these rows with its own buttons and decides nothing.
  */
-class SettingsMenuTest {
+class SettingsScreenTest {
 
     @TempDir
     Path configDir;
 
     private final List<String> changes = new ArrayList<>();
 
-    private SettingsMenu menuWhereEverythingLanded(Settings settings) {
-        return new SettingsMenu(settings, feature -> true, () -> changes.add("changed"));
+    private SettingsScreen screenWhereEverythingLanded(Settings settings) {
+        return new SettingsScreen(settings, feature -> true, () -> changes.add("changed"));
+    }
+
+    /** The row for a setting, found by what it switches rather than by where it is. */
+    private static SettingsScreen.Row row(SettingsScreen screen, OnOff setting) {
+        for (SettingsScreen.Row row : screen.rows()) {
+            if (row.label().startsWith(setting.feature().displayName() + ": ")) {
+                return row;
+            }
+        }
+        throw new AssertionError("no row for " + setting.key());
     }
 
     @Test
     void there_is_a_row_for_every_declared_setting_in_the_order_they_are_declared() {
         Settings settings = Settings.load(configDir);
 
-        List<SettingsMenu.Row> rows = menuWhereEverythingLanded(settings).rows();
+        List<SettingsScreen.Row> rows = screenWhereEverythingLanded(settings).rows();
 
         // Walked, not listed: a setting declared tomorrow gets a row without
         // a line of screen code.
@@ -49,7 +59,7 @@ class SettingsMenuTest {
     @Test
     void pressing_a_row_switches_its_setting_now_and_for_the_next_session() throws IOException {
         Settings settings = Settings.load(configDir);
-        SettingsMenu.Row fps = menuWhereEverythingLanded(settings).rows().get(0);
+        SettingsScreen.Row fps = row(screenWhereEverythingLanded(settings), Settings.FPS_READOUT);
 
         fps.press();
 
@@ -69,10 +79,10 @@ class SettingsMenuTest {
         // so by the time it runs, the new value has to be there to read.
         Settings settings = Settings.load(configDir);
         List<Boolean> seen = new ArrayList<>();
-        SettingsMenu menu = new SettingsMenu(settings, feature -> true,
+        SettingsScreen screen = new SettingsScreen(settings, feature -> true,
                 () -> seen.add(settings.get(Settings.TOGGLE_SPRINT)));
 
-        menu.rows().get(1).press();
+        row(screen, Settings.TOGGLE_SPRINT).press();
 
         assertEquals(List.of(false), seen);
     }
@@ -82,9 +92,9 @@ class SettingsMenuTest {
         Settings settings = Settings.load(configDir);
         Path file = configDir.resolve("ash.properties");
         String before = Files.readString(file);
-        SettingsMenu menu = new SettingsMenu(settings, feature -> feature != Feature.TOGGLE_SPRINT,
+        SettingsScreen screen = new SettingsScreen(settings, feature -> feature != Feature.TOGGLE_SPRINT,
                 () -> changes.add("changed"));
-        SettingsMenu.Row sprint = menu.rows().get(1);
+        SettingsScreen.Row sprint = row(screen, Settings.TOGGLE_SPRINT);
 
         sprint.press();
 
@@ -94,28 +104,40 @@ class SettingsMenuTest {
         assertEquals(before, Files.readString(file));
         assertEquals(List.of(), changes);
         assertEquals("Toggle sprint did not load. That is a problem with ash, not with your game or your setup,"
-                + " and an update to ash will fix it.", menu.footer());
+                + " and an update to ash will fix it.", screen.footer());
     }
 
     @Test
     void a_change_that_could_not_be_saved_says_so_and_still_takes_effect_for_the_session() throws IOException {
         Settings settings = Settings.load(configDir);
         Files.createDirectory(configDir.resolve("ash.properties.partial"));
-        SettingsMenu menu = menuWhereEverythingLanded(settings);
+        SettingsScreen screen = screenWhereEverythingLanded(settings);
 
-        menu.rows().get(0).press();
+        row(screen, Settings.FPS_READOUT).press();
 
-        assertEquals(Saved.FILE_UNWRITABLE.message(), menu.footer());
+        assertEquals(Saved.FILE_UNWRITABLE.message(), screen.footer());
         assertFalse(settings.get(Settings.FPS_READOUT));
         assertEquals(List.of("changed"), changes);
     }
 
     @Test
     void with_nothing_to_report_the_footer_is_empty() {
-        SettingsMenu menu = menuWhereEverythingLanded(Settings.load(configDir));
+        Settings settings = Settings.load(configDir);
+        SettingsScreen screen = screenWhereEverythingLanded(settings);
 
-        menu.rows().get(0).press();
+        row(screen, Settings.FPS_READOUT).press();
 
-        assertEquals("", menu.footer());
+        assertFalse(settings.get(Settings.FPS_READOUT), "the test proves nothing if the press did nothing");
+        assertEquals("", screen.footer());
+    }
+
+    @Test
+    void every_feature_that_did_not_load_is_named_as_the_launcher_names_them() {
+        // The launcher's notice lists every one; a screen that named only the
+        // first would tell a different story about the same session.
+        SettingsScreen screen = new SettingsScreen(Settings.load(configDir), feature -> false, () -> { });
+
+        assertEquals("FPS readout and Toggle sprint did not load. That is a problem with ash, not with your game or"
+                + " your setup, and an update to ash will fix it.", screen.footer());
     }
 }

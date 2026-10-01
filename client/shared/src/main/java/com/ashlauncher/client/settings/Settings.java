@@ -129,6 +129,19 @@ public final class Settings {
         return new Settings(file, values, problems);
     }
 
+    /**
+     * Whether the player has a feature on: its switch's value, or true for a
+     * feature that has no switch.
+     */
+    public boolean on(Feature feature) {
+        for (OnOff setting : DECLARED) {
+            if (setting.feature() == feature) {
+                return values.get(setting);
+            }
+        }
+        return true;
+    }
+
     /** The setting's value this session: as read, or as last changed in game. */
     public boolean get(OnOff setting) {
         return values.get(setting);

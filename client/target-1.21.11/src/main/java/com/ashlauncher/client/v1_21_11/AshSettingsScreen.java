@@ -1,6 +1,6 @@
 package com.ashlauncher.client.v1_21_11;
 
-import com.ashlauncher.client.settings.SettingsMenu;
+import com.ashlauncher.client.settings.SettingsScreen;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.KeyMapping;
@@ -12,10 +12,10 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 
 /**
- * ash's settings screen on 1.21.11: the shared {@link SettingsMenu}'s rows,
+ * ash's settings screen on 1.21.11: the shared {@link SettingsScreen}'s rows,
  * drawn as the game's own buttons. Every decision - what each row says,
  * whether it can be pressed, what pressing does, what the footer says - is
- * the menu's.
+ * the shared settings screen's.
  *
  * <p>Laid out the same as 1.8.9's: a column of 200-wide buttons a quarter of
  * the way down, the title above, Done below, the footer beneath that.
@@ -25,13 +25,13 @@ final class AshSettingsScreen extends Screen {
     private static final int BUTTON_WIDTH = 200;
     private static final int ROW_HEIGHT = 24;
 
-    private final SettingsMenu menu;
+    private final SettingsScreen settingsScreen;
     private final KeyMapping key;
     private final List<Button> rowButtons = new ArrayList<>();
 
-    AshSettingsScreen(SettingsMenu menu, KeyMapping key) {
-        super(Component.literal(SettingsMenu.TITLE));
-        this.menu = menu;
+    AshSettingsScreen(SettingsScreen settingsScreen, KeyMapping key) {
+        super(Component.literal(SettingsScreen.TITLE));
+        this.settingsScreen = settingsScreen;
         this.key = key;
     }
 
@@ -40,7 +40,7 @@ final class AshSettingsScreen extends Screen {
         rowButtons.clear();
         int x = width / 2 - BUTTON_WIDTH / 2;
         int y = height / 4;
-        for (SettingsMenu.Row row : menu.rows()) {
+        for (SettingsScreen.Row row : settingsScreen.rows()) {
             Button button = Button.builder(Component.literal(row.label()), pressed -> {
                 row.press();
                 relabel();
@@ -55,7 +55,7 @@ final class AshSettingsScreen extends Screen {
 
     private void relabel() {
         for (int i = 0; i < rowButtons.size(); i++) {
-            rowButtons.get(i).setMessage(Component.literal(menu.rows().get(i).label()));
+            rowButtons.get(i).setMessage(Component.literal(settingsScreen.rows().get(i).label()));
         }
     }
 
@@ -63,9 +63,9 @@ final class AshSettingsScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(font, title, width / 2, height / 4 - 20, 0xFFFFFFFF);
-        String footer = menu.footer();
+        String footer = settingsScreen.footer();
         if (!footer.isEmpty()) {
-            int top = height / 4 + (menu.rows().size() + 2) * ROW_HEIGHT;
+            int top = height / 4 + (settingsScreen.rows().size() + 2) * ROW_HEIGHT;
             graphics.drawWordWrap(font, Component.literal(footer), width / 2 - BUTTON_WIDTH, top, BUTTON_WIDTH * 2,
                     0xFFFFFFFF);
         }

@@ -148,13 +148,13 @@ class ToggleSprintTest {
     }
 
     @Test
-    void switching_it_off_mid_sprint_stops_the_sprint() {
+    void switching_it_off_mid_sprint_releases_the_sprint_key_at_once() {
         key.press();
         assertTrue(tick(false), "the test proves nothing if the latch never set");
 
         on.set(false);
 
-        assertFalse(tick(false), "still sprinting after toggle sprint was switched off");
+        assertFalse(tick(false), "the sprint key still read as held after toggle sprint was switched off");
     }
 
     @Test

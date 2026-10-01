@@ -18,7 +18,7 @@ import java.util.function.Predicate;
  * <p>The rows are {@link Settings#declared()}, walked: a setting declared
  * there has a row without a line of screen code.
  */
-public final class SettingsMenu {
+public final class SettingsScreen {
 
     /** The screen's title, on both targets. */
     public static final String TITLE = "ash settings";
@@ -39,7 +39,7 @@ public final class SettingsMenu {
      *     {@code settings} - to rewrite the load report, so that it says what
      *     the session ended with
      */
-    public SettingsMenu(Settings settings, Predicate<Feature> landed, Runnable changed) {
+    public SettingsScreen(Settings settings, Predicate<Feature> landed, Runnable changed) {
         this.settings = settings;
         this.landed = landed;
         this.changed = changed;
@@ -63,13 +63,32 @@ public final class SettingsMenu {
         if (!saveProblem.isEmpty()) {
             return saveProblem;
         }
+        List<String> unavailable = new ArrayList<>();
         for (Row row : rows) {
             if (!row.available()) {
-                return row.setting.feature().displayName() + " did not load. That is a problem with ash, not with"
-                        + " your game or your setup, and an update to ash will fix it.";
+                unavailable.add(row.name());
             }
         }
-        return "";
+        if (unavailable.isEmpty()) {
+            return "";
+        }
+        return listed(unavailable) + " did not load. That is a problem with ash, not with your game or your setup,"
+                + " and an update to ash will fix it.";
+    }
+
+    /** "A", "A and B", "A, B and C" - as the launcher's notice names them. */
+    private static String listed(List<String> names) {
+        if (names.size() == 1) {
+            return names.get(0);
+        }
+        StringBuilder sentence = new StringBuilder();
+        for (int i = 0; i < names.size() - 1; i++) {
+            if (i > 0) {
+                sentence.append(", ");
+            }
+            sentence.append(names.get(i));
+        }
+        return sentence.append(" and ").append(names.get(names.size() - 1)).toString();
     }
 
     /** One setting's switch. */
@@ -84,7 +103,11 @@ public final class SettingsMenu {
         /** "FPS readout: On", "FPS readout: Off" or "FPS readout: Did not load". */
         public String label() {
             String state = !available() ? "Did not load" : settings.get(setting) ? "On" : "Off";
-            return setting.feature().displayName() + ": " + state;
+            return name() + ": " + state;
+        }
+
+        private String name() {
+            return setting.feature().displayName();
         }
 
         /** Whether pressing it does anything. False for a feature whose mixins did not land. */

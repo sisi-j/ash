@@ -70,10 +70,13 @@ public final class ToggleSprint {
      */
     public void tick(Object player) {
         if (!on.getAsBoolean()) {
-            // Off means off at once, even mid-sprint. The key stays bound
-            // while the feature is off - bindings are registered once, at
-            // startup - so presses made now are drained here rather than left
-            // to flip the latch the moment it is switched back on.
+            // Off releases the latch at once, so the sprint key reads as up -
+            // exactly as letting go of a held sprint key does, and with the
+            // same result: the game keeps a sprint that has started until the
+            // player stops or turns. The key stays bound while the feature is
+            // off - bindings are registered once, at startup - so presses made
+            // now are drained here rather than left to flip the latch the
+            // moment it is switched back on.
             latched = false;
             key.takePresses();
             wasHeld = key.held();

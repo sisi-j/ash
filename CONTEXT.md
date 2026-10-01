@@ -65,11 +65,11 @@ _Avoid_: .minecraft, instance folder
 ### Client
 
 **Feature**:
-One toggleable ash capability, such as toggle sprint or the custom crosshair. Presentation layer only.
+One ash capability that loads, or degrades, on its own, such as toggle sprint or the custom crosshair. Most have a switch the player can turn off; ash's settings screen has none, since nothing switches off the way to switch things. Presentation layer only.
 _Avoid_: mod, module, tweak, hack
 
 **Load report**:
-The record the client writes saying which features loaded, which degraded, and which the player switched off - `ash/load-report.json` in the game directory, replaced each time the client starts. Written by the client, read by the launcher before the next play and into ash's own log, never the other way.
+The record the client writes saying which features loaded, which degraded, and which the player switched off - `ash/load-report.json` in the game directory, replaced each time the client starts and again whenever the player changes a setting in game, so it says what the session ended with. Written by the client, read by the launcher before the next play and into ash's own log, never the other way.
 _Avoid_: health check, status file, diagnostics
 
 **Bundled mod**:
