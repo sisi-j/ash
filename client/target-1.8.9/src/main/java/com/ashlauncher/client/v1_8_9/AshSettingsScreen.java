@@ -1,16 +1,19 @@
 package com.ashlauncher.client.v1_8_9;
 
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.ui.Key;
 import com.ashlauncher.client.ui.Panel;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.KeyBinding;
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
 /**
  * ash's settings on 1.8.9: a screen that holds the shared {@link Panel} and
- * decides nothing. It passes the game's input through, gives the panel a
- * surface to draw on, and closes on its own key and on Escape.
+ * decides nothing. It maps the game's input to ash's own names and passes it
+ * on, gives the panel a surface to draw on, and closes on its own key - a
+ * key binding, which only the game knows how to match.
  *
  * <p>{@link #keyPressed} and {@link #mouseClicked} are overridden here, in
  * this package, also so that the smoke test - in this package - can deliver
@@ -53,20 +56,31 @@ public final class AshSettingsScreen extends Screen {
         }
     }
 
+    /** The game's own mouse handling, then the wheel, which 1.8.9's screens leave to each screen. */
+    @Override
+    public void handleMouse() {
+        super.handleMouse();
+        int wheel = Mouse.getEventDWheel();
+        if (wheel != 0) {
+            panel.mouseScrolled(wheel);
+        }
+    }
+
     /**
      * The key that opened it closes it. A key binding gets no presses while a
      * screen is open - the screen drains the keyboard first - so the screen
-     * has to know its own key. Escape is the game's own handling; any other
-     * printable character goes to the panel's search.
+     * has to know its own key. Backspace and Escape go to the panel by
+     * ash's names, and every other key's character to its search - which
+     * ignores the control characters keys such as Shift type here.
      */
     @Override
     protected void keyPressed(char character, int keyCode) {
         if (keyCode == key.getCode()) {
             client.setScreen(null);
         } else if (keyCode == Keyboard.KEY_BACK) {
-            panel.backspace();
+            panel.keyPressed(Key.BACKSPACE);
         } else if (keyCode == Keyboard.KEY_ESCAPE) {
-            super.keyPressed(character, keyCode);
+            panel.keyPressed(Key.ESCAPE);
         } else {
             panel.charTyped(character);
         }

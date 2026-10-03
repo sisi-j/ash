@@ -1,6 +1,7 @@
 package com.ashlauncher.client.v1_21_11;
 
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.ui.Key;
 import com.ashlauncher.client.ui.Panel;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphics;
@@ -13,8 +14,9 @@ import org.lwjgl.glfw.GLFW;
 
 /**
  * ash's settings on 1.21.11: a screen that holds the shared {@link Panel}
- * and decides nothing. It passes the game's input through, gives the panel a
- * surface to draw on, and closes on its own key and on Escape.
+ * and decides nothing. It maps the game's input to ash's own names and passes
+ * it on, gives the panel a surface to draw on, and closes on its own key -
+ * a key binding, which only the game knows how to match.
  */
 final class AshSettingsScreen extends Screen {
 
@@ -53,17 +55,21 @@ final class AshSettingsScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+        panel.mouseScrolled(vertical);
+        return true;
+    }
+
+    @Override
     public boolean charTyped(CharacterEvent event) {
-        for (char character : event.codepointAsString().toCharArray()) {
-            panel.charTyped(character);
-        }
+        panel.charTyped(event.codepoint());
         return true;
     }
 
     /**
      * The key that opened it closes it. A key binding gets no presses while a
      * screen is open - the screen is asked first - so the screen has to know
-     * its own key. Escape is the game's own handling.
+     * its own key. Backspace and Escape go to the panel by ash's names.
      */
     @Override
     public boolean keyPressed(KeyEvent event) {
@@ -72,7 +78,11 @@ final class AshSettingsScreen extends Screen {
             return true;
         }
         if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
-            panel.backspace();
+            panel.keyPressed(Key.BACKSPACE);
+            return true;
+        }
+        if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
+            panel.keyPressed(Key.ESCAPE);
             return true;
         }
         return super.keyPressed(event);

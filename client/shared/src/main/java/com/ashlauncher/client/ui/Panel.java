@@ -1,6 +1,7 @@
 package com.ashlauncher.client.ui;
 
 import com.ashlauncher.client.report.Feature;
+import com.ashlauncher.client.settings.Category;
 import com.ashlauncher.client.settings.SettingsScreen;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,27 +16,28 @@ import java.util.function.Supplier;
  * search and close along the top; categories down the left with counts; a
  * card per feature with its switch; and a footer. It is a stand-in until the
  * final design brief, so the look lives here, in one class, and the
- * behaviour lives in {@link SettingsScreen}.
+ * behaviour lives in {@link SettingsScreen}. Still to come in it: the
+ * options view with #34, and "Edit HUD" with #41.
  *
- * <p>Laid out afresh from the screen size on every frame and every click, so
- * what is drawn and what a click hits can never disagree. Everything is in
- * GUI units and made of rectangles and text.
+ * <p>Laid out afresh from the screen size and the font on every frame and
+ * every click, so what is drawn and what a click hits can never disagree.
+ * Everything is in GUI units and made of rectangles and text.
  *
- * <p>The version target's screen forwards the game's input - a click, a typed
- * character, Backspace - and draws through a {@link ScreenSurface}. It
- * closes itself on its own key and on Escape.
+ * <p>The version target's screen passes the game's input on - a click, a
+ * scroll, a typed character, a {@link Key} - and draws through a
+ * {@link ScreenSurface}. Escape closes the panel; the key that opened it is a
+ * key binding, the target's to recognise.
  */
 public final class Panel {
 
-    private static final int TOP = 22;
-    private static final int FOOT = 14;
-    private static final int SIDE = 72;
+    private static final int TOP_BAR_HEIGHT = 22;
+    private static final int CATEGORY_COLUMN_WIDTH = 72;
     private static final int PAD = 8;
     private static final int GAP = 6;
-    private static final int CARD_HEIGHT = 46;
-    private static final int CATEGORY_HEIGHT = 13;
     private static final int SWITCH_WIDTH = 18;
     private static final int SWITCH_HEIGHT = 10;
+    /** From this wide, in GUI units, three columns of cards fit; below it, two. */
+    private static final int THREE_COLUMNS_FROM = 270;
     private static final int MAX_QUERY = 32;
 
     private final SettingsScreen model;
@@ -43,9 +45,13 @@ public final class Panel {
     private final Runnable close;
     private int width = 427;
     private int height = 240;
+    /** The font's line height, as last drawn: every height below is built from it. */
+    private int lineHeight = 9;
     /** The chosen category, or {@code null} for all of them. */
-    private Feature.Category category;
+    private Category category;
     private String query = "";
+    /** The first row of cards on view. */
+    private int scroll;
 
     /**
      * @param closeKeyName what the key that opens and closes the panel is
@@ -62,6 +68,7 @@ public final class Panel {
     public void resize(int width, int height) {
         this.width = width;
         this.height = height;
+        scroll = Math.min(scroll, maxScroll());
     }
 
     // ---- input ----
@@ -72,15 +79,15 @@ public final class Panel {
             close.run();
             return true;
         }
-        for (Feature.Category each : categories()) {
+        if (categoryRect(null).contains(x, y)) {
+            choose(null);
+            return true;
+        }
+        for (Category each : categories()) {
             if (categoryRect(each).contains(x, y)) {
-                category = each;
+                choose(each);
                 return true;
             }
-        }
-        if (categoryRect(null).contains(x, y)) {
-            category = null;
-            return true;
         }
         for (SettingsScreen.Row row : visibleRows()) {
             Rect card = cardOf(row.feature());
@@ -92,28 +99,54 @@ public final class Panel {
         return searchBox().contains(x, y);
     }
 
-    /**
-     * A character typed while the panel is open. It always goes to the
-     * search box: nothing else on the panel takes text.
-     */
-    public void charTyped(char character) {
-        if (character >= ' ' && character != 127 && query.length() < MAX_QUERY) {
-            query += character;
+    /** The mouse wheel: positive is away from the player, which scrolls up. */
+    public void mouseScrolled(double amount) {
+        if (amount > 0) {
+            scroll = Math.max(0, scroll - 1);
+        } else if (amount < 0) {
+            scroll = Math.min(maxScroll(), scroll + 1);
         }
     }
 
-    public void backspace() {
-        if (!query.isEmpty()) {
-            query = query.substring(0, query.length() - 1);
+    public void keyPressed(Key key) {
+        if (key == Key.ESCAPE) {
+            close.run();
+        } else if (key == Key.BACKSPACE && !query.isEmpty()) {
+            int cut = query.offsetByCodePoints(query.length(), -1);
+            setQuery(query.substring(0, cut));
         }
+    }
+
+    /**
+     * A character typed while the panel is open, as a whole code point, so
+     * nothing here can split one in half. It always goes to the search box:
+     * nothing else on the panel takes text. Control characters - what Shift
+     * or an arrow key types on 1.8.9 - are ignored.
+     */
+    public void charTyped(int codePoint) {
+        if (codePoint < ' ' || codePoint == 127 || !Character.isValidCodePoint(codePoint)
+                || query.codePointCount(0, query.length()) >= MAX_QUERY) {
+            return;
+        }
+        setQuery(new StringBuilder(query).appendCodePoint(codePoint).toString());
+    }
+
+    private void choose(Category which) {
+        category = which;
+        scroll = 0;
+    }
+
+    private void setQuery(String text) {
+        query = text;
+        scroll = 0;
     }
 
     // ---- where things are, for clicks and for anything that has to point at them ----
 
     /**
      * Where a feature's switch is drawn, or {@code null} when its card is not
-     * on screen - filtered out, or past the bottom. Public so that the
-     * real-game tests can click it as a player would.
+     * on view - filtered out, or scrolled away. Public so that the real-game
+     * tests can click it as a player would.
      */
     public Rect switchOf(Feature feature) {
         Rect card = cardOf(feature);
@@ -122,14 +155,16 @@ public final class Panel {
 
     Rect cardOf(Feature feature) {
         List<SettingsScreen.Row> rows = visibleRows();
-        Rect grid = grid();
-        int columns = grid.width >= 270 ? 3 : 2;
-        int cardWidth = (grid.width - GAP * (columns - 1)) / columns;
         for (int i = 0; i < rows.size(); i++) {
             if (rows.get(i).feature() == feature) {
-                int x = grid.x + (i % columns) * (cardWidth + GAP);
-                int y = grid.y + (i / columns) * (CARD_HEIGHT + GAP);
-                return y + CARD_HEIGHT <= grid.y + grid.height ? new Rect(x, y, cardWidth, CARD_HEIGHT) : null;
+                int row = i / columns();
+                if (row < scroll || row >= scroll + rowsOnView()) {
+                    return null;
+                }
+                Rect grid = grid();
+                int x = grid.x + (i % columns()) * (cardWidth() + GAP);
+                int y = grid.y + (row - scroll) * (cardHeight() + GAP);
+                return new Rect(x, y, cardWidth(), cardHeight());
             }
         }
         return null;
@@ -140,7 +175,7 @@ public final class Panel {
         if (name.equals("All")) {
             return categoryRect(null);
         }
-        for (Feature.Category each : categories()) {
+        for (Category each : categories()) {
             if (each.displayName().equals(name)) {
                 return categoryRect(each);
             }
@@ -150,7 +185,12 @@ public final class Panel {
 
     Rect closeButton() {
         Rect panel = panel();
-        return new Rect(panel.x + panel.width - PAD - 12, panel.y + 5, 12, 12);
+        return new Rect(panel.x + panel.width - PAD - 12, panel.y + (TOP_BAR_HEIGHT - 12) / 2, 12, 12);
+    }
+
+    int maxScroll() {
+        int rows = (visibleRows().size() + columns() - 1) / columns();
+        return Math.max(0, rows - rowsOnView());
     }
 
     private Rect panel() {
@@ -159,28 +199,51 @@ public final class Panel {
         return new Rect((width - w) / 2, (height - h) / 2, w, h);
     }
 
+    private int footerHeight() {
+        return lineHeight + 5;
+    }
+
+    private int cardHeight() {
+        return 6 + lineHeight + 5 + 2 * lineHeight + 5;
+    }
+
     private Rect searchBox() {
         Rect panel = panel();
         int left = panel.x + PAD + 30;
-        return new Rect(left, panel.y + 4, closeButton().x - 8 - left, 14);
+        int h = lineHeight + 5;
+        return new Rect(left, panel.y + (TOP_BAR_HEIGHT - h) / 2, closeButton().x - 8 - left, h);
     }
 
-    private Rect categoryRect(Feature.Category which) {
+    private Rect categoryRect(Category which) {
         Rect panel = panel();
         int index = which == null ? 0 : categories().indexOf(which) + 1;
-        return new Rect(panel.x + 4, panel.y + TOP + 6 + index * (CATEGORY_HEIGHT + 2), SIDE - 8, CATEGORY_HEIGHT);
+        int h = lineHeight + 4;
+        return new Rect(panel.x + 4, panel.y + TOP_BAR_HEIGHT + 6 + index * (h + 2), CATEGORY_COLUMN_WIDTH - 8, h);
     }
 
     /** Where the cards go: the body, less room for the notice when there is one. */
     private Rect grid() {
         Rect panel = panel();
-        int top = panel.y + TOP + PAD;
-        int bottom = panel.y + panel.height - FOOT - PAD - noticeHeight();
-        return new Rect(panel.x + SIDE + PAD, top, panel.width - SIDE - 2 * PAD, bottom - top);
+        int top = panel.y + TOP_BAR_HEIGHT + PAD;
+        int bottom = panel.y + panel.height - footerHeight() - PAD - noticeHeight();
+        return new Rect(panel.x + CATEGORY_COLUMN_WIDTH + PAD, top, panel.width - CATEGORY_COLUMN_WIDTH - 2 * PAD,
+                bottom - top);
     }
 
     private int noticeHeight() {
-        return model.footer().isEmpty() ? 0 : 2 * 9 + 4;
+        return model.footer().isEmpty() ? 0 : 2 * lineHeight + 4;
+    }
+
+    private int columns() {
+        return grid().width >= THREE_COLUMNS_FROM ? 3 : 2;
+    }
+
+    private int cardWidth() {
+        return (grid().width - GAP * (columns() - 1)) / columns();
+    }
+
+    private int rowsOnView() {
+        return Math.max(1, (grid().height + GAP) / (cardHeight() + GAP));
     }
 
     private static Rect switchIn(Rect card) {
@@ -190,9 +253,9 @@ public final class Panel {
     // ---- what is shown ----
 
     /** The categories that have at least one switch, in their declared order. */
-    private List<Feature.Category> categories() {
-        List<Feature.Category> present = new ArrayList<>();
-        for (Feature.Category each : Feature.Category.values()) {
+    private List<Category> categories() {
+        List<Category> present = new ArrayList<>();
+        for (Category each : Category.values()) {
             if (count(each) > 0) {
                 present.add(each);
             }
@@ -200,10 +263,10 @@ public final class Panel {
         return present;
     }
 
-    private int count(Feature.Category which) {
+    private int count(Category which) {
         int count = 0;
         for (SettingsScreen.Row row : model.rows()) {
-            if (which == null || row.feature().category() == which) {
+            if (which == null || row.category() == which) {
                 count++;
             }
         }
@@ -214,10 +277,9 @@ public final class Panel {
         String needle = query.trim().toLowerCase(Locale.ROOT);
         List<SettingsScreen.Row> visible = new ArrayList<>();
         for (SettingsScreen.Row row : model.rows()) {
-            Feature feature = row.feature();
-            boolean inCategory = category == null || feature.category() == category;
-            String haystack = (feature.displayName() + " " + feature.description() + " "
-                    + feature.category().displayName()).toLowerCase(Locale.ROOT);
+            boolean inCategory = category == null || row.category() == category;
+            String haystack = (row.name() + " " + row.description() + " " + row.category().displayName())
+                    .toLowerCase(Locale.ROOT);
             if (inCategory && (needle.isEmpty() || haystack.contains(needle))) {
                 visible.add(row);
             }
@@ -229,47 +291,50 @@ public final class Panel {
 
     /** Draws the panel; the mouse position, in GUI units, decides what is highlighted. */
     public void render(ScreenSurface surface, int mouseX, int mouseY) {
+        lineHeight = surface.lineHeight();
+        scroll = Math.min(scroll, maxScroll());
         surface.fill(0, 0, width, height, Palette.DIM);
         Rect panel = panel();
-        Shapes.rounded(surface, panel, 3, Palette.LINE);
-        Shapes.rounded(surface, new Rect(panel.x + 1, panel.y + 1, panel.width - 2, panel.height - 2), 2, Palette.PANEL);
+        Shapes.bordered(surface, panel, 3, Palette.LINE, Palette.PANEL);
 
-        drawTop(surface, panel, mouseX, mouseY);
+        drawTopBar(surface, panel, mouseX, mouseY);
         drawCategories(surface, panel, mouseX, mouseY);
         drawCards(surface, mouseX, mouseY);
+        drawScrollBar(surface);
         drawNotice(surface);
         drawFooter(surface, panel);
     }
 
-    private void drawTop(ScreenSurface surface, Rect panel, int mouseX, int mouseY) {
-        int textY = panel.y + (TOP - surface.lineHeight()) / 2 + 1;
+    private void drawTopBar(ScreenSurface surface, Rect panel, int mouseX, int mouseY) {
+        int textY = panel.y + (TOP_BAR_HEIGHT - lineHeight) / 2 + 1;
         surface.drawText("ash", panel.x + PAD, textY, Palette.TEXT);
 
         Rect search = searchBox();
-        Shapes.rounded(surface, search, 2, Palette.LINE);
-        Shapes.rounded(surface, new Rect(search.x + 1, search.y + 1, search.width - 2, search.height - 2), 1, Palette.RAISED);
+        Shapes.bordered(surface, search, 2, Palette.LINE, Palette.RAISED);
         int textX = search.x + 5;
         int room = search.width - 12;
+        int searchTextY = search.y + 3;
         if (query.isEmpty()) {
-            surface.drawText(Text.fit(surface, "Search features", room), textX, search.y + 3, Palette.MUTED);
+            surface.drawText(Text.fit(surface, "Search features", room), textX, searchTextY, Palette.MUTED);
         } else {
             String shown = Text.tail(surface, query, room);
-            surface.drawText(shown, textX, search.y + 3, Palette.TEXT);
-            surface.fill(textX + surface.textWidth(shown) + 1, search.y + 3, 1, surface.lineHeight() - 1, Palette.TEXT);
+            surface.drawText(shown, textX, searchTextY, Palette.TEXT);
+            surface.fill(textX + surface.textWidth(shown) + 1, searchTextY, 1, lineHeight - 1, Palette.TEXT);
         }
 
         Rect close = closeButton();
         int closeColour = close.contains(mouseX, mouseY) ? Palette.TEXT : Palette.MUTED;
-        surface.drawText("x", close.centreX() - surface.textWidth("x") / 2, close.y + 2, closeColour);
+        surface.drawText("x", close.centreX() - surface.textWidth("x") / 2, close.y + (close.height - lineHeight) / 2 + 1,
+                closeColour);
 
-        surface.fill(panel.x + 1, panel.y + TOP, panel.width - 2, 1, Palette.LINE);
+        surface.fill(panel.x + 1, panel.y + TOP_BAR_HEIGHT, panel.width - 2, 1, Palette.LINE);
     }
 
     private void drawCategories(ScreenSurface surface, Rect panel, int mouseX, int mouseY) {
-        List<Feature.Category> all = new ArrayList<>();
+        List<Category> all = new ArrayList<>();
         all.add(null);
         all.addAll(categories());
-        for (Feature.Category each : all) {
+        for (Category each : all) {
             Rect at = categoryRect(each);
             boolean chosen = each == category;
             if (chosen) {
@@ -278,10 +343,12 @@ public final class Panel {
             int colour = chosen || at.contains(mouseX, mouseY) ? Palette.TEXT : Palette.MUTED;
             String name = each == null ? "All" : each.displayName();
             String count = String.valueOf(count(each));
-            surface.drawText(name, at.x + 5, at.y + 3, colour);
-            surface.drawText(count, at.x + at.width - 5 - surface.textWidth(count), at.y + 3, Palette.MUTED);
+            surface.drawText(name, at.x + 5, at.y + 2, colour);
+            surface.drawText(count, at.x + at.width - 5 - surface.textWidth(count), at.y + 2, Palette.MUTED);
         }
-        surface.fill(panel.x + SIDE, panel.y + TOP + 1, 1, panel.height - TOP - FOOT - 1, Palette.LINE);
+        int top = panel.y + TOP_BAR_HEIGHT + 1;
+        surface.fill(panel.x + CATEGORY_COLUMN_WIDTH, top, 1, panel.height - TOP_BAR_HEIGHT - footerHeight() - 1,
+                Palette.LINE);
     }
 
     private void drawCards(ScreenSurface surface, int mouseX, int mouseY) {
@@ -298,24 +365,38 @@ public final class Panel {
                 continue;
             }
             int border = card.contains(mouseX, mouseY) ? Palette.EMPHASIS : Palette.LINE;
-            Shapes.rounded(surface, card, 2, border);
-            Shapes.rounded(surface, new Rect(card.x + 1, card.y + 1, card.width - 2, card.height - 2), 1, Palette.RAISED);
+            Shapes.bordered(surface, card, 2, border, Palette.RAISED);
 
             Rect toggle = switchIn(card);
             int nameRoom = toggle.x - card.x - 10;
-            surface.drawText(Text.fit(surface, row.feature().displayName(), nameRoom), card.x + 6, card.y + 6, Palette.TEXT);
-            Shapes.toggle(surface, toggle, row.on(), row.available());
+            surface.drawText(Text.fit(surface, row.name(), nameRoom), card.x + 6, card.y + 6, Palette.TEXT);
+            Shapes.onOffSwitch(surface, toggle, row.on(), row.available());
 
-            int textTop = card.y + 20;
+            int textTop = card.y + 6 + lineHeight + 5;
             if (!row.available()) {
                 surface.drawText("Did not load", card.x + 6, textTop, Palette.MUTED);
             } else {
-                for (String line : Text.wrap(surface, row.feature().description(), card.width - 12, 2)) {
+                for (String line : Text.wrap(surface, row.description(), card.width - 12, 2)) {
                     surface.drawText(line, card.x + 6, textTop, Palette.MUTED);
-                    textTop += surface.lineHeight();
+                    textTop += lineHeight;
                 }
             }
         }
+    }
+
+    /** A thin bar beside the cards when there are more rows than fit, its thumb where the view is. */
+    private void drawScrollBar(ScreenSurface surface) {
+        int max = maxScroll();
+        if (max == 0) {
+            return;
+        }
+        Rect grid = grid();
+        int x = grid.x + grid.width + 3;
+        int rows = max + rowsOnView();
+        int thumb = Math.max(6, grid.height * rowsOnView() / rows);
+        int thumbY = grid.y + (grid.height - thumb) * scroll / max;
+        surface.fill(x, grid.y, 2, grid.height, Palette.LINE);
+        surface.fill(x, thumbY, 2, thumb, Palette.MUTED);
     }
 
     /** Why a change was not saved, or why a feature is unavailable: the model's words, above the footer. */
@@ -328,14 +409,14 @@ public final class Panel {
         int y = grid.y + grid.height + 4;
         for (String line : Text.wrap(surface, notice, grid.width, 2)) {
             surface.drawText(line, grid.x, y, Palette.TEXT);
-            y += surface.lineHeight();
+            y += lineHeight;
         }
     }
 
     private void drawFooter(ScreenSurface surface, Rect panel) {
-        int top = panel.y + panel.height - FOOT;
+        int top = panel.y + panel.height - footerHeight();
         surface.fill(panel.x + 1, top, panel.width - 2, 1, Palette.LINE);
-        int textY = top + (FOOT - surface.lineHeight()) / 2 + 1;
+        int textY = top + 3;
         String closes = closeKeyName.get() + " closes";
         int right = panel.x + panel.width - PAD - surface.textWidth(closes);
         surface.drawText(closes, right, textY, Palette.MUTED);

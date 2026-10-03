@@ -100,7 +100,6 @@ class SettingsScreenTest {
         sprint.press();
 
         assertFalse(sprint.available());
-        
         assertTrue(settings.get(Settings.TOGGLE_SPRINT), "a switch that does nothing was switched anyway");
         assertEquals(before, Files.readString(file));
         assertEquals(List.of(), changes);

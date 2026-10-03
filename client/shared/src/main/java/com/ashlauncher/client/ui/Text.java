@@ -30,7 +30,7 @@ final class Text {
     static String tail(ScreenSurface surface, String text, int room) {
         String shown = text;
         while (!shown.isEmpty() && surface.textWidth(shown) > room) {
-            shown = shown.substring(1);
+            shown = shown.substring(shown.offsetByCodePoints(0, 1));
         }
         return shown;
     }
@@ -54,7 +54,9 @@ final class Text {
                 lines.add(fit(surface, line + " " + join(words, i), room));
                 return lines;
             }
-            lines.add(line);
+            // Fitted too: a single word wider than the room is taken whole
+            // above, and has to be cut here rather than run off the card.
+            lines.add(fit(surface, line, room));
             line = words[i];
         }
         if (!line.isEmpty()) {

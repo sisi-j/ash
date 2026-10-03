@@ -43,9 +43,23 @@ class PanelTest {
     }
 
     private static FakeScreenSurface render(Panel panel) {
-        FakeScreenSurface surface = new FakeScreenSurface();
+        return render(panel, new FakeScreenSurface());
+    }
+
+    private static FakeScreenSurface render(Panel panel, FakeScreenSurface surface) {
         panel.render(surface, -1, -1);
         return surface;
+    }
+
+    /** The text drawn inside a rectangle, top to bottom, joined with spaces. */
+    private static String textIn(FakeScreenSurface surface, Rect area) {
+        StringBuilder text = new StringBuilder();
+        for (FakeScreenSurface.Text drawn : surface.texts) {
+            if (area.contains(drawn.x(), drawn.y())) {
+                text.append(text.length() == 0 ? "" : " ").append(drawn.text());
+            }
+        }
+        return text.toString();
     }
 
     private static void click(Panel panel, Rect at) {
@@ -60,13 +74,19 @@ class PanelTest {
 
     @Test
     void every_declared_setting_has_a_card_with_its_name_and_what_it_does() {
-        FakeScreenSurface surface = render(panel(Settings.load(configDir)));
-
+        FakeScreenSurface surface;
         assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
+        Panel panel = panel(Settings.load(configDir));
+        surface = render(panel);
         for (OnOff setting : Settings.declared()) {
-            assertTrue(surface.drew(setting.feature().displayName()), setting.key() + " has no card: " + surface.lines());
-            assertTrue(String.join(" ", surface.lines()).contains(setting.feature().description().split(" ")[0]),
-                    setting.key() + "'s description was not drawn");
+            Rect card = panel.cardOf(setting.feature());
+            String inCard = textIn(surface, card);
+            // The name, then as much of its own description as fits, in its own card.
+            String name = setting.feature().displayName();
+            assertTrue(inCard.startsWith(name + " "), setting.key() + "'s card reads \"" + inCard + "\"");
+            String shown = inCard.substring(name.length() + 1).replace("...", "");
+            assertTrue(shown.length() >= 12 && setting.description().startsWith(shown),
+                    setting.key() + "'s card shows \"" + shown + "\", not its description");
         }
         assertTrue(surface.drew("ash"), "no wordmark");
     }
@@ -106,12 +126,39 @@ class PanelTest {
 
     @Test
     void each_category_is_listed_with_how_many_features_it_has() {
-        FakeScreenSurface surface = render(panel(Settings.load(configDir)));
+        Panel panel = panel(Settings.load(configDir));
+        FakeScreenSurface surface = render(panel);
 
         for (String category : new String[] {"All", "PvP", "HUD", "Movement"}) {
-            assertTrue(surface.drew(category), category + " is not listed");
+            long expected = category.equals("All") ? Settings.declared().size()
+                    : Settings.declared().stream().filter(s -> s.category().displayName().equals(category)).count();
+            assertEquals(category + " " + expected, textIn(surface, panel.categoryAt(category)),
+                    "the " + category + " row");
         }
-        assertTrue(surface.drew(String.valueOf(Settings.declared().size())), "All's count is not shown");
+    }
+
+    @Test
+    void a_switch_is_drawn_as_what_it_is_knob_right_when_on_and_left_when_off() {
+        Settings settings = Settings.load(configDir);
+        Panel panel = panel(settings);
+        Rect on = panel.switchOf(Feature.FPS_READOUT);
+
+        assertEquals(Palette.BACKGROUND, knobColour(render(panel), on, true), "an on switch's knob is not at the right");
+        click(panel, on);
+        assertEquals(Palette.MUTED, knobColour(render(panel), on, false), "an off switch's knob is not at the left");
+    }
+
+    /** The colour filled at the middle of one end of a switch, where its knob sits. */
+    private static int knobColour(FakeScreenSurface surface, Rect at, boolean right) {
+        int x = right ? at.x + at.width - 5 : at.x + 4;
+        int y = at.centreY();
+        int colour = 0;
+        for (FakeScreenSurface.Fill fill : surface.fills) {
+            if (x >= fill.x() && x < fill.x() + fill.width() && y >= fill.y() && y < fill.y() + fill.height()) {
+                colour = fill.colour();
+            }
+        }
+        return colour;
     }
 
     @Test
@@ -126,7 +173,7 @@ class PanelTest {
         assertFalse(filtered.drew("FPS readout"), "a card that does not match is still shown");
 
         for (int i = 0; i < "cross".length(); i++) {
-            panel.backspace();
+            panel.keyPressed(Key.BACKSPACE);
         }
         FakeScreenSurface cleared = render(panel);
         assertTrue(cleared.drew("FPS readout"), "clearing the search did not bring the cards back");
@@ -170,6 +217,53 @@ class PanelTest {
     }
 
     @Test
+    void escape_closes_the_panel() {
+        Panel panel = panel(Settings.load(configDir));
+
+        panel.keyPressed(Key.ESCAPE);
+
+        assertEquals(List.of("closed"), closed);
+    }
+
+    @Test
+    void typing_never_splits_a_character_in_two() {
+        // A character outside the basic plane is two chars in Java; the
+        // search keeps it whole when typed and when deleted.
+        Panel panel = panel(Settings.load(configDir));
+        int grin = 0x1F600;
+
+        panel.charTyped('a');
+        panel.charTyped(grin);
+        panel.keyPressed(Key.BACKSPACE);
+
+        assertTrue(render(panel).drew("a"), "Backspace took half a character, or the 'a' with it");
+    }
+
+    @Test
+    void cards_that_do_not_fit_are_reached_by_scrolling() {
+        // A taller font - as ash's own typeface might be - makes the cards
+        // taller, so three no longer fit at 320 by 240, the smallest GUI size
+        // the game ever uses.
+        Settings settings = Settings.load(configDir);
+        Panel panel = panel(settings);
+        panel.resize(320, 240);
+        FakeScreenSurface tall = render(panel, new FakeScreenSurface(18));
+        assertTrue(panel.maxScroll() > 0, "the test proves nothing if every card fits");
+        assertEquals(null, panel.switchOf(Feature.CROSSHAIR), "the third card is on view without scrolling");
+        assertTrue(tall.fills.stream().anyMatch(f -> f.colour() == Palette.MUTED && f.width() == 2),
+                "nothing shows there is more to scroll to");
+
+        panel.mouseScrolled(-1);
+        render(panel, new FakeScreenSurface(18));
+        click(panel, panel.switchOf(Feature.CROSSHAIR));
+
+        assertFalse(settings.get(Settings.CROSSHAIR), "the card scrolled to could not be switched");
+        panel.mouseScrolled(1);
+        render(panel, new FakeScreenSurface(18));
+        assertTrue(panel.switchOf(Feature.FPS_READOUT) != null, "scrolling back up did not bring the first card back");
+    }
+
+    @Test
     void a_click_on_nothing_does_nothing() {
         Settings settings = Settings.load(configDir);
         Panel panel = panel(settings);
@@ -185,28 +279,44 @@ class PanelTest {
     }
 
     @Test
-    void at_the_smallest_common_gui_size_everything_stays_on_screen_and_no_card_overlaps_another() {
-        // 1280 by 720 at GUI scale 4 is 320 by 180: the tightest a common
-        // window gets before the game drops to a smaller scale.
-        for (int[] size : new int[][] {{320, 180}, {427, 240}, {640, 360}, {960, 540}}) {
-            Panel panel = panel(Settings.load(configDir));
+    void at_every_common_gui_size_everything_stays_on_screen_and_no_card_overlaps_another() {
+        // The game picks the largest GUI scale that leaves at least 320 by 240,
+        // so 320 by 240 is the smallest a GUI ever is; 427 by 240 is 1280 by
+        // 720 at scale 3. Each size is tried with and without the notice a
+        // feature that did not load puts above the footer.
+        for (int[] size : new int[][] {{320, 240}, {427, 240}, {480, 270}, {640, 360}, {960, 540}}) {
+          for (boolean notice : new boolean[] {false, true}) {
+            Panel panel = panel(Settings.load(configDir), feature -> !notice || feature != Feature.TOGGLE_SPRINT);
             panel.resize(size[0], size[1]);
             FakeScreenSurface surface = render(panel);
+            String at = size[0] + "x" + size[1] + (notice ? " with the notice" : "");
 
             for (FakeScreenSurface.Fill fill : surface.fills) {
                 assertTrue(fill.x() >= 0 && fill.y() >= 0 && fill.x() + fill.width() <= size[0]
-                        && fill.y() + fill.height() <= size[1], "off screen at " + size[0] + "x" + size[1] + ": " + fill);
+                        && fill.y() + fill.height() <= size[1], "off screen at " + at + ": " + fill);
             }
-            List<Rect> switches = new ArrayList<>();
+            for (FakeScreenSurface.Text text : surface.texts) {
+                assertTrue(text.x() >= 0 && text.y() >= 0 && text.x() + surface.textWidth(text.text()) <= size[0]
+                        && text.y() + surface.lineHeight() <= size[1], "text off screen at " + at + ": " + text);
+            }
             for (OnOff setting : Settings.declared()) {
-                switches.add(panel.cardOf(setting.feature()));
+                assertTrue(panel.cardOf(setting.feature()) != null || panel.maxScroll() > 0,
+                        setting.key() + "'s card is neither on view nor reachable by scrolling at " + at);
             }
-            for (int i = 0; i < switches.size(); i++) {
-                for (int j = i + 1; j < switches.size(); j++) {
-                    assertFalse(switches.get(i).overlaps(switches.get(j)),
-                            "cards overlap at " + size[0] + "x" + size[1] + ": " + switches.get(i) + " " + switches.get(j));
+            List<Rect> cards = new ArrayList<>();
+            for (OnOff setting : Settings.declared()) {
+                Rect card = panel.cardOf(setting.feature());
+                if (card != null) {
+                    cards.add(card);
                 }
             }
+            for (int i = 0; i < cards.size(); i++) {
+                for (int j = i + 1; j < cards.size(); j++) {
+                    assertFalse(cards.get(i).overlaps(cards.get(j)), "cards overlap at " + at + ": " + cards.get(i) + " "
+                            + cards.get(j));
+                }
+            }
+          }
         }
     }
 }

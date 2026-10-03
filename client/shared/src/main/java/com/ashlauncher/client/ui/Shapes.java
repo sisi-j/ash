@@ -10,7 +10,11 @@ final class Shapes {
     private Shapes() {
     }
 
-    /** A rectangle with corners of radius {@code radius}, drawn as stepped rows. */
+    /**
+     * A rectangle with corners of radius {@code radius}, drawn as stepped
+     * rows. Radius 2 cuts one pixel from each corner, radius 3 a two-step
+     * curve, and half the height a pill.
+     */
     static void rounded(ScreenSurface surface, Rect at, int radius, int colour) {
         int r = Math.min(radius, Math.min(at.width, at.height) / 2);
         if (r <= 0) {
@@ -25,10 +29,24 @@ final class Shapes {
         surface.fill(at.x, at.y + r, at.width, at.height - 2 * r, colour);
     }
 
-    /** How far in a row is at the corner, {@code row} rows from the edge. */
+    /**
+     * A rounded rectangle with a one-unit border: the panel, the search box
+     * and every card are drawn this way.
+     */
+    static void bordered(ScreenSurface surface, Rect at, int radius, int border, int fill) {
+        rounded(surface, at, radius, border);
+        rounded(surface, new Rect(at.x + 1, at.y + 1, at.width - 2, at.height - 2), radius - 1, fill);
+    }
+
+    /**
+     * How far in a row is at the corner, {@code row} rows from the edge: how
+     * much of the row lies outside the circle of the corner, rounded up a
+     * little, so a small radius still visibly rounds.
+     */
     private static int inset(int radius, int row) {
         double dy = radius - row - 0.5;
-        return (int) Math.round(radius - Math.sqrt(Math.max(0, radius * radius - dy * dy)));
+        double outside = radius - Math.sqrt(Math.max(0, radius * radius - dy * dy));
+        return Math.max(0, (int) Math.ceil(outside - 0.25));
     }
 
     /**
@@ -36,7 +54,7 @@ final class Shapes {
      * with the knob at the right; off is its emphasis grey with the knob at
      * the left; a switch that cannot be pressed is dimmer still.
      */
-    static void toggle(ScreenSurface surface, Rect at, boolean on, boolean available) {
+    static void onOffSwitch(ScreenSurface surface, Rect at, boolean on, boolean available) {
         int track = !available ? Palette.LINE : on ? Palette.TEXT : Palette.EMPHASIS;
         int knob = !available ? Palette.EMPHASIS : on ? Palette.BACKGROUND : Palette.MUTED;
         rounded(surface, at, at.height / 2, track);

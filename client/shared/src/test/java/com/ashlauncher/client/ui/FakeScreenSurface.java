@@ -5,10 +5,21 @@ import java.util.List;
 
 /**
  * A screen with no game behind it: records every rectangle and every line of
- * text, measures text as the game's own font roughly does - six units a
- * character, nine a line - and answers what is at a point.
+ * text, and measures text as the game's own font roughly does - six units a
+ * character, nine a line - or as a taller face would.
  */
 final class FakeScreenSurface implements ScreenSurface {
+
+    private final int lineHeight;
+
+    FakeScreenSurface() {
+        this(9);
+    }
+
+    /** A surface whose font is {@code lineHeight} tall, as ash's own typeface might be one day. */
+    FakeScreenSurface(int lineHeight) {
+        this.lineHeight = lineHeight;
+    }
 
     /** One line of text, as it arrived. */
     record Text(String text, int x, int y, int colour) {
@@ -38,7 +49,7 @@ final class FakeScreenSurface implements ScreenSurface {
 
     @Override
     public int lineHeight() {
-        return 9;
+        return lineHeight;
     }
 
     /** Every line drawn, as strings, in order. */
