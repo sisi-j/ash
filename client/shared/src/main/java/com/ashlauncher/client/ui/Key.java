@@ -8,6 +8,8 @@ package com.ashlauncher.client.ui;
 public enum Key {
     /** Deletes the last character of the search. */
     BACKSPACE,
-    /** Closes the panel. */
-    ESCAPE
+    /** Closes the panel, or stops typing in a box. */
+    ESCAPE,
+    /** Applies what was typed in a box. */
+    ENTER
 }

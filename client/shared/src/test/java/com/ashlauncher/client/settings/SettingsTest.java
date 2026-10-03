@@ -23,11 +23,15 @@ class SettingsTest {
      * the end, at its default - so a test about a complete file stays about
      * a complete file when the next feature declares a setting.
      */
+    private static <T> String fallbackLine(Setting<T> setting) {
+        return setting.key() + "=" + setting.format(setting.fallback()) + "\n";
+    }
+
     private static String complete(String file) {
         StringBuilder whole = new StringBuilder(file);
-        for (OnOff setting : Settings.declared()) {
+        for (Setting<?> setting : Settings.declared()) {
             if (!file.contains(setting.key())) {
-                whole.append(setting.key()).append('=').append(setting.fallback()).append('\n');
+                whole.append(fallbackLine(setting));
             }
         }
         return whole.toString();
@@ -144,7 +148,9 @@ class SettingsTest {
 
     @Test
     void every_setting_is_declared_once_in_the_order_a_first_run_writes_them() throws IOException {
-        assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR), Settings.declared());
+        assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
+                Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
+                Settings.CROSSHAIR_OUTLINE), Settings.declared());
 
         Settings.load(configDir);
 
@@ -157,7 +163,19 @@ class SettingsTest {
                         + " true or false.\n"
                         + "toggle-sprint.enabled=true\n"
                         + "# Draw ash's crosshair in place of the game's. true or false.\n"
-                        + "crosshair.enabled=true\n",
+                        + "crosshair.enabled=true\n"
+                        + "# The crosshair's shape: cross, t, dot or box.\n"
+                        + "crosshair.shape=cross\n"
+                        + "# How long each arm of the crosshair is: a whole number from 1 to 10.\n"
+                        + "crosshair.size=4\n"
+                        + "# How far the arms start from the centre: a whole number from 0 to 5.\n"
+                        + "crosshair.gap=0\n"
+                        + "# How thick the crosshair's lines are: a whole number from 1 to 4.\n"
+                        + "crosshair.thickness=1\n"
+                        + "# The crosshair's colour and opacity, as #RRGGBBAA. #FFFFFFFF is opaque white.\n"
+                        + "crosshair.colour=#FFFFFFFF\n"
+                        + "# A dark outline around the crosshair, so it shows against snow and sky. true or false.\n"
+                        + "crosshair.outline=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 
@@ -168,7 +186,7 @@ class SettingsTest {
         Settings settings = Settings.load(configDir);
 
         assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
-        for (OnOff setting : Settings.declared()) {
+        for (Setting<?> setting : Settings.declared()) {
             assertEquals(setting.fallback(), settings.get(setting), setting.key() + " is not at its default on a first run");
         }
     }
@@ -238,13 +256,13 @@ class SettingsTest {
     void every_setting_changed_in_game_is_what_the_next_session_reads() throws IOException {
         // Each one alone, so a setting that saved into another's line would show.
         assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
-        for (OnOff changed : Settings.declared()) {
+        for (OnOff changed : Settings.switches()) {
             Files.deleteIfExists(configDir.resolve("ash.properties"));
             assertEquals(Saved.SAVED, Settings.load(configDir).set(changed, !changed.fallback()), changed.key());
 
             Settings next = Settings.load(configDir);
 
-            for (OnOff setting : Settings.declared()) {
+            for (OnOff setting : Settings.switches()) {
                 boolean expected = setting == changed ? !setting.fallback() : setting.fallback();
                 assertEquals(expected, next.get(setting), "after changing " + changed.key() + ", " + setting.key());
             }

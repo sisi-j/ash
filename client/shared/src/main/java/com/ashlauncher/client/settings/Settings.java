@@ -69,28 +69,74 @@ public final class Settings {
             "crosshair.enabled", true,
             "Draw ash's crosshair in place of the game's. true or false.");
 
+    // The crosshair's options. Its default look is the plus Phase 2's
+    // crosshair drew: four arms of four, no gap, one thick, white, outlined.
+
+    public static final Choice CROSSHAIR_SHAPE = new Choice(Feature.CROSSHAIR, "crosshair.shape", "Shape", "cross",
+            "The crosshair's shape: cross, t, dot or box.", "cross", "Cross", "t", "T", "dot", "Dot", "box", "Box");
+
+    public static final Whole CROSSHAIR_SIZE = new Whole(Feature.CROSSHAIR, "crosshair.size", "Size", 4, 1, 10,
+            "How long each arm of the crosshair is: a whole number from 1 to 10.");
+
+    public static final Whole CROSSHAIR_GAP = new Whole(Feature.CROSSHAIR, "crosshair.gap", "Gap", 0, 0, 5,
+            "How far the arms start from the centre: a whole number from 0 to 5.");
+
+    public static final Whole CROSSHAIR_THICKNESS = new Whole(Feature.CROSSHAIR, "crosshair.thickness", "Thickness", 1,
+            1, 4, "How thick the crosshair's lines are: a whole number from 1 to 4.");
+
+    public static final Colour CROSSHAIR_COLOUR = new Colour(Feature.CROSSHAIR, "crosshair.colour", "Colour", 0xFFFFFFFF,
+            "The crosshair's colour and opacity, as #RRGGBBAA. #FFFFFFFF is opaque white.");
+
+    public static final OnOff CROSSHAIR_OUTLINE = new OnOff(Feature.CROSSHAIR, "Outline", "crosshair.outline", true,
+            "A dark outline around the crosshair, so it shows against snow and sky. true or false.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
      * left out of it is not quietly read and never written, it has no value
-     * at all, and the first test to ask for it fails.
+     * at all, and the first test to ask for it fails. New settings go at the
+     * end, which is where an older file gains them.
      */
-    private static final List<OnOff> DECLARED = Collections.unmodifiableList(
-            Arrays.asList(FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR));
+    private static final List<Setting<?>> DECLARED = Collections.unmodifiableList(Arrays.<Setting<?>>asList(
+            FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
+            CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE));
 
     private final Path file;
-    private final Map<OnOff, Boolean> values;
+    private final Map<Setting<?>, Object> values;
     private final List<String> problems;
 
-    private Settings(Path file, Map<OnOff, Boolean> values, List<String> problems) {
+    private Settings(Path file, Map<Setting<?>, Object> values, List<String> problems) {
         this.file = file;
         this.values = values;
         this.problems = Collections.unmodifiableList(problems);
     }
 
     /** Every setting there is, in the order the file lists them. */
-    public static List<OnOff> declared() {
+    public static List<Setting<?>> declared() {
         return DECLARED;
+    }
+
+    /** Every feature's switch, in the order the file lists them: one card each on the settings screen. */
+    public static List<OnOff> switches() {
+        List<OnOff> switches = new ArrayList<>();
+        for (Setting<?> setting : DECLARED) {
+            if (setting instanceof OnOff && ((OnOff) setting).isSwitch()) {
+                switches.add((OnOff) setting);
+            }
+        }
+        return Collections.unmodifiableList(switches);
+    }
+
+    /** A feature's options, in the order the file lists them: everything that belongs to it but its switch. */
+    public static List<Setting<?>> optionsOf(Feature feature) {
+        List<Setting<?>> options = new ArrayList<>();
+        for (Setting<?> setting : DECLARED) {
+            boolean isSwitch = setting instanceof OnOff && ((OnOff) setting).isSwitch();
+            if (setting.feature() == feature && !isSwitch) {
+                options.add(setting);
+            }
+        }
+        return Collections.unmodifiableList(options);
     }
 
     /**
@@ -129,8 +175,8 @@ public final class Settings {
             appendMissing(file, original, properties, problems);
         }
 
-        Map<OnOff, Boolean> values = new IdentityHashMap<>();
-        for (OnOff setting : DECLARED) {
+        Map<Setting<?>, Object> values = new IdentityHashMap<>();
+        for (Setting<?> setting : DECLARED) {
             values.put(setting, read(properties, setting, problems));
         }
         return new Settings(file, values, problems);
@@ -141,17 +187,18 @@ public final class Settings {
      * feature that has no switch.
      */
     public boolean on(Feature feature) {
-        for (OnOff setting : DECLARED) {
+        for (OnOff setting : switches()) {
             if (setting.feature() == feature) {
-                return values.get(setting);
+                return get(setting);
             }
         }
         return true;
     }
 
     /** The setting's value this session: as read, or as last changed in game. */
-    public boolean get(OnOff setting) {
-        return values.get(setting);
+    @SuppressWarnings("unchecked")
+    public <T> T get(Setting<T> setting) {
+        return (T) values.get(setting);
     }
 
     /**
@@ -173,15 +220,19 @@ public final class Settings {
      * <p>Never thrown from. When the file cannot be changed safely it is left
      * exactly as it was, the change lasts until the game closes, and what to
      * do about it comes back for whoever asked to say so.
+     *
+     * <p>A value outside what its kind allows is brought within it first - a
+     * colour too faint to draw alike on both targets, say - and kept as that.
      */
-    public Saved set(OnOff setting, boolean value) {
+    public <T> Saved set(Setting<T> setting, T wanted) {
+        T value = setting.normalise(wanted);
         values.put(setting, value);
         try {
             byte[] current = Files.exists(file) ? Files.readAllBytes(file) : new byte[0];
             String text = new String(current, StandardCharsets.ISO_8859_1);
             new Properties().load(new StringReader(text));
 
-            String changed = PropertiesText.withValue(text, setting.key(), Boolean.toString(value));
+            String changed = PropertiesText.withValue(text, setting.key(), setting.format(value));
             writeWhole(file, changed != null
                     ? changed.getBytes(StandardCharsets.ISO_8859_1)
                     : appended(current, entry(setting, value)));
@@ -207,9 +258,9 @@ public final class Settings {
     /** Adds every setting the file lacks to its end. */
     private static void appendMissing(Path file, byte[] original, Properties properties, List<String> problems) {
         StringBuilder missing = new StringBuilder();
-        for (OnOff setting : DECLARED) {
+        for (Setting<?> setting : DECLARED) {
             if (!properties.containsKey(setting.key())) {
-                missing.append(entry(setting, setting.fallback()));
+                missing.append(fallbackEntry(setting));
             }
         }
         if (missing.length() == 0) {
@@ -225,8 +276,12 @@ public final class Settings {
     }
 
     /** A setting as a first run writes it: its comment, then its line. */
-    private static String entry(OnOff setting, boolean value) {
-        return "# " + setting.comment() + "\n" + setting.key() + "=" + value + "\n";
+    private static <T> String entry(Setting<T> setting, T value) {
+        return "# " + setting.comment() + "\n" + setting.key() + "=" + setting.format(value) + "\n";
+    }
+
+    private static <T> String fallbackEntry(Setting<T> setting) {
+        return entry(setting, setting.fallback());
     }
 
     /**
@@ -267,26 +322,21 @@ public final class Settings {
     }
 
     /**
-     * {@code true} or {@code false}, in any case, and nothing else.
-     *
-     * <p>Strict because the lenient reading is a trap: {@code Boolean.parseBoolean}
-     * calls anything that is not "true" false, so a player who writes "yes"
-     * would switch the feature off without a word.
+     * The setting's value from the file, or its default - with a sentence in
+     * {@code problems} when the file has a value ash cannot use, so that a
+     * mistake costs the player that one setting and says so.
      */
-    private static boolean read(Properties properties, OnOff setting, List<String> problems) {
-        String value = properties.getProperty(setting.key());
-        if (value == null) {
+    private static <T> T read(Properties properties, Setting<T> setting, List<String> problems) {
+        String raw = properties.getProperty(setting.key());
+        if (raw == null) {
             return setting.fallback();
         }
-        String trimmed = value.trim();
-        if (trimmed.equalsIgnoreCase("true")) {
-            return true;
+        T value = setting.parse(raw);
+        if (value != null) {
+            return value;
         }
-        if (trimmed.equalsIgnoreCase("false")) {
-            return false;
-        }
-        problems.add(setting.key() + " is \"" + value + "\" in " + FILE_NAME
-                + ", which is neither true nor false, so it is " + setting.fallback() + " until that is fixed");
+        problems.add(setting.key() + " is \"" + raw + "\" in " + FILE_NAME + ", which is not " + setting.expected()
+                + ", so it is " + setting.format(setting.fallback()) + " until that is fixed");
         return setting.fallback();
     }
 }

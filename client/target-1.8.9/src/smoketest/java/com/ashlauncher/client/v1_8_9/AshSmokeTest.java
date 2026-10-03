@@ -21,6 +21,8 @@ import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
+import com.ashlauncher.client.settings.Settings;
+import com.ashlauncher.client.ui.Panel;
 import com.ashlauncher.client.ui.Rect;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
@@ -118,12 +120,13 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         toggleSprintWorks(client);
         settingsScreenWorks(client);
+        crosshairOptionsWork(client);
         crosshairWorks(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
                 + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
-                + " of the game's and gave way to it when switched off");
+                + " of the game's and gave way to it when switched off, and its options changed what it drew");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -410,21 +413,70 @@ public final class AshSmokeTest implements ClientModInitializer {
     }
 
     /**
-     * A left click in the middle of a feature's switch on ash's panel, as the
-     * game's input loop delivers one: the panel says where it drew the switch.
+     * The crosshair's options page, used as a player would: open it from the
+     * card, choose a shape, set a size on the slider, pick a colour, and the
+     * file and the crosshair the game draws both follow. Then "Reset options",
+     * which the crosshair check after this one relies on.
      */
+    private static void crosshairOptionsWork(MinecraftClient client) {
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings for the crosshair's options", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        pause(300L);
+
+        clickOn(client, screen, "the crosshair's options link", panel -> panel.optionsLinkOf(Feature.CROSSHAIR));
+        clickOn(client, screen, "the dot", panel -> panel.choiceOf(Settings.CROSSHAIR_SHAPE, "dot"));
+        clickOn(client, screen, "size 6 on its slider", panel -> panel.sliderAt(Settings.CROSSHAIR_SIZE, 6));
+        clickOn(client, screen, "the red swatch", panel -> panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
+        // By eye: the page, with a red dot in all three previews.
+        screenshot(client, "ash-crosshair-options.png");
+
+        expectFileSays("crosshair.shape=dot");
+        expectFileSays("crosshair.size=6");
+        expectFileSays("crosshair.colour=#FF4D4DFF");
+        List<Integer> drawn = onClient(client, () -> {
+            RecordingSurface surface = new RecordingSurface();
+            CrosshairHook.draw(surface, 0, 0);
+            return surface.colours;
+        });
+        if (drawn == null || drawn.size() != 2 || !drawn.contains(0xFFFF4D4D)) {
+            fail("the game's crosshair is not a red dot and its outline; it drew " + drawn);
+        }
+
+        clickOn(client, screen, "Reset options", Panel::resetOptions);
+        expectFileSays("crosshair.shape=cross");
+        expectFileSays("crosshair.size=4");
+        expectFileSays("crosshair.colour=#FFFFFFFF");
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings after the crosshair's options", () -> client.currentScreen == null ? client : null);
+    }
+
+    /** A left click in the middle of a feature's switch on ash's panel, as the game's input loop delivers one. */
     private static void click(MinecraftClient client, AshSettingsScreen screen, Feature feature) {
+        clickOn(client, screen, feature + "'s switch", panel -> panel.switchOf(feature));
+    }
+
+    /**
+     * A left click in the middle of something on ash's panel, as the game's
+     * input loop delivers one - press, then release - where the panel says it
+     * drew it. Then a moment for a frame to draw what changed.
+     */
+    private static void clickOn(MinecraftClient client, AshSettingsScreen screen, String what,
+            java.util.function.Function<Panel, Rect> where) {
         Boolean clicked = onClient(client, () -> {
-            Rect toggle = screen.panel().switchOf(feature);
-            if (toggle == null) {
+            Rect target = where.apply(screen.panel());
+            if (target == null) {
                 return false;
             }
-            screen.mouseClicked(toggle.centreX(), toggle.centreY(), 0);
+            screen.mouseClicked(target.centreX(), target.centreY(), 0);
+            screen.mouseReleased(target.centreX(), target.centreY(), 0);
             return true;
         });
         if (clicked == null || !clicked) {
-            fail("ash's panel shows no switch for " + feature);
+            fail("ash's panel does not show " + what);
         }
+        pause(300L);
     }
 
     /**
@@ -610,6 +662,7 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
+        final List<Integer> colours = new ArrayList<>();
         int fills;
 
         @Override
@@ -630,6 +683,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         @Override
         public void fill(int x, int y, int width, int height, int colour) {
             fills++;
+            colours.add(colour);
         }
 
         @Override

@@ -56,6 +56,19 @@ public final class AshSettingsScreen extends Screen {
         }
     }
 
+    /** The mouse moved with a button held: a slider being dragged. */
+    @Override
+    protected void mouseDragged(int mouseX, int mouseY, int button, long msSinceClick) {
+        if (button == 0) {
+            panel.mouseDragged(mouseX, mouseY);
+        }
+    }
+
+    @Override
+    protected void mouseReleased(int mouseX, int mouseY, int button) {
+        panel.mouseReleased();
+    }
+
     /** The game's own mouse handling, then the wheel, which 1.8.9's screens leave to each screen. */
     @Override
     public void handleMouse() {
@@ -69,7 +82,7 @@ public final class AshSettingsScreen extends Screen {
     /**
      * The key that opened it closes it. A key binding gets no presses while a
      * screen is open - the screen drains the keyboard first - so the screen
-     * has to know its own key. Backspace and Escape go to the panel by
+     * has to know its own key. Backspace, Escape and Enter go to the panel by
      * ash's names, and every other key's character to its search - which
      * ignores the control characters keys such as Shift type here.
      */
@@ -81,6 +94,8 @@ public final class AshSettingsScreen extends Screen {
             panel.keyPressed(Key.BACKSPACE);
         } else if (keyCode == Keyboard.KEY_ESCAPE) {
             panel.keyPressed(Key.ESCAPE);
+        } else if (keyCode == Keyboard.KEY_RETURN || keyCode == Keyboard.KEY_NUMPADENTER) {
+            panel.keyPressed(Key.ENTER);
         } else {
             panel.charTyped(character);
         }

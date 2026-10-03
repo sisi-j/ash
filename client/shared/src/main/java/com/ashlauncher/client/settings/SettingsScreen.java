@@ -15,8 +15,9 @@ import java.util.function.Predicate;
  * game's input to ash's own names and pass it on - so the two cannot come to
  * disagree about what the screen says.
  *
- * <p>The rows are {@link Settings#declared()}, walked: a setting declared
- * there has a row without a line of screen code.
+ * <p>The rows are {@link Settings#switches()}, walked: a feature's switch
+ * declared there has a row without a line of screen code, and its options
+ * - {@link Settings#optionsOf} - a page.
  */
 public final class SettingsScreen {
 
@@ -44,7 +45,7 @@ public final class SettingsScreen {
         this.landed = landed;
         this.changed = changed;
         List<Row> rows = new ArrayList<>();
-        for (OnOff setting : Settings.declared()) {
+        for (OnOff setting : Settings.switches()) {
             rows.add(new Row(setting));
         }
         this.rows = Collections.unmodifiableList(rows);
@@ -52,6 +53,40 @@ public final class SettingsScreen {
 
     public List<Row> rows() {
         return rows;
+    }
+
+    /** The settings behind the screen, for what is drawn from them - the crosshair's preview. */
+    public Settings settings() {
+        return settings;
+    }
+
+    /** A feature's options, in the order its page shows them. */
+    public List<Setting<?>> optionsOf(Feature feature) {
+        return Settings.optionsOf(feature);
+    }
+
+    public <T> T value(Setting<T> setting) {
+        return settings.get(setting);
+    }
+
+    /**
+     * Changes one of a feature's options, at once and in the file, as a
+     * switch is changed: a problem saving it is the notice's to say.
+     */
+    public <T> void change(Setting<T> setting, T value) {
+        saveProblem = settings.set(setting, value).message();
+        changed.run();
+    }
+
+    /** Puts every one of a feature's options back to its default. The feature stays switched as it was. */
+    public void resetOptions(Feature feature) {
+        for (Setting<?> option : optionsOf(feature)) {
+            resetOne(option);
+        }
+    }
+
+    private <T> void resetOne(Setting<T> option) {
+        change(option, option.fallback());
     }
 
     /**
@@ -121,6 +156,11 @@ public final class SettingsScreen {
         /** Whether the player has it on this session. */
         public boolean on() {
             return settings.get(setting);
+        }
+
+        /** Whether the feature has a page of options beyond its switch. */
+        public boolean hasOptions() {
+            return !optionsOf(setting.feature()).isEmpty();
         }
 
         /** Whether pressing it does anything. False for a feature whose mixins did not land. */

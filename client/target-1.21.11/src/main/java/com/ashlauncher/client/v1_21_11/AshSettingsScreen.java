@@ -55,6 +55,18 @@ final class AshSettingsScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        panel.mouseDragged((int) event.x(), (int) event.y());
+        return true;
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        panel.mouseReleased();
+        return true;
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
         panel.mouseScrolled(vertical);
         return true;
@@ -69,7 +81,7 @@ final class AshSettingsScreen extends Screen {
     /**
      * The key that opened it closes it. A key binding gets no presses while a
      * screen is open - the screen is asked first - so the screen has to know
-     * its own key. Backspace and Escape go to the panel by ash's names.
+     * its own key. Backspace, Escape and Enter go to the panel by ash's names.
      */
     @Override
     public boolean keyPressed(KeyEvent event) {
@@ -83,6 +95,10 @@ final class AshSettingsScreen extends Screen {
         }
         if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
             panel.keyPressed(Key.ESCAPE);
+            return true;
+        }
+        if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
+            panel.keyPressed(Key.ENTER);
             return true;
         }
         return super.keyPressed(event);
