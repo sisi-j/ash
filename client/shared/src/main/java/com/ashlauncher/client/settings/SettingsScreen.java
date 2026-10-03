@@ -9,11 +9,10 @@ import java.util.function.Predicate;
 /**
  * What ash's settings screen shows and does, decided once for both targets.
  *
- * <p>Each version target draws these rows with its own vanilla buttons - one
- * button per row, labelled {@link Row#label()}, inactive unless
- * {@link Row#available()}, calling {@link Row#press()} - and draws
- * {@link #footer()} beneath them. It decides nothing else, so the two targets
- * cannot come to disagree about what the screen says.
+ * <p>The model behind the panel ash draws ({@code ui.Panel}): which switches
+ * there are, which can be pressed, what pressing does, and what the footer
+ * says. The panel decides how they look, and the version targets decide
+ * nothing - so the two cannot come to disagree about what the screen says.
  *
  * <p>The rows are {@link Settings#declared()}, walked: a setting declared
  * there has a row without a line of screen code.
@@ -100,10 +99,14 @@ public final class SettingsScreen {
             this.setting = setting;
         }
 
-        /** "FPS readout: On", "FPS readout: Off" or "FPS readout: Did not load". */
-        public String label() {
-            String state = !available() ? "Did not load" : settings.get(setting) ? "On" : "Off";
-            return name() + ": " + state;
+        /** The feature this row switches. */
+        public Feature feature() {
+            return setting.feature();
+        }
+
+        /** Whether the player has it on this session. */
+        public boolean on() {
+            return settings.get(setting);
         }
 
         private String name() {

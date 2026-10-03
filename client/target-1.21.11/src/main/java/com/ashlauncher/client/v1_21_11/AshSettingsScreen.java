@@ -1,95 +1,78 @@
 package com.ashlauncher.client.v1_21_11;
 
 import com.ashlauncher.client.settings.SettingsScreen;
-import java.util.ArrayList;
-import java.util.List;
+import com.ashlauncher.client.ui.Panel;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
-import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 
 /**
- * ash's settings screen on 1.21.11: the shared {@link SettingsScreen}'s rows,
- * drawn as the game's own buttons. Every decision - what each row says,
- * whether it can be pressed, what pressing does, what the footer says - is
- * the shared settings screen's.
- *
- * <p>Laid out the same as 1.8.9's: a column of 200-wide buttons a quarter of
- * the way down, the title above, Done below, the footer beneath that.
+ * ash's settings on 1.21.11: a screen that holds the shared {@link Panel}
+ * and decides nothing. It passes the game's input through, gives the panel a
+ * surface to draw on, and closes on its own key and on Escape.
  */
 final class AshSettingsScreen extends Screen {
 
-    private static final int BUTTON_WIDTH = 200;
-    private static final int ROW_HEIGHT = 24;
-
-    private final SettingsScreen settingsScreen;
     private final KeyMapping key;
-    private final List<Button> rowButtons = new ArrayList<>();
+    private final Panel panel;
 
     AshSettingsScreen(SettingsScreen settingsScreen, KeyMapping key) {
         super(Component.literal(SettingsScreen.TITLE));
-        this.settingsScreen = settingsScreen;
         this.key = key;
+        this.panel = new Panel(settingsScreen, () -> key.getTranslatedKeyMessage().getString(), this::onClose);
+    }
+
+    /** The panel this screen shows, so the real-game test can find a switch and click it as a player would. */
+    Panel panel() {
+        return panel;
     }
 
     @Override
     protected void init() {
-        rowButtons.clear();
-        int x = width / 2 - BUTTON_WIDTH / 2;
-        int y = height / 4;
-        for (SettingsScreen.Row row : settingsScreen.rows()) {
-            Button button = Button.builder(Component.literal(row.label()), pressed -> {
-                row.press();
-                relabel();
-            }).bounds(x, y, BUTTON_WIDTH, 20).build();
-            button.active = row.available();
-            rowButtons.add(addRenderableWidget(button));
-            y += ROW_HEIGHT;
-        }
-        addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, pressed -> onClose())
-                .bounds(x, y + ROW_HEIGHT / 2, BUTTON_WIDTH, 20).build());
-    }
-
-    private void relabel() {
-        for (int i = 0; i < rowButtons.size(); i++) {
-            rowButtons.get(i).setMessage(Component.literal(settingsScreen.rows().get(i).label()));
-        }
+        panel.resize(width, height);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.drawCenteredString(font, title, width / 2, height / 4 - 20, 0xFFFFFFFF);
-        String footer = settingsScreen.footer();
-        if (!footer.isEmpty()) {
-            int top = height / 4 + (settingsScreen.rows().size() + 2) * ROW_HEIGHT;
-            graphics.drawWordWrap(font, Component.literal(footer), width / 2 - BUTTON_WIDTH, top, BUTTON_WIDTH * 2,
-                    0xFFFFFFFF);
-        }
+        panel.render(new GuiScreenSurface(graphics, font), mouseX, mouseY);
     }
 
-    /**
-     * A light dim rather than the game's blur, so the HUD stays readable
-     * behind the screen and a switch can be seen taking effect - the same dim
-     * 1.8.9's screen draws.
-     */
+    /** Nothing: the panel draws its own light dim, so the HUD stays readable behind it. */
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.fill(0, 0, width, height, 0x60000000);
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        return event.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && panel.mouseClicked((int) event.x(), (int) event.y());
+    }
+
+    @Override
+    public boolean charTyped(CharacterEvent event) {
+        for (char character : event.codepointAsString().toCharArray()) {
+            panel.charTyped(character);
+        }
+        return true;
     }
 
     /**
      * The key that opened it closes it. A key binding gets no presses while a
      * screen is open - the screen is asked first - so the screen has to know
-     * its own key.
+     * its own key. Escape is the game's own handling.
      */
     @Override
     public boolean keyPressed(KeyEvent event) {
         if (key.matches(event)) {
             onClose();
+            return true;
+        }
+        if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {
+            panel.backspace();
             return true;
         }
         return super.keyPressed(event);

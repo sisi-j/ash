@@ -32,7 +32,7 @@ class SettingsScreenTest {
     /** The row for a setting, found by what it switches rather than by where it is. */
     private static SettingsScreen.Row row(SettingsScreen screen, OnOff setting) {
         for (SettingsScreen.Row row : screen.rows()) {
-            if (row.label().startsWith(setting.feature().displayName() + ": ")) {
+            if (row.feature() == setting.feature()) {
                 return row;
             }
         }
@@ -51,7 +51,8 @@ class SettingsScreenTest {
         assertEquals(Settings.declared().size(), rows.size());
         for (int i = 0; i < rows.size(); i++) {
             OnOff setting = Settings.declared().get(i);
-            assertEquals(setting.feature().displayName() + ": On", rows.get(i).label());
+            assertEquals(setting.feature(), rows.get(i).feature());
+            assertTrue(rows.get(i).on(), setting.key() + " is not on by default");
             assertTrue(rows.get(i).available());
         }
     }
@@ -63,13 +64,13 @@ class SettingsScreenTest {
 
         fps.press();
 
-        assertEquals("FPS readout: Off", fps.label());
+        assertFalse(fps.on());
         assertFalse(settings.get(Settings.FPS_READOUT), "the running game did not see the change");
         assertFalse(Settings.load(configDir).get(Settings.FPS_READOUT), "the change was not saved");
 
         fps.press();
 
-        assertEquals("FPS readout: On", fps.label());
+        assertTrue(fps.on());
         assertTrue(Settings.load(configDir).get(Settings.FPS_READOUT));
     }
 
@@ -99,7 +100,7 @@ class SettingsScreenTest {
         sprint.press();
 
         assertFalse(sprint.available());
-        assertEquals("Toggle sprint: Did not load", sprint.label());
+        
         assertTrue(settings.get(Settings.TOGGLE_SPRINT), "a switch that does nothing was switched anyway");
         assertEquals(before, Files.readString(file));
         assertEquals(List.of(), changes);

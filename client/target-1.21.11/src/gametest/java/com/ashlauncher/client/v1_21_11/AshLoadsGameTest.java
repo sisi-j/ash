@@ -2,9 +2,11 @@ package com.ashlauncher.client.v1_21_11;
 
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.hud.HudSurface;
+import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
+import com.ashlauncher.client.ui.Rect;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,8 +21,6 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 
 /**
@@ -131,14 +131,10 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         if (!opened) {
             throw new AssertionError("Right Shift did not open ash's settings");
         }
-        context.takeScreenshot("ash-settings");
+        context.takeScreenshot("ash-settings-panel");
 
-        clickButton(context, "FPS readout: On");
+        clickSwitch(context, Feature.FPS_READOUT);
         context.waitTicks(5);
-        String label = context.computeOnClient(client -> buttonLabels(client.screen));
-        if (!label.contains("FPS readout: Off")) {
-            throw new AssertionError("the FPS readout's switch did not change: " + label);
-        }
         assertFileSays("fps-readout.enabled=false");
         assertReportSays("{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"off\" }");
         assertReadoutDraws(context, false, "the FPS readout still draws after it was switched off");
@@ -154,7 +150,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
         context.getInput().pressKey(settingsKey);
         context.waitTicks(5);
-        clickButton(context, "FPS readout: Off");
+        clickSwitch(context, Feature.FPS_READOUT);
         context.waitTicks(5);
         assertFileSays("fps-readout.enabled=true");
         assertReadoutDraws(context, true, "the FPS readout did not come back when it was switched on");
@@ -196,7 +192,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         ash.expect(5, 0, 0x000000, "ash's crosshair's outline");
 
         KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
-        switchCrosshair(context, settingsKey, "Crosshair: On", "crosshair.enabled=false");
+        switchCrosshair(context, settingsKey, "crosshair.enabled=false");
         if (context.computeOnClient(client -> CrosshairHook.draw(new RecordingSurface(), 0, 0))) {
             throw new AssertionError("ash's crosshair still draws after it was switched off");
         }
@@ -206,15 +202,14 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             game.expectInverseOf(none, at[0], at[1]);
         }
 
-        switchCrosshair(context, settingsKey, "Crosshair: Off", "crosshair.enabled=true");
+        switchCrosshair(context, settingsKey, "crosshair.enabled=true");
     }
 
     /** Opens ash's settings, presses one switch, checks the file, and closes them again. */
-    private static void switchCrosshair(ClientGameTestContext context, KeyMapping settingsKey, String label,
-            String fileSays) {
+    private static void switchCrosshair(ClientGameTestContext context, KeyMapping settingsKey, String fileSays) {
         context.getInput().pressKey(settingsKey);
         context.waitTicks(5);
-        clickButton(context, label);
+        clickSwitch(context, Feature.CROSSHAIR);
         context.waitTicks(5);
         assertFileSays(fileSays);
         context.getInput().pressKey(settingsKey);
@@ -298,31 +293,25 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         });
     }
 
-    /** Moves the real cursor onto the button with this label and clicks, as a player would. */
-    private static void clickButton(ClientGameTestContext context, String label) {
+    /**
+     * Moves the real cursor onto a feature's switch on ash's panel and clicks,
+     * as a player would: the panel says where it drew the switch, and the
+     * game's own input does the rest.
+     */
+    private static void clickSwitch(ClientGameTestContext context, Feature feature) {
         double[] at = context.computeOnClient(client -> {
-            for (var child : client.screen.children()) {
-                if (child instanceof AbstractWidget widget && widget.getMessage().getString().equals(label)) {
-                    double scale = client.getWindow().getGuiScale();
-                    return new double[] {
-                        (widget.getX() + widget.getWidth() / 2.0) * scale, (widget.getY() + widget.getHeight() / 2.0) * scale
-                    };
-                }
+            if (!(client.screen instanceof AshSettingsScreen screen)) {
+                throw new AssertionError("ash's settings are not open");
             }
-            throw new AssertionError("no \"" + label + "\" button on the screen: " + buttonLabels(client.screen));
+            Rect toggle = screen.panel().switchOf(feature);
+            if (toggle == null) {
+                throw new AssertionError("ash's panel shows no switch for " + feature);
+            }
+            double scale = client.getWindow().getGuiScale();
+            return new double[] {(toggle.centreX() + 0.5) * scale, (toggle.centreY() + 0.5) * scale};
         });
         context.getInput().setCursorPos(at[0], at[1]);
         context.getInput().pressMouse(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT);
-    }
-
-    private static String buttonLabels(Screen screen) {
-        StringBuilder labels = new StringBuilder();
-        for (var child : screen.children()) {
-            if (child instanceof AbstractWidget widget) {
-                labels.append('[').append(widget.getMessage().getString()).append(']');
-            }
-        }
-        return labels.toString();
     }
 
     private static void assertReadoutDraws(ClientGameTestContext context, boolean expected, String otherwise) {
