@@ -85,8 +85,16 @@ The client's own configuration file, `config/ash.properties` in an instance's ga
 _Avoid_: config (unqualified), options (that is the game's own `options.txt`), synced settings (Phase 4, and a different thing)
 
 **Settings screen**:
-ash's in-game screen for its own features, opened with Right Shift by default and rebindable in Controls. Drawn by ash itself, the same on both version targets - a panel of categories, search and a card per feature - never with the game's own widgets. One switch per feature, built by walking the declared client settings, so a feature declared there appears on it with no screen code of its own; a feature that did not load is shown as such and cannot be switched. A change takes effect at once and is saved as it is made, into the client settings - the screen is a second editor of that file, never a second writer.
+ash's in-game screen for its own features, opened with Right Shift by default and rebindable in Controls. Drawn by ash itself, the same on both version targets - a panel over the blurred game, with a SETTINGS strip down its left and a **tile** per feature under search and category tabs - never with the game's own widgets. One switch per feature, built by walking the declared client settings, so a feature declared there appears on it with no screen code of its own; a feature that did not load is shown as such and cannot be switched. A change takes effect at once and is saved as it is made, into the client settings - the screen is a second editor of that file, never a second writer.
 _Avoid_: menu, mod menu, options (that is the game's own screen), config screen
+
+**Tile**:
+One feature on the settings screen: its name, icon, FPS mark, a gear for its options and an ENABLED/DISABLED button.
+_Avoid_: card, module (Lunar's word), mod
+
+**FPS mark**:
+The sign on a tile of what a feature does to the frame rate, measured on and off: green triangle up, red triangle down, or a grey line within ±3%.
+_Avoid_: performance badge, FPS impact (in UI text)
 
 **Feature option**:
 One setting that shapes how a feature looks or behaves rather than whether it is on - the crosshair's shape, size, gap, thickness, colour and outline. Declared in the client settings beside the feature's switch, and edited on the feature's own page of the settings screen, reached from its card; a feature that did not load offers no page, and an option that does nothing for what the others are set to (a dot's gap) is not shown. "Reset to defaults" there puts the switch and every option back.
