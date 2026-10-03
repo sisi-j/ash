@@ -25,9 +25,9 @@ class SettingsTest {
      */
     private static String complete(String file) {
         StringBuilder whole = new StringBuilder(file);
-        for (OnOff setting : Settings.declared()) {
+        for (Setting<?> setting : Settings.declared()) {
             if (!file.contains(setting.key())) {
-                whole.append(setting.key()).append('=').append(setting.fallback()).append('\n');
+                whole.append(fallbackLine(setting));
             }
         }
         return whole.toString();
@@ -144,7 +144,9 @@ class SettingsTest {
 
     @Test
     void every_setting_is_declared_once_in_the_order_a_first_run_writes_them() throws IOException {
-        assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR), Settings.declared());
+        assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
+                Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
+                Settings.CROSSHAIR_OUTLINE), Settings.declared());
 
         Settings.load(configDir);
 
@@ -157,7 +159,19 @@ class SettingsTest {
                         + " true or false.\n"
                         + "toggle-sprint.enabled=true\n"
                         + "# Draw ash's crosshair in place of the game's. true or false.\n"
-                        + "crosshair.enabled=true\n",
+                        + "crosshair.enabled=true\n"
+                        + "# The crosshair's shape: cross, t, dot or box.\n"
+                        + "crosshair.shape=cross\n"
+                        + "# How long each arm of the crosshair is, or how wide a dot is: a whole number from 1 to 10.\n"
+                        + "crosshair.size=4\n"
+                        + "# How far the arms start from the centre: a whole number from 0 to 5.\n"
+                        + "crosshair.gap=0\n"
+                        + "# How thick the crosshair's lines are: a whole number from 1 to 4.\n"
+                        + "crosshair.thickness=1\n"
+                        + "# The crosshair's colour and opacity, as #RRGGBBAA. #FFFFFFFF is opaque white.\n"
+                        + "crosshair.colour=#FFFFFFFF\n"
+                        + "# A dark outline around the crosshair, so it shows against snow and sky. true or false.\n"
+                        + "crosshair.outline=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 
@@ -168,7 +182,7 @@ class SettingsTest {
         Settings settings = Settings.load(configDir);
 
         assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
-        for (OnOff setting : Settings.declared()) {
+        for (Setting<?> setting : Settings.declared()) {
             assertEquals(setting.fallback(), settings.get(setting), setting.key() + " is not at its default on a first run");
         }
     }
@@ -237,14 +251,14 @@ class SettingsTest {
     @Test
     void every_setting_changed_in_game_is_what_the_next_session_reads() throws IOException {
         // Each one alone, so a setting that saved into another's line would show.
-        assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
-        for (OnOff changed : Settings.declared()) {
+        assertFalse(Settings.switches().isEmpty(), "the test proves nothing with no switches declared");
+        for (OnOff changed : Settings.switches()) {
             Files.deleteIfExists(configDir.resolve("ash.properties"));
             assertEquals(Saved.SAVED, Settings.load(configDir).set(changed, !changed.fallback()), changed.key());
 
             Settings next = Settings.load(configDir);
 
-            for (OnOff setting : Settings.declared()) {
+            for (OnOff setting : Settings.switches()) {
                 boolean expected = setting == changed ? !setting.fallback() : setting.fallback();
                 assertEquals(expected, next.get(setting), "after changing " + changed.key() + ", " + setting.key());
             }
@@ -379,5 +393,55 @@ class SettingsTest {
                     || saved.message().contains("Exception"), saved + ": " + saved.message());
         }
         assertEquals("", Saved.SAVED.message());
+    }
+
+    private static <T> String fallbackLine(Setting<T> setting) {
+        return setting.key() + "=" + setting.format(setting.fallback()) + "\n";
+    }
+
+    @Test
+    void every_setting_of_every_kind_changed_alone_is_what_the_next_session_reads_and_no_other_moves()
+            throws IOException {
+        assertTrue(Settings.declared().size() > Settings.switches().size(),
+                "the test proves nothing with no settings beyond the switches");
+        for (Setting<?> changed : Settings.declared()) {
+            Files.deleteIfExists(configDir.resolve("ash.properties"));
+            Settings settings = Settings.load(configDir);
+            Object other = setToSomethingElse(settings, changed);
+
+            Settings next = Settings.load(configDir);
+
+            for (Setting<?> setting : Settings.declared()) {
+                Object expected = setting == changed ? other : setting.fallback();
+                assertEquals(expected, next.get(setting), "after changing " + changed.key() + ", " + setting.key());
+            }
+            assertEquals(List.of(), next.problems(), "after changing " + changed.key());
+        }
+    }
+
+    /** Sets a setting to a value that is not its default, of whatever kind, and returns it. */
+    private static Object setToSomethingElse(Settings settings, Setting<?> setting) {
+        if (setting instanceof OnOff) {
+            OnOff flag = (OnOff) setting;
+            settings.set(flag, !flag.fallback());
+            return !flag.fallback();
+        }
+        if (setting instanceof Whole) {
+            Whole whole = (Whole) setting;
+            int value = whole.fallback() == whole.max() ? whole.min() : whole.max();
+            settings.set(whole, value);
+            return value;
+        }
+        if (setting instanceof Choice) {
+            Choice choice = (Choice) setting;
+            String value = choice.options().get(choice.options().size() - 1).id();
+            settings.set(choice, value);
+            return value;
+        }
+        if (setting instanceof Colour) {
+            settings.set((Colour) setting, 0xC04DC3FF);
+            return 0xC04DC3FF;
+        }
+        throw new AssertionError("a kind of setting this test does not know: " + setting);
     }
 }

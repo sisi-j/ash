@@ -47,10 +47,10 @@ class SettingsScreenTest {
 
         // Walked, not listed: a setting declared tomorrow gets a row without
         // a line of screen code.
-        assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
-        assertEquals(Settings.declared().size(), rows.size());
+        assertFalse(Settings.switches().isEmpty(), "the test proves nothing with no settings declared");
+        assertEquals(Settings.switches().size(), rows.size());
         for (int i = 0; i < rows.size(); i++) {
-            OnOff setting = Settings.declared().get(i);
+            OnOff setting = Settings.switches().get(i);
             assertEquals(setting.feature(), rows.get(i).feature());
             assertTrue(rows.get(i).on(), setting.key() + " is not on by default");
             assertTrue(rows.get(i).available());

@@ -88,6 +88,10 @@ _Avoid_: config (unqualified), options (that is the game's own `options.txt`), s
 ash's in-game screen for its own features, opened with Right Shift by default and rebindable in Controls. Drawn by ash itself, the same on both version targets - a panel of categories, search and a card per feature - never with the game's own widgets. One switch per feature, built by walking the declared client settings, so a feature declared there appears on it with no screen code of its own; a feature that did not load is shown as such and cannot be switched. A change takes effect at once and is saved as it is made, into the client settings - the screen is a second editor of that file, never a second writer.
 _Avoid_: menu, mod menu, options (that is the game's own screen), config screen
 
+**Feature option**:
+One setting that shapes how a feature looks or behaves rather than whether it is on - the crosshair's shape, size, gap, thickness, colour and outline. Declared in the client settings beside the feature's switch, and edited on the feature's own page of the settings screen, reached from its card; a feature that did not load offers no page, and an option that does nothing for what the others are set to (a dot's gap) is not shown. "Reset to defaults" there puts the switch and every option back.
+_Avoid_: option (unqualified, in docs - it is the game's own word), sub-setting, config value
+
 **Third-party mod**:
 A mod the player supplies themselves, loaded only when they opt in.
 _Avoid_: mod (unqualified), external mod, custom mod

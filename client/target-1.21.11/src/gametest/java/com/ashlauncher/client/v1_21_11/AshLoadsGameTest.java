@@ -6,6 +6,8 @@ import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
+import com.ashlauncher.client.settings.Settings;
+import com.ashlauncher.client.ui.Panel;
 import com.ashlauncher.client.ui.Rect;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -113,6 +115,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
             toggleSprintWorks(context, server);
             settingsScreenWorks(context);
+            crosshairOptionsWork(context);
             crosshairWorks(context);
         }
     }
@@ -294,24 +297,75 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     }
 
     /**
-     * Moves the real cursor onto a feature's switch on ash's panel and clicks,
-     * as a player would: the panel says where it drew the switch, and the
-     * game's own input does the rest.
+     * The crosshair's options page, used as a player would: open it from the
+     * card, choose a shape, set a size on the slider, pick a colour, and the
+     * file and the crosshair the game draws both follow. Then "Reset to defaults",
+     * which the crosshair check after this one relies on.
      */
+    private static void crosshairOptionsWork(ClientGameTestContext context) {
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+
+        clickOn(context, "the crosshair's options link", panel -> panel.optionsLinkOf(Feature.CROSSHAIR));
+        clickOn(context, "the dot", panel -> panel.choiceOf(Settings.CROSSHAIR_SHAPE, "dot"));
+        clickOn(context, "size 6 on its slider", panel -> panel.sliderAt(Settings.CROSSHAIR_SIZE, 6));
+        clickOn(context, "the red swatch", panel -> panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
+        // By eye: the page, with a red dot in all three previews.
+        context.takeScreenshot("ash-crosshair-options");
+
+        assertFileSays("crosshair.shape=dot");
+        assertFileSays("crosshair.size=6");
+        assertFileSays("crosshair.colour=#FF4D4DFF");
+
+        // The panel closed, the world's own frame: a red square six wide,
+        // from three left of the centre to two right of it, outlined.
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        Frame dot = frame(context, "ash-crosshair-red-dot", false);
+        for (int[] at : new int[][] {{0, 0}, {2, 2}, {-3, -3}, {2, -3}}) {
+            dot.expect(at[0], at[1], 0xFF4D4D, "the red dot");
+        }
+        dot.expect(3, 0, 0x000000, "the dot's outline");
+        dot.expect(-4, 0, 0x000000, "the dot's outline");
+
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickOn(context, "the crosshair's options link", panel -> panel.optionsLinkOf(Feature.CROSSHAIR));
+        clickOn(context, "Reset to defaults", Panel::resetToDefaults);
+        assertFileSays("crosshair.shape=cross");
+        assertFileSays("crosshair.size=4");
+        assertFileSays("crosshair.colour=#FFFFFFFF");
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+    }
+
+    /** Moves the real cursor onto a feature's switch on ash's panel and clicks, as a player would. */
     private static void clickSwitch(ClientGameTestContext context, Feature feature) {
+        clickOn(context, feature + "'s switch", panel -> panel.switchOf(feature));
+    }
+
+    /**
+     * Moves the real cursor onto something on ash's panel and clicks, as a
+     * player would: the panel says where it drew it, and the game's own input
+     * does the rest.
+     */
+    private static void clickOn(ClientGameTestContext context, String what,
+            java.util.function.Function<Panel, Rect> where) {
         double[] at = context.computeOnClient(client -> {
             if (!(client.screen instanceof AshSettingsScreen screen)) {
                 throw new AssertionError("ash's settings are not open");
             }
-            Rect toggle = screen.panel().switchOf(feature);
-            if (toggle == null) {
-                throw new AssertionError("ash's panel shows no switch for " + feature);
+            Rect target = where.apply(screen.panel());
+            if (target == null) {
+                throw new AssertionError("ash's panel does not show " + what);
             }
             double scale = client.getWindow().getGuiScale();
-            return new double[] {(toggle.centreX() + 0.5) * scale, (toggle.centreY() + 0.5) * scale};
+            return new double[] {(target.centreX() + 0.5) * scale, (target.centreY() + 0.5) * scale};
         });
         context.getInput().setCursorPos(at[0], at[1]);
         context.getInput().pressMouse(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT);
+        context.waitTicks(3);
     }
 
     private static void assertReadoutDraws(ClientGameTestContext context, boolean expected, String otherwise) {

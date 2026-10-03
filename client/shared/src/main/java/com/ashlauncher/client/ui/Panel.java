@@ -2,6 +2,10 @@ package com.ashlauncher.client.ui;
 
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.settings.Category;
+import com.ashlauncher.client.settings.Choice;
+import com.ashlauncher.client.settings.Colour;
+import com.ashlauncher.client.settings.OnOff;
+import com.ashlauncher.client.settings.Whole;
 import com.ashlauncher.client.settings.SettingsScreen;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,12 +20,15 @@ import java.util.function.Supplier;
  * search and close along the top; categories down the left with counts; a
  * card per feature with its switch; and a footer. It is a stand-in until the
  * final design brief, so the look lives here, in one class, and the
- * behaviour lives in {@link SettingsScreen}. Still to come in it: the
- * options view with #34, and "Edit HUD" with #41.
+ * behaviour lives in {@link SettingsScreen}. A feature with options has an
+ * "Options" link on its card, which opens its {@link OptionsPage} in place of
+ * the cards. Still to come: "Edit HUD", with #41.
  *
- * <p>Laid out afresh from the screen size and the font on every frame and
- * every click, so what is drawn and what a click hits can never disagree.
- * Everything is in GUI units and made of rectangles and text.
+ * <p>The cards are laid out afresh from the screen size and the font on every
+ * frame and every click; an options page records where it drew each control
+ * and matches a click against that record. Either way, what a click hits is
+ * what is on screen. Everything is in GUI units and made of rectangles and
+ * text.
  *
  * <p>The version target's screen passes the game's input on - a click, a
  * scroll, a typed character, a {@link Key} - and draws through a
@@ -53,6 +60,10 @@ public final class Panel {
     private String query = "";
     /** The first row of cards on view. */
     private int scroll;
+    /** The feature whose options are open in place of the cards, or {@code null}. */
+    private OptionsPage page;
+    /** How wide "Options >" draws, as last measured. */
+    private int optionsLinkWidth = 50;
 
     /**
      * @param closeKeyName what the key that opens and closes the panel is
@@ -90,18 +101,45 @@ public final class Panel {
                 return true;
             }
         }
+        if (page != null) {
+            return page.click(x, y) || searchBox().contains(x, y);
+        }
         for (SettingsScreen.Row row : visibleRows()) {
             Rect card = cardOf(row.feature());
-            if (card != null && switchIn(card).contains(x, y)) {
+            if (card == null) {
+                continue;
+            }
+            if (switchIn(card).contains(x, y)) {
                 row.press();
+                return true;
+            }
+            if (row.hasOptions() && row.available() && optionsLinkIn(card).contains(x, y)) {
+                page = new OptionsPage(model, row, () -> page = null);
                 return true;
             }
         }
         return searchBox().contains(x, y);
     }
 
+    /** The mouse moved with the left button held, as when dragging a slider. */
+    public void mouseDragged(int x, int y) {
+        if (page != null) {
+            page.drag(x, y);
+        }
+    }
+
+    public void mouseReleased() {
+        if (page != null) {
+            page.release();
+        }
+    }
+
     /** The mouse wheel: positive is away from the player, which scrolls up. */
     public void mouseScrolled(double amount) {
+        if (page != null) {
+            page.scroll(amount);
+            return;
+        }
         if (amount > 0) {
             scroll = Math.max(0, scroll - 1);
         } else if (amount < 0) {
@@ -110,6 +148,13 @@ public final class Panel {
     }
 
     public void keyPressed(Key key) {
+        if (page != null && page.keyPressed(key)) {
+            return;
+        }
+        if (page != null && key == Key.BACKSPACE) {
+            // As typing does: the search is the cards', so editing it goes back to them.
+            page = null;
+        }
         if (key == Key.ESCAPE) {
             close.run();
         } else if (key == Key.BACKSPACE && !query.isEmpty()) {
@@ -120,21 +165,29 @@ public final class Panel {
 
     /**
      * A character typed while the panel is open, as a whole code point, so
-     * nothing here can split one in half. It always goes to the search box:
-     * nothing else on the panel takes text. Control characters - what Shift
-     * or an arrow key types on 1.8.9 - are ignored.
+     * nothing here can split one in half. It goes to a colour's box while one
+     * is being typed in, and otherwise to the search - which, typed into from
+     * a feature's options, goes back to the cards to show what it finds.
+     * Control characters - what Shift or an arrow key types on 1.8.9 - are
+     * ignored.
      */
     public void charTyped(int codePoint) {
+        if (page != null && page.typing()) {
+            page.charTyped(codePoint);
+            return;
+        }
         if (codePoint < ' ' || codePoint == 127 || !Character.isValidCodePoint(codePoint)
                 || query.codePointCount(0, query.length()) >= MAX_QUERY) {
             return;
         }
+        page = null;
         setQuery(new StringBuilder(query).appendCodePoint(codePoint).toString());
     }
 
     private void choose(Category which) {
         category = which;
         scroll = 0;
+        page = null;
     }
 
     private void setQuery(String text) {
@@ -150,8 +203,68 @@ public final class Panel {
      * tests can click it as a player would.
      */
     public Rect switchOf(Feature feature) {
+        if (page != null) {
+            return page.feature() == feature ? page.target("switch:" + feature.id()) : null;
+        }
         Rect card = cardOf(feature);
         return card == null ? null : switchIn(card);
+    }
+
+    /** Where a feature's "Options" link is on its card, or {@code null} when it has none or its card is not on view. */
+    public Rect optionsLinkOf(Feature feature) {
+        if (page != null) {
+            return null;
+        }
+        for (SettingsScreen.Row row : visibleRows()) {
+            if (row.feature() == feature && row.hasOptions() && row.available()) {
+                Rect card = cardOf(feature);
+                return card == null ? null : optionsLinkIn(card);
+            }
+        }
+        return null;
+    }
+
+    // Where the open options page drew each control, for the real-game tests
+    // to click as a player would; null when it is not on view.
+
+    /** An on/off option's switch on its feature's page. */
+    public Rect switchOf(OnOff option) {
+        return page == null ? null : page.target("flag:" + option.key());
+    }
+
+    public Rect choiceOf(Choice choice, String id) {
+        return page == null ? null : page.target("choice:" + choice.key() + ":" + id);
+    }
+
+    /** The point along a whole number's slider that stands for {@code value}. */
+    public Rect sliderAt(Whole whole, int value) {
+        return page == null ? null : page.pointOn("slider:" + whole.key(), value, whole.min(), whole.max());
+    }
+
+    public Rect swatchOf(Colour colour, int rgb) {
+        return page == null ? null : page.target("swatch:" + colour.key() + ":" + OptionsPage.hex(rgb));
+    }
+
+    public Rect hexBoxOf(Colour colour) {
+        return page == null ? null : page.target("hex:" + colour.key());
+    }
+
+    public Rect opacitySlider(Colour colour) {
+        return page == null ? null : page.target("opacity:" + colour.key());
+    }
+
+    /** The point along a colour's opacity slider that stands for {@code percent}. */
+    public Rect opacityAt(Colour colour, int percent) {
+        int min = (int) Math.round(Colour.MIN_ALPHA * 100 / 255.0);
+        return page == null ? null : page.pointOn("opacity:" + colour.key(), percent, min, 100);
+    }
+
+    public Rect resetToDefaults() {
+        return page == null ? null : page.target("reset");
+    }
+
+    public Rect backLink() {
+        return page == null ? null : page.target("back");
     }
 
     Rect cardOf(Feature feature) {
@@ -218,8 +331,13 @@ public final class Panel {
         return lineHeight + 5;
     }
 
+    /** The name, two lines of description, and a line for the "Options" link. */
     private int cardHeight() {
-        return 6 + lineHeight + 5 + 2 * lineHeight + 5;
+        return 6 + lineHeight + 5 + 2 * lineHeight + 4 + lineHeight + 5;
+    }
+
+    private Rect optionsLinkIn(Rect card) {
+        return new Rect(card.x + 4, card.y + card.height - lineHeight - 6, optionsLinkWidth + 4, lineHeight + 3);
     }
 
     private Rect searchBox() {
@@ -315,8 +433,12 @@ public final class Panel {
 
         drawTopBar(surface, panel, mouseX, mouseY);
         drawCategories(surface, panel, mouseX, mouseY);
-        drawCards(surface, mouseX, mouseY);
-        drawScrollBar(surface);
+        if (page != null) {
+            page.render(surface, grid(), mouseX, mouseY);
+        } else {
+            drawCards(surface, mouseX, mouseY);
+            drawScrollBar(surface);
+        }
         drawNotice(surface);
         drawFooter(surface, panel);
     }
@@ -387,6 +509,14 @@ public final class Panel {
             int nameRoom = toggle.x - card.x - 10;
             surface.drawText(Text.fit(surface, row.name(), nameRoom), card.x + 6, card.y + 6, Palette.TEXT);
             Shapes.onOffSwitch(surface, toggle, row.on(), row.available());
+
+            // A feature that did not load offers no options: they would change nothing.
+            if (row.hasOptions() && row.available()) {
+                String options = "Options >";
+                optionsLinkWidth = surface.textWidth(options);
+                Rect link = optionsLinkIn(card);
+                surface.drawText(options, link.x + 2, link.y + 2, link.contains(mouseX, mouseY) ? Palette.TEXT : Palette.MUTED);
+            }
 
             int textTop = card.y + 6 + lineHeight + 5;
             if (!row.available()) {

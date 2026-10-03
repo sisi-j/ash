@@ -2,6 +2,7 @@ package com.ashlauncher.client.crosshair;
 
 import com.ashlauncher.client.hud.HudSurface;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * ash's crosshair, drawn in place of the game's.
@@ -16,15 +17,20 @@ import java.util.function.BooleanSupplier;
 public final class Crosshair {
 
     private final BooleanSupplier on;
-    private final Cross cross;
+    private final Supplier<Cross> cross;
 
     /**
      * @param on whether the player wants it; asked every frame, so a switch on
      *     the settings screen shows at once
      */
-    public Crosshair(BooleanSupplier on, Cross cross) {
+    public Crosshair(BooleanSupplier on, Supplier<Cross> cross) {
         this.on = on;
         this.cross = cross;
+    }
+
+    /** A crosshair that never changes shape: for tests, and anything without settings behind it. */
+    public Crosshair(BooleanSupplier on, Cross cross) {
+        this(on, () -> cross);
     }
 
     /**
@@ -44,9 +50,7 @@ public final class Crosshair {
         if (!on.getAsBoolean()) {
             return false;
         }
-        for (Cross.Piece piece : cross.pieces()) {
-            surface.fill(centreX + piece.x, centreY + piece.y, piece.width, piece.height, piece.colour);
-        }
+        cross.get().drawOnto(surface::fill, centreX, centreY, 1);
         return true;
     }
 }

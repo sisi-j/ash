@@ -75,12 +75,13 @@ class PanelTest {
     @Test
     void every_declared_setting_has_a_card_with_its_name_and_what_it_does() {
         FakeScreenSurface surface;
-        assertFalse(Settings.declared().isEmpty(), "the test proves nothing with no settings declared");
+        assertFalse(Settings.switches().isEmpty(), "the test proves nothing with no settings declared");
         Panel panel = panel(Settings.load(configDir));
         surface = render(panel);
-        for (OnOff setting : Settings.declared()) {
+        for (OnOff setting : Settings.switches()) {
             Rect card = panel.cardOf(setting.feature());
-            String inCard = textIn(surface, card);
+            // The "Options >" link is the card's own, not part of what the feature does.
+            String inCard = textIn(surface, card).replace(" Options >", "");
             // The name, then as much of its own description as fits, in its own card.
             String name = setting.feature().displayName();
             assertTrue(inCard.startsWith(name + " "), setting.key() + "'s card reads \"" + inCard + "\"");
@@ -119,7 +120,7 @@ class PanelTest {
 
         click(panel, panel.categoryAt("All"));
         FakeScreenSurface all = render(panel);
-        for (OnOff setting : Settings.declared()) {
+        for (OnOff setting : Settings.switches()) {
             assertTrue(all.drew(setting.feature().displayName()), setting.key() + " missing under All");
         }
     }
@@ -130,8 +131,8 @@ class PanelTest {
         FakeScreenSurface surface = render(panel);
 
         for (String category : new String[] {"All", "PvP", "HUD", "Movement"}) {
-            long expected = category.equals("All") ? Settings.declared().size()
-                    : Settings.declared().stream().filter(s -> s.category().displayName().equals(category)).count();
+            long expected = category.equals("All") ? Settings.switches().size()
+                    : Settings.switches().stream().filter(s -> s.category().displayName().equals(category)).count();
             assertEquals(category + " " + expected, textIn(surface, panel.categoryAt(category)),
                     "the " + category + " row");
         }
@@ -300,7 +301,7 @@ class PanelTest {
 
         assertFalse(handled);
         assertEquals(List.of(), closed);
-        for (OnOff setting : Settings.declared()) {
+        for (OnOff setting : Settings.switches()) {
             assertEquals(setting.fallback(), settings.get(setting), setting.key());
         }
     }
@@ -326,12 +327,12 @@ class PanelTest {
                 assertTrue(text.x() >= 0 && text.y() >= 0 && text.x() + surface.textWidth(text.text()) <= size[0]
                         && text.y() + surface.lineHeight() <= size[1], "text off screen at " + at + ": " + text);
             }
-            for (OnOff setting : Settings.declared()) {
+            for (OnOff setting : Settings.switches()) {
                 assertTrue(panel.cardOf(setting.feature()) != null || panel.maxScroll() > 0,
                         setting.key() + "'s card is neither on view nor reachable by scrolling at " + at);
             }
             List<Rect> cards = new ArrayList<>();
-            for (OnOff setting : Settings.declared()) {
+            for (OnOff setting : Settings.switches()) {
                 Rect card = panel.cardOf(setting.feature());
                 if (card != null) {
                     cards.add(card);

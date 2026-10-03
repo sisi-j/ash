@@ -88,7 +88,7 @@ class CrosshairTest {
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
         int cx = centreX(surface);
         int cy = centreY(surface);
-        Cross gapped = new Cross(3, 2, 1, WHITE, false);
+        Cross gapped = new Cross(Shape.CROSS, 3, 2, 1, WHITE, false);
 
         draw(new Crosshair(() -> true, gapped), surface);
 
@@ -108,7 +108,7 @@ class CrosshairTest {
             for (int gap = 0; gap <= 2; gap++) {
                 for (int arm = 1; arm <= 6; arm++) {
                     FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
-                    draw(new Crosshair(() -> true, new Cross(arm, gap, thickness, WHITE, false)), surface);
+                    draw(new Crosshair(() -> true, new Cross(Shape.CROSS, arm, gap, thickness, WHITE, false)), surface);
 
                     int expected = 2 * (arm + gap) + thickness;
                     String size = "arm " + arm + ", gap " + gap + ", thickness " + thickness;
@@ -125,7 +125,7 @@ class CrosshairTest {
         int cx = centreX(surface);
         int cy = centreY(surface);
 
-        draw(new Crosshair(() -> true, new Cross(4, 1, 3, WHITE, false)), surface);
+        draw(new Crosshair(() -> true, new Cross(Shape.CROSS, 4, 1, 3, WHITE, false)), surface);
 
         for (int offset = -1; offset <= 1; offset++) {
             assertEquals(WHITE, surface.pixelAt(cx + 3, cy + offset), "row " + offset + " of the right arm");
@@ -138,7 +138,7 @@ class CrosshairTest {
     void without_an_outline_nothing_dark_is_drawn() {
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-        draw(new Crosshair(() -> true, new Cross(4, 0, 1, WHITE, false)), surface);
+        draw(new Crosshair(() -> true, new Cross(Shape.CROSS, 4, 0, 1, WHITE, false)), surface);
 
         assertFalse(surface.fills().isEmpty(), "the test proves nothing if nothing was drawn");
         for (FakeHudSurface.Fill fill : surface.fills()) {
@@ -185,5 +185,144 @@ class CrosshairTest {
             }
         }
         return first < 0 ? 0 : last - first + 1;
+    }
+
+    @Test
+    void a_t_has_no_top_arm() {
+        FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
+        int cx = centreX(surface);
+        int cy = centreY(surface);
+
+        draw(new Crosshair(() -> true, new Cross(Shape.T, 4, 0, 1, WHITE, false)), surface);
+
+        assertEquals(EMPTY, surface.pixelAt(cx, cy - 3), "a T with a top arm");
+        assertEquals(WHITE, surface.pixelAt(cx, cy + 3), "a T without its bottom arm");
+        assertEquals(WHITE, surface.pixelAt(cx - 3, cy), "a T without its left arm");
+    }
+
+    @Test
+    void a_dot_is_a_filled_square_on_the_centre_with_no_arms() {
+        FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
+        int cx = centreX(surface);
+        int cy = centreY(surface);
+
+        draw(new Crosshair(() -> true, new Cross(Shape.DOT, 4, 0, 1, WHITE, false)), surface);
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                assertEquals(WHITE, surface.pixelAt(cx + dx, cy + dy), "the dot at " + dx + "," + dy);
+            }
+        }
+        assertEquals(EMPTY, surface.pixelAt(cx + 3, cy), "a dot with an arm");
+    }
+
+    @Test
+    void a_box_is_hollow_with_its_corners_filled() {
+        FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
+        int cx = centreX(surface);
+        int cy = centreY(surface);
+
+        draw(new Crosshair(() -> true, new Cross(Shape.BOX, 4, 0, 1, WHITE, false)), surface);
+
+        assertEquals(EMPTY, surface.pixelAt(cx, cy), "a filled box");
+        assertEquals(WHITE, surface.pixelAt(cx + 4, cy + 4), "a box without a corner");
+        assertEquals(WHITE, surface.pixelAt(cx - 4, cy - 4), "a box without a corner");
+        assertEquals(WHITE, surface.pixelAt(cx, cy - 4), "a box without a top");
+        assertEquals(EMPTY, surface.pixelAt(cx + 5, cy), "a box drawn wider than its size");
+    }
+
+    @Test
+    void the_outline_is_as_see_through_as_the_crosshair() {
+        // A faint crosshair with a solid outline would be a dark ring with a
+        // ghost inside it.
+        int faintRed = 0x80FF0000;
+        FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
+
+        draw(new Crosshair(() -> true, new Cross(Shape.CROSS, 4, 0, 1, faintRed, true)), surface);
+
+        assertEquals(0x80000000, surface.pixelAt(centreX(surface) + 5, centreY(surface)), "the outline's colour");
+    }
+
+    @Test
+    void the_crosshair_is_built_from_the_settings_every_time_it_is_drawn() throws java.io.IOException {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("ash-crosshair");
+        com.ashlauncher.client.settings.Settings settings = com.ashlauncher.client.settings.Settings.load(dir);
+        Crosshair crosshair = new Crosshair(() -> true, () -> Cross.of(settings));
+        FakeHudSurface before = FakeHudSurface.ofTypicalSize();
+        draw(crosshair, before);
+        assertEquals(WHITE, before.pixelAt(centreX(before), centreY(before)), "the test proves nothing if the default draws nothing");
+
+        settings.set(com.ashlauncher.client.settings.Settings.CROSSHAIR_SHAPE, "box");
+        settings.set(com.ashlauncher.client.settings.Settings.CROSSHAIR_COLOUR, 0xFF4DC3FF);
+        FakeHudSurface after = FakeHudSurface.ofTypicalSize();
+        draw(crosshair, after);
+
+        assertEquals(EMPTY, after.pixelAt(centreX(after), centreY(after)), "the shape did not change to a box");
+        assertEquals(0xFF4DC3FF, after.pixelAt(centreX(after) + 4, centreY(after) + 4), "the colour did not change");
+    }
+
+    @Test
+    void drawn_at_a_scale_every_piece_grows_by_it() {
+        java.util.List<int[]> fills = new java.util.ArrayList<>();
+        Cross.DEFAULT.drawOnto((x, y, w, h, colour) -> fills.add(new int[] {x, y, w, h}), 100, 100, 3);
+
+        for (int[] fill : fills) {
+            assertEquals(0, fill[2] % 3, "a piece's width is not a multiple of the scale");
+            assertEquals(0, fill[3] % 3, "a piece's height is not a multiple of the scale");
+        }
+        assertTrue(fills.size() > 0);
+    }
+
+    @Test
+    void no_pixel_is_filled_twice_for_any_shape_size_gap_thickness_or_outline() {
+        // A see-through crosshair is only evenly see-through if nothing is
+        // drawn over anything else: two fills on one pixel draw it darker.
+        for (Shape shape : Shape.values()) {
+            for (int thickness = 1; thickness <= 4; thickness++) {
+                for (int gap = 0; gap <= 2; gap++) {
+                    for (boolean outlined : new boolean[] {false, true}) {
+                        java.util.Map<Long, Integer> covered = new java.util.HashMap<>();
+                        new Cross(shape, 5, gap, thickness, 0x80FFFFFF, outlined).drawOnto((x, y, w, h, colour) -> {
+                            for (int px = x; px < x + w; px++) {
+                                for (int py = y; py < y + h; py++) {
+                                    covered.merge(((long) px << 32) | (py & 0xFFFFFFFFL), 1, Integer::sum);
+                                }
+                            }
+                        }, 0, 0, 1);
+                        String what = shape + " thickness " + thickness + " gap " + gap + (outlined ? " outlined" : "");
+                        assertFalse(covered.isEmpty(), "nothing drawn for " + what);
+                        assertTrue(covered.values().stream().allMatch(n -> n == 1), "a pixel filled twice for " + what);
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void every_shape_with_an_even_thickness_is_still_even() {
+        // Square, except a T: it has no top arm, so it is as wide as a cross
+        // and only as tall as its centre and lower arm.
+        FakeHudSurface cross = FakeHudSurface.ofTypicalSize();
+        draw(new Crosshair(() -> true, new Cross(Shape.CROSS, 4, 1, 2, WHITE, true)), cross);
+        for (Shape shape : Shape.values()) {
+            FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
+            draw(new Crosshair(() -> true, new Cross(shape, 4, 1, 2, WHITE, true)), surface);
+
+            if (shape == Shape.T) {
+                assertEquals(extent(cross, true), extent(surface, true), "T's width at thickness 2");
+            } else {
+                assertEquals(extent(surface, true), extent(surface, false), shape + " at thickness 2");
+            }
+        }
+    }
+
+    @Test
+    void a_dot_is_as_wide_as_its_size() {
+        for (int size = 1; size <= 6; size++) {
+            FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
+            draw(new Crosshair(() -> true, new Cross(Shape.DOT, size, 0, 1, WHITE, false)), surface);
+
+            assertEquals(size, extent(surface, true), "a dot of size " + size);
+        }
     }
 }

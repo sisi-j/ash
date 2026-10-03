@@ -91,7 +91,9 @@ public final class AshClient implements ClientModInitializer {
         boolean crosshairLanded = MixinFeature.landed(() -> InGameHud.class, CROSSHAIR_MIXIN,
                 why -> LOG.warn(MixinFeature.didNotLoad(Feature.CROSSHAIR.displayName(), why)));
         if (crosshairLanded) {
-            CrosshairHook.install(new Crosshair(() -> settings.get(Settings.CROSSHAIR), Cross.DEFAULT));
+            // Built from the settings every frame, so a change on the settings
+            // screen shows on the next one.
+            CrosshairHook.install(new Crosshair(() -> settings.get(Settings.CROSSHAIR), () -> Cross.of(settings)));
         } else {
             landed.remove(Feature.CROSSHAIR);
         }
