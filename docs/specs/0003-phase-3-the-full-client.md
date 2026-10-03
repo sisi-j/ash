@@ -159,7 +159,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
   - `Ash` stays the launcher's single inbound seam, with the existing fakes.
 
   The three new seams are:
-  - **the settings model**;
+  - **the settings model**, and since 2026-10-03 **ash's own interface over it**: drawn in the shared module through a screen surface, with each target's input passed through to it (see *The settings model and the settings screen*);
   - **the launcher UI rendered against a fake API**;
   - **a frame-time measurement run on real hardware**.
 - **`HudSurface` grows only what a feature needs.** The crosshair needs filled rectangles and the screen's width. Nothing is added ahead of a feature that calls it.
@@ -226,19 +226,31 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
   - "Appended to, never rewritten" becomes "appended to, and changed only in place".
   - Writes stay atomic, and reads still never throw.
 - **Changes apply at once and are saved as they are made.** Nothing waits for the screen to close.
-- **Each target draws the screen with its own vanilla widgets, thinly.** Layout and behaviour are the same on both targets, and the widgets look like each target's own. The decisions sit in the shared module: which options exist, their order, their bounds, what "reset" restores, and when an option is unavailable.
+- ~~**Each target draws the screen with its own vanilla widgets, thinly.** Layout and behaviour are the same on both targets, and the widgets look like each target's own.~~ **ash draws its own interface, the same on both targets.** (*Amended 2026-10-03 by the product owner's decision, after the prototype on branch `prototype/ash-ui`.*)
+  - The product owner wants a menu like Lunar's in kind, but simpler and in ash's grayscale. Vanilla widgets would look like each game's own grey buttons, so they are dropped.
+  - **The layout, for now, is the prototype's design A, "Panel":**
+    - a centred window, with the wordmark, a search box, "Edit HUD" and close along the top;
+    - categories down the left, with counts;
+    - a grid of cards, one per feature, each with its switch and an "Options" link;
+    - options opening in place of the grid, with a live preview where one helps, such as the crosshair over sky, snow and night;
+    - a footer saying changes save as they are made, and the key that closes the screen.
+  - **This is a stand-in, not the final look.** The product owner will give an in-depth brief for the final design once there are more settings. So this is built so that the look can change without the behaviour changing.
+  - **Everything is drawn from rectangles and text**, which both targets can draw. Rounded corners are stepped pixels.
+  - **Text is the game's own font for now.** Using ash's own typeface in game means ash rendering its own text on both targets. That waits for the final design, and the drawing surface keeps text behind one method so the face can change later.
+  - **The shared module draws it and decides everything.** It draws through a screen surface: fill a rectangle, draw text, measure text. It takes input passed through from the target: mouse press, drag, release and scroll, keys mapped to ash's own names, and typed characters. Every widget, from the switch and the slider to the colour picker and the HUD editor, is ash's own and tested in the shared module against a fake surface with simulated input.
+  - **Each target supplies only a thin screen.** That screen forwards the game's input, implements the surface, and closes on its key.
 - **The screen opens on a key binding, Right Shift by default**, registered like toggle sprint's and rebindable in Controls. A button on the title or pause screen is out of scope. The launcher names the key once, where a new player will see it.
   - Right Shift is unbound by default on both targets.
   - A key binding receives no presses while a screen is open, so the screen recognises its own key to close.
   - *Settled 2026-09-29 by `docs/research/0005`.*
-- **The building blocks, per target** (*settled 2026-09-29 by `docs/research/0005`*):
+- **The building blocks, per target** (*settled 2026-09-29 by `docs/research/0005`*; *since 2026-10-03, ash draws its own widgets, so what follows about each target's widgets is background, not the plan. The key polling and the input each target gives a screen still apply*):
   - **1.21.11** has every widget the option kinds need: a cycling button, a checkbox, a slider, a text box and a scrolling list of rows. The key is polled on Fabric API's client tick event, which is already inside the Fabric API ash ships, so there are no new modules.
     - The game's own options list is not used, because it rewrites the game's `options.txt` every time the screen closes.
   - **1.8.9** has a slider, which works in fractions and is made whole-number by the shared module. It has a text box and a scrolling list like its Controls screen. It has no cycling button and no checkbox; the game's own screens use a plain button whose label changes, and so does ash.
     - The key is polled from **ash's own small hook on the client tick**, not from Legacy Fabric's lifecycle-events module. That module would mean two more jars pinned and mirrored, and its code is required, so if it failed to apply the whole game would stop. ash's own hook degrades only the settings key.
 - **Colour options never go below the smallest opacity both targets draw the same way.** At near-zero opacity, 1.8.9 draws text fully opaque and 1.21.11 draws nothing (`HudSurface` records the same fault). The settings model clamps the value, so the same setting never looks opposite on the two targets.
 - **A feature that degraded is shown as unavailable** on the screen, with the same wording the launcher's notice uses. It is never a live switch.
-- **Readout positions are an anchor plus an offset.** The anchor is the nearest corner or edge, and the offset is in GUI units. That keeps a placed readout in place across resolution, window size and GUI-scale changes, and makes clamping on screen a pure calculation. Dragging is the only per-target part.
+- **Readout positions are an anchor plus an offset.** The anchor is the nearest corner or edge, and the offset is in GUI units. That keeps a placed readout in place across resolution, window size and GUI-scale changes, and makes clamping on screen a pure calculation. ~~Dragging is the only per-target part.~~ Dragging is ash's own too, from the panel's "Edit HUD" mode; the target only passes the mouse through.
 
 ### Performance
 
