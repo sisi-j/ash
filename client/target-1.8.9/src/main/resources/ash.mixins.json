@@ -5,7 +5,9 @@
   "plugin": "com.ashlauncher.client.mixin.AshMixinPlugin",
   "compatibilityLevel": "JAVA_8",
   "client": [
+    "ClientPlayNetworkHandlerMixin",
     "ClientPlayerEntityMixin",
+    "ClientPlayerInteractionManagerMixin",
     "InGameHudMixin",
     "MinecraftClientMixin"
   ],

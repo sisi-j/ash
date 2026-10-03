@@ -14,6 +14,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.imageio.ImageIO;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.hud.HudSurface;
@@ -31,6 +32,12 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.client.util.Window;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.passive.PigEntity;
+import net.minecraft.server.integrated.IntegratedServer;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.level.LevelGeneratorType;
 import net.minecraft.world.level.LevelInfo;
 import org.lwjgl.input.Keyboard;
@@ -122,11 +129,13 @@ public final class AshSmokeTest implements ClientModInitializer {
         settingsScreenWorks(client);
         crosshairOptionsWork(client);
         crosshairWorks(client);
+        hitIndicatorWorks(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
                 + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
-                + " of the game's and gave way to it when switched off, and its options changed what it drew");
+                + " of the game's and gave way to it when switched off, and its options changed what it drew, and"
+                + " the hit indicator marked the player's own hit on a pig and not a hurt the player had not attacked it for");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -178,6 +187,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
             "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
+            "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -558,6 +568,107 @@ public final class AshSmokeTest implements ClientModInitializer {
         if (sprinting == null || sprinting != expected) {
             fail(otherwise + " (sprinting: " + sprinting + ")");
         }
+    }
+
+    /**
+     * The hit indicator, in this test's own world. Its options are set on the
+     * settings screen first - the longest duration, so the mark is still up
+     * when it is looked for. Then a pig, spawned on the integrated server.
+     * Hurt by something the player did not attack it with, it must not mark.
+     * Attacked by the player, it must: the server's hurt, matched to that
+     * attack. This tier cannot press the mouse button, so the attack starts at
+     * the call the button reaches, {@code attackEntity} - which is also where
+     * ash records it.
+     */
+    private static void hitIndicatorWorks(MinecraftClient client) {
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings for the hit indicator's options", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        pause(300L);
+        clickOn(client, screen, "the hit indicator's options link", panel -> panel.optionsLinkOf(Feature.HIT_INDICATOR));
+        clickOn(client, screen, "1000 ms on its slider", panel -> panel.sliderAt(Settings.HIT_INDICATOR_DURATION, 1000));
+        clickOn(client, screen, "the green swatch", panel -> panel.swatchOf(Settings.HIT_INDICATOR_COLOUR, 0x4DFF88));
+        // By eye: the page, with Duration at 1000 ms and green chosen.
+        screenshot(client, "ash-hit-indicator-options.png");
+        expectFileSays("hit-indicator.duration=1000");
+        expectFileSays("hit-indicator.colour=#4DFF88FF");
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings after the hit indicator's options", () -> client.currentScreen == null ? client : null);
+
+        IntegratedServer server = client.getServer();
+        double[] at = onClient(client, () -> new double[] {client.player.x, client.player.y, client.player.z});
+        PigEntity pig = onServer(server, () -> {
+            ServerWorld world = server.worlds[0];
+            PigEntity spawned = new PigEntity(world);
+            spawned.refreshPositionAndAngles(at[0], at[1], at[2] + 2, 0.0F, 0.0F);
+            spawned.setAiDisabled(true);
+            world.spawnEntity(spawned);
+            return spawned;
+        });
+        int id = pig.getEntityId();
+        Entity seen = await("the pig to reach the client", () -> onClient(client, () -> client.world.getEntityById(id)));
+
+        onServer(server, () -> pig.damage(DamageSource.GENERIC, 1.0F));
+        // The hurt reaching the client, or "no mark" would hold for a status
+        // that never arrived.
+        await("the pig's hurt to reach the client", () ->
+                onClient(client, () -> ((LivingEntity) seen).hurtTime > 0) ? client : null);
+        pause(200L);
+        if (hitIndicatorShows(client)) {
+            fail("the pig, hurt by nothing the player attacked it with, lit the hit indicator");
+        }
+
+        // Past the invulnerability that hurt left it with, so the player's hit is a fresh one.
+        pause(1500L);
+        onClient(client, () -> {
+            client.interactionManager.attackEntity(client.player, seen);
+            return null;
+        });
+        pause(300L);
+        if (!hitIndicatorShows(client)) {
+            fail("the player's hit on the pig, confirmed by the server, did not light the hit indicator");
+        }
+        // By eye: four short green diagonals around the crosshair.
+        screenshot(client, "ash-hit-indicator.png");
+        onServer(server, () -> {
+            pig.remove();
+            return null;
+        });
+    }
+
+    /** Whether the hit indicator draws a mark right now, asked of the feature itself. */
+    private static boolean hitIndicatorShows(MinecraftClient client) {
+        Boolean shows = onClient(client, () -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.hitIndicator.draw(surface, 0, 0);
+            return surface.fills > 0;
+        });
+        return shows != null && shows;
+    }
+
+    /** Runs {@code work} on the integrated server's thread and waits for its answer. */
+    private static <T> T onServer(IntegratedServer server, Callable<T> work) {
+        AtomicReference<T> answer = new AtomicReference<>();
+        AtomicReference<Exception> thrown = new AtomicReference<>();
+        try {
+            server.submit(() -> {
+                try {
+                    answer.set(work.call());
+                } catch (Exception failed) {
+                    thrown.set(failed);
+                }
+            }).get(STEP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            fail("interrupted while waiting on the server thread");
+        } catch (ExecutionException | TimeoutException failed) {
+            fail("the server thread did not answer (" + failed + ")");
+        }
+        if (thrown.get() != null) {
+            fail("on the server thread: " + thrown.get());
+        }
+        return answer.get();
     }
 
     /** Runs {@code work} on the client thread and waits for its answer. */

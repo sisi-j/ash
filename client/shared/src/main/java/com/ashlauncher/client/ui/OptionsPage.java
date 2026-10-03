@@ -290,7 +290,9 @@ final class OptionsPage {
                 break;
             case WHOLE: {
                 Whole whole = (Whole) row.setting;
-                drawSlider(surface, "slider:" + whole.key(), area, model.value(whole), whole.min(), whole.max(), "",
+                String unit = whole.unit().isEmpty() ? "" : " " + whole.unit();
+                drawSlider(surface, "slider:" + whole.key(), area, model.value(whole), whole.min(), whole.max(),
+                        whole.step(), unit,
                         value -> {
                             // Only when it moves: a drag along one value is not a save per frame.
                             if (model.value(whole) != value) {
@@ -311,7 +313,7 @@ final class OptionsPage {
                 // slider's lowest step and that step sets exactly it.
                 int minPercent = (int) Math.round(Colour.MIN_ALPHA * 100 / 255.0);
                 int percent = Math.max(minPercent, (int) Math.round((model.value(colour) >>> 24) * 100 / 255.0));
-                drawSlider(surface, "opacity:" + colour.key(), area, percent, minPercent, 100, "%", value -> {
+                drawSlider(surface, "opacity:" + colour.key(), area, percent, minPercent, 100, 1, "%", value -> {
                     int alpha = Math.max(Colour.MIN_ALPHA, (int) Math.round(value * 255 / 100.0));
                     int wanted = (alpha << 24) | (model.value(colour) & 0xFFFFFF);
                     if (model.value(colour) != wanted) {
@@ -358,8 +360,8 @@ final class OptionsPage {
         void to(int value);
     }
 
-    private void drawSlider(ScreenSurface surface, String id, Rect area, int value, int min, int max, String unit,
-            Slide slide) {
+    private void drawSlider(ScreenSurface surface, String id, Rect area, int value, int min, int max, int step,
+            String unit, Slide slide) {
         String widest = max + unit;
         int valueWidth = surface.textWidth(widest) + 6;
         Rect track = new Rect(area.x, area.y, Math.max(12, area.width - valueWidth), area.height);
@@ -373,7 +375,9 @@ final class OptionsPage {
         targets.add(new Target(id, track, (x, y) -> {
             // From the handle's middle, one unit in from where it is drawn,
             // so pressing the handle where it stands leaves it there.
-            int under = min + (int) Math.round((x - track.x - 1) * (max - min) / (double) (track.width - 3));
+            // Then to the nearest step.
+            double along = (x - track.x - 1) * (max - min) / (double) (track.width - 3);
+            int under = min + (int) Math.round(along / step) * step;
             slide.to(Math.max(min, Math.min(max, under)));
         }));
     }

@@ -11,11 +11,24 @@ public final class Whole extends Setting<Integer> {
 
     private final int min;
     private final int max;
+    private final int step;
+    private final String unit;
 
     Whole(Feature feature, String key, String label, int fallback, int min, int max, String comment) {
+        this(feature, key, label, fallback, min, max, 1, "", comment);
+    }
+
+    /**
+     * @param step what the settings screen's slider moves in, from {@code min}; the file takes any value in range
+     * @param unit shown after the number on the settings screen, such as "ms"; never written in the file
+     */
+    Whole(Feature feature, String key, String label, int fallback, int min, int max, int step, String unit,
+            String comment) {
         super(feature, key, label, fallback, comment);
         this.min = min;
         this.max = max;
+        this.step = step;
+        this.unit = unit;
     }
 
     public int min() {
@@ -24,6 +37,16 @@ public final class Whole extends Setting<Integer> {
 
     public int max() {
         return max;
+    }
+
+    /** What the settings screen's slider moves in: a slider with hundreds of values is one no one can set. */
+    public int step() {
+        return step;
+    }
+
+    /** What the number counts, such as "ms", or "" for a plain number. */
+    public String unit() {
+        return unit;
     }
 
     @Override
