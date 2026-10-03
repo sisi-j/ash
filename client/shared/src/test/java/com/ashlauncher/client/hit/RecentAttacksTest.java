@@ -68,13 +68,28 @@ class RecentAttacksTest {
     }
 
     @Test
-    void attacking_the_same_entity_again_restarts_its_window() {
+    void attacking_the_same_entity_again_gives_it_a_window_of_its_own() {
         attacks.attacked(7);
         now.addAndGet(RecentAttacks.WINDOW_MILLIS - 10);
         attacks.attacked(7);
         now.addAndGet(500);
 
         assertTrue(attacks.hurt(7));
+    }
+
+    @Test
+    void on_a_slow_connection_two_hits_in_flight_on_one_entity_both_match() {
+        // 600 ms of ping and two hits half a second apart, past 1.8.9's
+        // invulnerability: the first hurt comes back after the second swing.
+        attacks.attacked(7);
+        now.addAndGet(500);
+        attacks.attacked(7);
+        now.addAndGet(100);
+        assertTrue(attacks.hurt(7), "the first hit");
+        now.addAndGet(500);
+
+        assertTrue(attacks.hurt(7), "the second hit, used up by the first");
+        assertFalse(attacks.hurt(7), "a third hurt, with two attacks");
     }
 
     @Test

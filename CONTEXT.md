@@ -92,6 +92,10 @@ _Avoid_: menu, mod menu, options (that is the game's own screen), config screen
 One setting that shapes how a feature looks or behaves rather than whether it is on - the crosshair's shape, size, gap, thickness, colour and outline. Declared in the client settings beside the feature's switch, and edited on the feature's own page of the settings screen, reached from its card; a feature that did not load offers no page, and an option that does nothing for what the others are set to (a dot's gap) is not shown. "Reset to defaults" there puts the switch and every option back.
 _Avoid_: option (unqualified, in docs - it is the game's own word), sub-setting, config value
 
+**Hit indicator**:
+The feature that draws a **mark** at the crosshair when the server confirms one of the player's hits landed - never on the click alone, and never with an amount of damage or anyone's health. Exact on 1.21.11, where the server names who caused the damage; a match on 1.8.9, where it does not, so a hurt counts if it is of an entity the player attacked in the last second.
+_Avoid_: hit marker (in docs), hitmarker, damage indicator
+
 **Third-party mod**:
 A mod the player supplies themselves, loaded only when they opt in.
 _Avoid_: mod (unqualified), external mod, custom mod

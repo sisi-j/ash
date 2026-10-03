@@ -235,7 +235,12 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         server.runCommand("execute as @a at @s run tp @s ~ ~ ~ ~ -90");
         context.waitTicks(10);
         context.getInput().pressKey(options -> options.keyAttack);
-        context.waitTicks(10);
+        context.waitTicks(1);
+        // The swing itself, or "no mark" would hold for a press that never arrived.
+        if (!context.computeOnClient(client -> client.player.swinging)) {
+            throw new AssertionError("the attack key did not swing at the sky, so its no-mark check proves nothing");
+        }
+        context.waitTicks(9);
         if (hitIndicatorShows(context)) {
             throw new AssertionError("a swing at the empty sky lit the hit indicator");
         }
@@ -243,10 +248,19 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // Level with the player, so the pig is two blocks straight ahead, and
         // NoAI so it is still there when the swing arrives.
         server.runCommand("execute as @a at @s rotated ~ 0 run summon minecraft:pig ^ ^ ^2 {NoAI:1b,Tags:[\"ash_target\"]}");
-        server.runCommand("execute as @a at @s run tp @s ~ ~ ~ facing entity @e[tag=ash_target,limit=1] eyes");
+        // Anchored at the eyes, or the angle is worked out from the feet and
+        // the crosshair passes over the pig.
+        server.runCommand("execute as @a at @s anchored eyes run tp @s ~ ~ ~ facing entity @e[tag=ash_target,limit=1] eyes");
         context.waitTicks(10);
-        if (!context.computeOnClient(client -> client.hitResult instanceof EntityHitResult)) {
-            throw new AssertionError("the pig is not under the crosshair, so the hit below would prove nothing");
+        String aim = context.computeOnClient(client -> client.hitResult instanceof EntityHitResult ? null
+                : "the player at " + client.player.position() + " facing " + client.player.getYRot() + ","
+                        + client.player.getXRot() + "; pigs the client knows of: "
+                        + java.util.stream.StreamSupport.stream(client.level.entitiesForRendering().spliterator(), false)
+                                .filter(entity -> entity.getType() == net.minecraft.world.entity.EntityType.PIG)
+                                .map(entity -> String.valueOf(entity.position())).toList()
+                        + "; under the crosshair: " + client.hitResult);
+        if (aim != null) {
+            throw new AssertionError("the pig is not under the crosshair, so the hit below would prove nothing - " + aim);
         }
         context.getInput().pressKey(options -> options.keyAttack);
         context.waitTicks(4);

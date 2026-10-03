@@ -2,6 +2,7 @@ package com.ashlauncher.client.hit;
 
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.settings.Colour;
+import com.ashlauncher.client.settings.Settings;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 import java.util.function.LongSupplier;
@@ -21,9 +22,10 @@ import java.util.function.LongSupplier;
  */
 public final class HitIndicator {
 
-    /** How far from the centre each diagonal starts and ends, in GUI pixels, inclusive. */
+    /** How far from the centre each diagonal starts, in GUI pixels: clear of a default crosshair's arms. */
     static final int FROM = 3;
 
+    /** How far from the centre each diagonal ends, in GUI pixels, inclusive. */
     static final int TO = 5;
 
     private final BooleanSupplier on;
@@ -45,6 +47,13 @@ public final class HitIndicator {
         this.colour = colour;
         this.durationMillis = durationMillis;
         this.clockMillis = clockMillis;
+    }
+
+    /** The hit indicator as the player has set it up, read afresh at every hit and every frame. */
+    public static HitIndicator from(Settings settings, LongSupplier clockMillis) {
+        return new HitIndicator(() -> settings.get(Settings.HIT_INDICATOR),
+                () -> settings.get(Settings.HIT_INDICATOR_COLOUR), () -> settings.get(Settings.HIT_INDICATOR_DURATION),
+                clockMillis);
     }
 
     /**

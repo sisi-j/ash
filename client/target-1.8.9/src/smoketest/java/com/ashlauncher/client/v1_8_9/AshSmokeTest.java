@@ -33,6 +33,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.client.util.Window;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.passive.PigEntity;
 import net.minecraft.server.integrated.IntegratedServer;
@@ -134,7 +135,7 @@ public final class AshSmokeTest implements ClientModInitializer {
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
                 + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
                 + " of the game's and gave way to it when switched off, and its options changed what it drew, and"
-                + " the hit indicator marked the player's own hit on a pig and not anyone else's");
+                + " the hit indicator marked the player's own hit on a pig and not a hurt the player had not attacked it for");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -609,7 +610,11 @@ public final class AshSmokeTest implements ClientModInitializer {
         Entity seen = await("the pig to reach the client", () -> onClient(client, () -> client.world.getEntityById(id)));
 
         onServer(server, () -> pig.damage(DamageSource.GENERIC, 1.0F));
-        pause(500L);
+        // The hurt reaching the client, or "no mark" would hold for a status
+        // that never arrived.
+        await("the pig's hurt to reach the client", () ->
+                onClient(client, () -> ((LivingEntity) seen).hurtTime > 0) ? client : null);
+        pause(200L);
         if (hitIndicatorShows(client)) {
             fail("the pig, hurt by nothing the player attacked it with, lit the hit indicator");
         }

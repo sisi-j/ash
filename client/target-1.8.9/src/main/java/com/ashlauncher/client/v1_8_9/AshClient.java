@@ -27,7 +27,6 @@ import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.Window;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -91,8 +90,7 @@ public final class AshClient implements ClientModInitializer {
             fpsReadout.draw(surface);
             // Around the middle pixel of the game's crosshair, which it draws
             // at (width / 2 - 7, height / 2 - 7) with its centre on pixel 7.
-            Window window = new Window(minecraft);
-            HitHook.draw(surface, window.getWidth() / 2, window.getHeight() / 2);
+            HitHook.draw(surface, surface.width() / 2, surface.height() / 2);
         });
 
         // Every feature, less any whose mixin did not land. The settings
@@ -124,10 +122,8 @@ public final class AshClient implements ClientModInitializer {
         boolean hitHurtLanded = MixinFeature.landed(() -> ClientPlayNetworkHandler.class, HIT_HURT_MIXIN,
                 why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_INDICATOR.displayName(), why)));
         if (hitAttackLanded && hitHurtLanded) {
-            hitIndicator = new HitIndicator(() -> settings.get(Settings.HIT_INDICATOR),
-                    () -> settings.get(Settings.HIT_INDICATOR_COLOUR), () -> settings.get(Settings.HIT_INDICATOR_DURATION),
-                    AshClient::clockMillis);
-            HitHook.install(hitIndicator, new RecentAttacks(AshClient::clockMillis));
+            hitIndicator = HitIndicator.from(settings, HitHook::clockMillis);
+            HitHook.install(hitIndicator, new RecentAttacks(HitHook::clockMillis));
         } else {
             landed.remove(Feature.HIT_INDICATOR);
         }
@@ -177,11 +173,6 @@ public final class AshClient implements ClientModInitializer {
         } catch (IOException unwritable) {
             LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
         }
-    }
-
-    /** A clock that only goes forward, unlike the wall clock a player can change mid-session. */
-    private static long clockMillis() {
-        return System.nanoTime() / 1_000_000L;
     }
 
     private static String clientVersion() {

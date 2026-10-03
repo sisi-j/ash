@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ashlauncher.client.hud.FakeHudSurface;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -66,7 +68,7 @@ class HitIndicatorTest {
         indicator.confirmed();
         FakeHudSurface surface = draw();
 
-        java.util.Set<Long> seen = new java.util.HashSet<>();
+        Set<Long> seen = new HashSet<>();
         for (FakeHudSurface.Fill fill : surface.fills()) {
             for (int x = fill.x(); x < fill.x() + fill.width(); x++) {
                 for (int y = fill.y(); y < fill.y() + fill.height(); y++) {

@@ -32,6 +32,15 @@ public final class HitHook {
     }
 
     /**
+     * Milliseconds on a clock that only goes forward, for timing marks and
+     * matching attacks - not the wall clock, which a player can change
+     * mid-session.
+     */
+    public static long clockMillis() {
+        return System.nanoTime() / 1_000_000L;
+    }
+
+    /**
      * 1.21.11: the server's damage event, which names its cause. The player's
      * when they caused it to something other than themselves.
      *

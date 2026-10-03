@@ -119,9 +119,7 @@ public final class AshClient implements ClientModInitializer {
         boolean hitIndicatorLanded = MixinFeature.landed(() -> ClientPacketListener.class, HIT_INDICATOR_MIXIN,
                 why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_INDICATOR.displayName(), why)));
         if (hitIndicatorLanded) {
-            hitIndicator = new HitIndicator(() -> settings.get(Settings.HIT_INDICATOR),
-                    () -> settings.get(Settings.HIT_INDICATOR_COLOUR), () -> settings.get(Settings.HIT_INDICATOR_DURATION),
-                    () -> System.nanoTime() / 1_000_000L);
+            hitIndicator = HitIndicator.from(settings, HitHook::clockMillis);
             HitHook.install(hitIndicator, null);
             // Around the middle pixel of the game's crosshair, which it draws
             // at ((width - 15) / 2, (height - 15) / 2) with its centre on pixel 7.
