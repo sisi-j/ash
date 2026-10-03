@@ -120,6 +120,14 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             crosshairOptionsWork(context);
             crosshairWorks(context);
             hitIndicatorWorks(context, server);
+
+            // THROWAWAY spike for research 0007.
+            context.setScreen(SpikeScreen::new);
+            context.waitTicks(20);
+            context.takeScreenshot("spike-panel");
+            System.out.println("ash spike: " + SpikeScreen.lastSize + ", Java 2D " + SpikeScreen.lastRenderNanos / 1e6
+                    + " ms, upload " + SpikeScreen.lastUploadNanos / 1e6 + " ms");
+            context.setScreen(() -> null);
         }
     }
 

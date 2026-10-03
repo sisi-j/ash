@@ -131,6 +131,20 @@ public final class AshSmokeTest implements ClientModInitializer {
         crosshairWorks(client);
         hitIndicatorWorks(client);
 
+        // THROWAWAY spike for research 0007.
+        onClient(client, () -> {
+            client.setScreen(new SpikeScreen());
+            return null;
+        });
+        pause(1500L);
+        screenshot(client, "spike-panel.png");
+        System.out.println("ash spike: " + SpikeScreen.lastSize + ", blur loaded " + SpikeScreen.blurLoaded + ", Java 2D "
+                + SpikeScreen.lastRenderNanos / 1e6 + " ms, upload " + SpikeScreen.lastUploadNanos / 1e6 + " ms");
+        onClient(client, () -> {
+            client.setScreen(null);
+            return null;
+        });
+
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
                 + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
