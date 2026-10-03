@@ -31,7 +31,6 @@ import java.util.function.Supplier;
 public final class Panel {
 
     private static final int TOP_BAR_HEIGHT = 22;
-    private static final int CATEGORY_COLUMN_WIDTH = 72;
     private static final int PAD = 8;
     private static final int GAP = 6;
     private static final int SWITCH_WIDTH = 18;
@@ -47,6 +46,8 @@ public final class Panel {
     private int height = 240;
     /** The font's line height, as last drawn: every height below is built from it. */
     private int lineHeight = 9;
+    /** As wide as the widest category's name and count need, in the font as last drawn. */
+    private int categoryColumnWidth = 78;
     /** The chosen category, or {@code null} for all of them. */
     private Category category;
     private String query = "";
@@ -199,6 +200,20 @@ public final class Panel {
         return new Rect((width - w) / 2, (height - h) / 2, w, h);
     }
 
+    /**
+     * The category column, measured: the widest name and the widest count,
+     * five units inside each end of the row, six between them, and four
+     * either side of the row - so no name ever runs into its count.
+     */
+    private int measureCategoryColumn(ScreenSurface surface) {
+        int widestName = surface.textWidth("All");
+        for (Category each : categories()) {
+            widestName = Math.max(widestName, surface.textWidth(each.displayName()));
+        }
+        int widestCount = surface.textWidth(String.valueOf(count(null)));
+        return widestName + widestCount + 5 + 6 + 5 + 8;
+    }
+
     private int footerHeight() {
         return lineHeight + 5;
     }
@@ -218,7 +233,7 @@ public final class Panel {
         Rect panel = panel();
         int index = which == null ? 0 : categories().indexOf(which) + 1;
         int h = lineHeight + 4;
-        return new Rect(panel.x + 4, panel.y + TOP_BAR_HEIGHT + 6 + index * (h + 2), CATEGORY_COLUMN_WIDTH - 8, h);
+        return new Rect(panel.x + 4, panel.y + TOP_BAR_HEIGHT + 6 + index * (h + 2), categoryColumnWidth - 8, h);
     }
 
     /** Where the cards go: the body, less room for the notice when there is one. */
@@ -226,7 +241,7 @@ public final class Panel {
         Rect panel = panel();
         int top = panel.y + TOP_BAR_HEIGHT + PAD;
         int bottom = panel.y + panel.height - footerHeight() - PAD - noticeHeight();
-        return new Rect(panel.x + CATEGORY_COLUMN_WIDTH + PAD, top, panel.width - CATEGORY_COLUMN_WIDTH - 2 * PAD,
+        return new Rect(panel.x + categoryColumnWidth + PAD, top, panel.width - categoryColumnWidth - 2 * PAD,
                 bottom - top);
     }
 
@@ -292,6 +307,7 @@ public final class Panel {
     /** Draws the panel; the mouse position, in GUI units, decides what is highlighted. */
     public void render(ScreenSurface surface, int mouseX, int mouseY) {
         lineHeight = surface.lineHeight();
+        categoryColumnWidth = measureCategoryColumn(surface);
         scroll = Math.min(scroll, maxScroll());
         surface.fill(0, 0, width, height, Palette.DIM);
         Rect panel = panel();
@@ -347,7 +363,7 @@ public final class Panel {
             surface.drawText(count, at.x + at.width - 5 - surface.textWidth(count), at.y + 2, Palette.MUTED);
         }
         int top = panel.y + TOP_BAR_HEIGHT + 1;
-        surface.fill(panel.x + CATEGORY_COLUMN_WIDTH, top, 1, panel.height - TOP_BAR_HEIGHT - footerHeight() - 1,
+        surface.fill(panel.x + categoryColumnWidth, top, 1, panel.height - TOP_BAR_HEIGHT - footerHeight() - 1,
                 Palette.LINE);
     }
 

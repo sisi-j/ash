@@ -138,6 +138,33 @@ class PanelTest {
     }
 
     @Test
+    void no_category_s_name_runs_into_its_count() {
+        // The game's own font drew "Movement1" in the first real-game
+        // screenshot: the column was sized by guess, not by the font.
+        Panel panel = panel(Settings.load(configDir));
+        FakeScreenSurface surface = render(panel);
+
+        for (String category : new String[] {"All", "PvP", "HUD", "Movement"}) {
+            Rect row = panel.categoryAt(category);
+            FakeScreenSurface.Text name = null;
+            FakeScreenSurface.Text count = null;
+            for (FakeScreenSurface.Text text : surface.texts) {
+                if (row.contains(text.x(), text.y())) {
+                    if (name == null) {
+                        name = text;
+                    } else {
+                        count = text;
+                    }
+                }
+            }
+            assertTrue(name != null && count != null, category + " is not drawn as a name and a count");
+            int space = count.x() - (name.x() + surface.textWidth(name.text()));
+            assertTrue(space >= 4, category + "'s name and count are " + space + " apart");
+            assertTrue(count.x() + surface.textWidth(count.text()) <= row.x + row.width, category + "'s count overflows");
+        }
+    }
+
+    @Test
     void a_switch_is_drawn_as_what_it_is_knob_right_when_on_and_left_when_off() {
         Settings settings = Settings.load(configDir);
         Panel panel = panel(settings);

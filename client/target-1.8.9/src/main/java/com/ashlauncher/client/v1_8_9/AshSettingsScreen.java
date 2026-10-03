@@ -29,7 +29,7 @@ public final class AshSettingsScreen extends Screen {
 
     AshSettingsScreen(SettingsScreen settingsScreen, KeyBinding key) {
         this.key = key;
-        this.panel = new Panel(settingsScreen, () -> GameOptions.getFormattedNameForKeyCode(key.getCode()),
+        this.panel = new Panel(settingsScreen, () -> KeyNames.readable(GameOptions.getFormattedNameForKeyCode(key.getCode())),
                 () -> client.setScreen(null));
     }
 
