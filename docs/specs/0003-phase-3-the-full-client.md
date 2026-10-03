@@ -36,7 +36,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 - A player can opt an instance in to loading **third-party mods** they supply themselves, so that Sodium is one file away.
 - On 1.8.9, ash ships optimisations of its own. Each is chosen by measuring where the frame time goes on real hardware, and each ships only with a before and after from that measurement.
 
-**A launcher that looks like ash.** The three typefaces are bundled, and a design pass brings the launcher to the brief's grayscale identity.
+**A launcher that looks like ash.** ~~The three typefaces are bundled, and a design pass brings the launcher to the brief's grayscale identity.~~ The launcher and the in-game panel share one final design, approved on 2026-10-03: Inter throughout, translucent dark surfaces, and a launcher laid out like Dawn's home screen (see *The launcher's look*).
 
 ## User Stories
 
@@ -132,11 +132,11 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 
 ### The launcher's look
 
-56. As a player, I want the launcher in its own typefaces, so that it looks like one product rather than a system dialog.
-57. As a player, I want numbers such as versions, memory and progress in a monospaced face, so that they read as instruments and line up.
+56. As a player, I want the launcher in its own ~~typefaces~~ typeface, the same one as in game, so that it looks like one product rather than a system dialog.
+57. ~~As a player, I want numbers such as versions, memory and progress in a monospaced face, so that they read as instruments and line up.~~ As a player, I want numbers that change, such as progress and memory, to line up and not jitter, so that they read cleanly. (*Amended 2026-10-03: one face, with tabular figures.*)
 58. As a player, I want the launcher to work with no network, and still look right, so that its look never depends on a download.
-59. As a player, I want a layout I can read at a glance: my instances down the side, the selected one's details and Play in the middle, my account at the top, so that I am one click from playing.
-60. As a player, I want the launcher to stay grayscale throughout, with weight and contrast doing the work colour usually does, so that it looks like nothing else.
+59. As a player, I want a layout I can read at a glance: ~~my instances down the side, the selected one's details and Play in the middle,~~ a big LAUNCH GAME at the top, my instances clearly marked as the thing to choose, the selected one's servers and details beside them, and my account at the top, so that I am one click from playing. (*Amended 2026-10-03.*)
+60. ~~As a player, I want the launcher to stay grayscale throughout, with weight and contrast doing the work colour usually does, so that it looks like nothing else.~~ As a player, I want colour to mean only one thing each - green on or faster, red off or slower, grey no change - so that I never have to learn what a colour means twice. (*Amended 2026-10-03.*)
 
 ### Building and testing
 
@@ -148,6 +148,20 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 66. As a developer, I want the launcher's screens rendered in a browser against a fake of the launcher's API, so that its look can be checked without building the app.
 67. As a developer, I want that check to fail if a bundled typeface does not load, so that a font silently falling back is caught.
 68. As a developer, I want a repeatable frame-time measurement I can run on a real machine, on both version targets, so that optimisations are compared like for like.
+
+### The final look
+
+*Added 2026-10-03 with the approved design.*
+
+72. As a player, I want ash's in-game settings to look like a modern client's, with smooth text, rounded shapes and the game blurred behind, so that ash looks as good as the clients I compare it with.
+73. As a player, I want every feature shown as a tile I can switch from where I see it, so that turning things on and off is one click.
+74. As a player, I want each tile to say whether the feature raises, lowers or does not change my frame rate, measured rather than guessed, so that I can trust it when I tune for speed.
+75. As a player, I want the panel to open and close smoothly but quickly, so that it feels polished without slowing me down.
+76. As a player, I want a full colour picker, with a hex box and my recent colours, so that I can match any colour I want.
+77. As a player, I want to make ash's interface bigger or smaller, so that it suits my screen.
+78. As a player, I want LAUNCH GAME to show clearly that it was clicked and what it is doing, and to make a sound I can turn off, so that I never click twice wondering whether it worked.
+79. As a player, I want to rejoin a server I play on in one click from the launcher, so that I go from opening ash to playing in as few steps as possible.
+80. As a player, I want my selected instance's ash features, play time and mods at a glance, so that I know what I am about to launch.
 
 ## Implementation Decisions
 
@@ -235,16 +249,59 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 - **Changes apply at once and are saved as they are made.** Nothing waits for the screen to close.
 - ~~**Each target draws the screen with its own vanilla widgets, thinly.** Layout and behaviour are the same on both targets, and the widgets look like each target's own.~~ **ash draws its own interface, the same on both targets.** (*Amended 2026-10-03 by the product owner's decision, after the prototype on branch `prototype/ash-ui`.*)
   - The product owner wants a menu like Lunar's in kind, but simpler and in ash's grayscale. Vanilla widgets would look like each game's own grey buttons, so they are dropped.
-  - **The layout, for now, is the prototype's design A, "Panel":**
-    - a centred window, with the wordmark, a search box, "Edit HUD" and close along the top;
-    - categories down the left, with counts;
-    - a grid of cards, one per feature, each with its switch and an "Options" link;
-    - options opening in place of the grid, with a live preview where one helps, such as the crosshair over sky, snow and night;
-    - a footer saying changes save as they are made, and the key that closes the screen.
-  - **This is a stand-in, not the final look.** The product owner will give an in-depth brief for the final design once there are more settings. So this is built so that the look can change without the behaviour changing.
-  - **Everything is drawn from rectangles and text**, which both targets can draw. Rounded corners are stepped pixels.
-  - **Text is the game's own font for now.** Using ash's own typeface in game means ash rendering its own text on both targets. That waits for the final design, and the drawing surface keeps text behind one method so the face can change later.
-  - **The shared module draws it and decides everything.** It draws through a screen surface: fill a rectangle, draw text, measure text. It takes input passed through from the target: mouse press, drag, release and scroll, keys mapped to ash's own names, and typed characters. Every widget, from the switch and the slider to the colour picker and the HUD editor, is ash's own and tested in the shared module against a fake surface with simulated input.
+  - ~~**The layout, for now, is the prototype's design A, "Panel"**, a stand-in drawn from rectangles and text in the game's own font, with stepped rounded corners.~~ Superseded by the final design below. Design A shipped with #55 and #34 and stays until the final design replaces it.
+  - **The final design** (*settled 2026-10-03 by the product owner's brief and three rounds on an interactive mockup: branch `prototype/final-design`, https://claude.ai/artifact/J3nd5iXkeJtMsU1Nnt2ZJe, version 3*):
+    - **Frame.**
+      - The panel covers 85% of the screen, centred with equal margins, and has rounded corners and a soft shadow.
+      - Everything behind it, the margins included, is the game, blurred.
+      - The panel is 55% black over that blur.
+    - **Left strip.** A strip joined to the panel by a thin divider, darker than the panel (about 79% black).
+      - At the top: SETTINGS in large, upright capitals stacked closely one under another.
+      - At the bottom: two square buttons, each as wide as the strip allows with equal margins either side. Edit HUD sits above a gear.
+      - **Edit HUD** is dimmed until the HUD editor (#41) exists; pressing it gives a short shake and "coming soon".
+      - **The gear** opens ash's own settings: the open key, interface size (80–130%), animations on or off, and background blur on or off.
+    - **The tiles (the panel opens here).**
+      - A search box and category tabs (All, then a tab per category) run across the top.
+      - Below them, one tile per feature, five to a row at 1920×1080, scrolling when there are more.
+    - **A tile**, top to bottom: the feature's name; its icon; its FPS mark; and a gear beside an ENABLED or DISABLED button.
+      - Clicking the tile's body or its gear opens its options. Only the button switches the feature.
+      - **The FPS mark**, with "FPS" written under it:
+        - a green rounded triangle pointing up if the feature raises the frame rate;
+        - a red one pointing down if it lowers it;
+        - a grey horizontal line if the difference is within ±3%.
+      - It is measured, never guessed: each feature is run on and off through the frame-time measurement, and the result is recorded with the feature. Every feature so far measures grey.
+      - **A feature that did not load** is a dimmed tile whose grey button reads UNAVAILABLE. Clicking it shakes the tile and gives a one-line reason, worded as the launcher's notice is.
+      - **A feature with no options yet** keeps its gear, which opens a page saying so.
+    - **Options pages** replace the tiles with a fade; the strip stays.
+      - At the top: back, the feature's icon and name, and its ENABLED button.
+      - The options are rounded rows. A live preview sits on the right where one helps: the crosshair over sky, snow and night, or the hit indicator with a "Test a hit" button.
+      - "Reset to defaults" puts the switch and every option back.
+    - **The colour picker** folds open from the colour's chip. It has:
+      - a saturation and brightness square;
+      - a hue bar and an opacity bar;
+      - a hex box;
+      - preset swatches and recent colours.
+    - **Colours.**
+      - Text is white, icons are white at 80%, and every highlight is white: slider fills, the selected tab, focus, the picker's markers.
+      - Green means enabled or faster, red means disabled or slower, and grey (#A7ADA6) means no change or unavailable. They are bright, as other clients' are.
+      - Tiles are a faint white fill (about 6%) that brightens on hover.
+    - **Type and icons.**
+      - Inter everywhere, in game and in the launcher. Exceptions are rare.
+      - Icons are one outline set with rounded strokes.
+    - **Motion.**
+      - **Opening:** the blur and the panel fade in together while the panel rises from slightly below and slows to a stop, in about 350 ms. The tiles then rise and fade in, one just after another.
+      - **Closing:** the reverse, in about half the time.
+      - **Pages** cross-fade.
+      - **Switches** move fast and then ease out.
+      - **A short shake** marks only a refused action: an unavailable feature, freelook on a server that bans it, or an invalid colour code. It shakes the thing refused, never the whole screen.
+      - Animations can be switched off in ash's settings.
+    - **Size** follows the screen, so the panel keeps its proportions at 1080p and 1440p. Interface size in ash's settings scales it further.
+  - **How it is drawn.** Rectangles of solid colour in GUI units, stepped corners and the game's bitmap font cannot look like this, so the drawing changes. Exactly how, on each target, is unverified item 9 in *Further Notes*.
+    - ash draws the panel at the screen's real resolution, not in the game's scaled GUI units.
+    - Text is ash's own: Inter, at any size.
+    - Rounded shapes are anti-aliased.
+    - The game behind the panel is blurred on both targets.
+  - **The shared module draws it and decides everything.** It draws through a screen surface. That surface grows from "fill a rectangle, draw text, measure text" to also cover rounded rectangles, text in a given size and weight, icons, clipping, and drawing a group at an opacity, all at real resolution. It takes input passed through from the target: mouse press, drag, release and scroll, keys mapped to ash's own names, and typed characters. Every widget, from the switch and the slider to the colour picker and the HUD editor, is ash's own and tested in the shared module against a fake surface with simulated input.
   - **Each target supplies only a thin screen.** That screen forwards the game's input, implements the surface, and closes on its key.
 - **The screen opens on a key binding, Right Shift by default**, registered like toggle sprint's and rebindable in Controls. A button on the title or pause screen is out of scope. The launcher names the key once, where a new player will see it.
   - Right Shift is unbound by default on both targets.
@@ -306,18 +363,41 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 
 ### The launcher's look
 
-- **Sora 500, Inter 400 and 500, and JetBrains Mono 500 are bundled** as local font files, allowed by the app's content security policy, with their licences shipped alongside. No font is ever fetched at runtime.
-  - *Settled 2026-09-30 by `docs/research/0006`:* all three are under the SIL Open Font Licence 1.1, and none declares a Reserved Font Name.
-  - The official woff2 files ship unmodified, about 380 KB in all. Subsetting is allowed but would make a modified version, and it saves too little to be worth that.
-  - Sora publishes no static Medium, so its official variable font supplies the 500 weight. Sora has no releases, so it is pinned by commit.
-  - JetBrains Mono is taken from its v2.304 release, not from its repository head, which is ahead of the release.
-- **The brief's layout:**
-  - the instance switcher down the left;
-  - the selected instance's details (version target, loader, last played) and Play in the centre;
-  - the account switcher and settings in a top bar.
-
-  The news panel is Phase 5.
-- **Grayscale only**, from the brief's four values. Contrast and weight carry the hierarchy. Numeric readouts are JetBrains Mono.
+- ~~**Sora 500, Inter 400 and 500, and JetBrains Mono 500 are bundled**~~ **Inter alone is bundled** (*amended 2026-10-03: the product owner wants one face everywhere, in game and in the launcher*). It is bundled as local font files in the weights the design uses, allowed by the app's content security policy, with its licence shipped alongside. No font is ever fetched at runtime.
+  - *Settled 2026-09-30 by `docs/research/0006`:* Inter is under the SIL Open Font Licence 1.1 and declares no Reserved Font Name.
+  - The official woff2 files ship unmodified. Subsetting is allowed but would make a modified version.
+  - ~~Sora's variable font and JetBrains Mono's v2.304 release~~ are no longer needed.
+- ~~**The brief's layout:** the instance switcher down the left; the selected instance's details and Play in the centre; the account switcher and settings in a top bar.~~
+- **The final layout** (*settled 2026-10-03, with the in-game design: the same mockup, version 3*), drawn from Dawn's home screen:
+  - **Its own title bar**, replacing the Windows one:
+    - the "ash" wordmark on the left, where a logo joins it later;
+    - the account's name and face on the right, opening a menu to switch account, add one or sign out;
+    - then minimise, maximise and close.
+    - The bar drags the window.
+  - **An icon-only sidebar**: Play, Mods and News at the top, Settings at the bottom. Each name shows on hover, and the current page is highlighted.
+  - **Play**:
+    - **Greeting:** "Welcome back," with the account's face and name.
+    - **The LAUNCH area** runs the full width, over a pixel scene ash draws itself.
+      - The scene follows the local time of day (day, sunset, night) and drifts slowly.
+      - A green **LAUNCH GAME** button sits in the middle, with the selected instance under it.
+      - **When clicked:**
+        - the button presses in and a ripple spreads from the click;
+        - the scene brightens and slowly zooms, with a light sweeping across;
+        - the button fills through named steps (checking files, downloading with a percentage, starting) and ends on a green tick and PLAYING;
+        - a short sound plays on the click, and a quieter one when the game starts, unless launch sounds are off in Settings.
+    - **Below it, left to right:**
+      - **Recent servers** for the selected instance, read from its own server list, each with its status and player count. **Join** launches the instance straight into that server. A server that is offline cannot be joined.
+      - **This instance**: the ash features that are on, play time, the last session, the mods, and a shortcut to the instance's page.
+      - **Instances**:
+        - Each instance is a row with its version, name, "ash client" or "vanilla", and when it was last played.
+        - The selected row is highlighted translucent white, and its cog opens the instance's own page.
+        - A small New button sits at the top.
+        - The card has a soft white glow and a brighter surface than its neighbours, because choosing what to play is the page's main job.
+  - **The instance's own page**: name, memory, window size, Java, open folder, and delete, which asks for confirmation on the page itself.
+  - **Mods**: the selected instance's third-party mods (see *Third-party mods*).
+  - **News**: "coming soon" until the news panel in Phase 5.
+  - **Settings**: default memory, what the launcher does when the game starts, launch sounds, and language.
+- ~~**Grayscale only**, from the brief's four values.~~ **The in-game palette** (*amended 2026-10-03*): near-black with a faint soft glow, translucent white surfaces, white text, and green, red and grey for their meanings. Numbers use Inter's tabular figures.
 - **Tone** is the brief's: short, blunt, sentence case.
 
 ## Testing Decisions
@@ -370,7 +450,7 @@ No fixture substitutes for this.
 ## Out of Scope
 
 - The backend, cosmetics, entitlements, synced settings and news. These are Phase 4.
-- macOS, server entries and quick-connect, and the news panel. These are Phase 5.
+- macOS, ~~server entries and quick-connect~~ hand-made server entries, and the news panel. These are Phase 5. (*Amended 2026-10-03: joining a recent server from the launcher, read from the instance's own server list, is in this phase, with the final design.*)
 - Bundling Sodium (ADR-0013). Players add it as a third-party mod.
 - Forge mods, and mods for any loader other than the instance's own.
 - Finding, downloading, vetting or updating third-party mods for the player.
@@ -385,7 +465,7 @@ No fixture substitutes for this.
 
 ## Further Notes
 
-- **~~Seven~~ Eight things are unverified and must not be assumed while ticketing.** (*Item 8 added 2026-09-30.*) Phase 2 had three, and research settled each before its ticket needed it. Settling these is the next step after this spec.
+- **~~Seven~~ ~~Eight~~ Ten things are unverified and must not be assumed while ticketing.** (*Item 8 added 2026-09-30; items 9 and 10 added 2026-10-03 with the final design.*) Phase 2 had three, and research settled each before its ticket needed it. Settling these is the next step after this spec.
   1. ~~**The game-side hooks for each feature on each target.** These are the crosshair and whether the 1.21.11 cooldown indicator goes with it, the packet or event that confirms a hit, the ping in the tab list, the hurt tint, and the camera for freelook. They need a decompiled-source pass like toggle sprint's.~~ *Answered 2026-09-29 in `docs/research/0004-vanilla-hooks-for-phase-3-features.md`, read from this build's mapped jars.* Three findings changed the decisions above:
      - the cooldown indicator is inside the crosshair method, so the crosshair is a mixin on both targets;
      - the hit indicator is exact on 1.21.11 and a match on 1.8.9;
@@ -410,12 +490,29 @@ No fixture substitutes for this.
      - where each target keeps its camera mode.
 
      It needs a pass through the mapped jars like research 0004's, and a check against the listed servers themselves.
+  9. **How each target can draw the final in-game design** (*added 2026-10-03*). This means:
+     - drawing at the screen's real resolution instead of in GUI units;
+     - text in Inter: 1.21.11 may load a TTF through its own font system; 1.8.9 has no TTF support, so ash would render its own glyphs;
+     - anti-aliased rounded shapes;
+     - blurring the game behind the panel: 1.21.11 has a menu blur of its own, while 1.8.9 would need a post-processing shader;
+     - an icon set and its licence;
+     - what each costs in frame time while the panel is open.
+
+     It decides how the screen surface grows. It needs a pass through both mapped jars and a working spike on each target before the drawing layer is ticketed.
+  10. **What the launcher's new Play page needs from the game and the system** (*added 2026-10-03*). This means:
+      - reading an instance's server list (`servers.dat`, NBT) on both targets;
+      - asking a server for its status and player count the way the game's own server list does, so the launcher sends nothing the game would not;
+      - launching straight into a server on each target: 1.21.11's quick-play arguments and 1.8.9's server arguments;
+      - recording play time and the last session from the launcher's own launch and exit;
+      - a frameless window with its own title bar in Tauri on Windows, including dragging and snapping;
+      - the launch sound, and its licence or origin.
 - **Order.**
   - The settings model comes first, because every feature after it declares its options through it.
   - Lithium ~~is early, because it is small and changes the environment every later test runs in~~ follows the frame-time measurement, since it ships only on a measured gain.
   - The features can then proceed in parallel.
   - The 1.8.9 optimisations start with the measurement and nothing else.
   - The launcher's look is independent of everything else and can go at any time.
+  - The final design is built in game and in the launcher together, as the product owner chose. In game, item 9's research and the drawing layer come before the panel; the features already built move onto it unchanged, because the panel is built from the same settings declaration.
 - **This phase is bigger than Phase 2.** It has four areas, where Phase 2 had one. If it needs splitting, the launcher's look and the 1.8.9 optimisations split off cleanly, since neither blocks nor is blocked by the features.
 - ~~**Freelook is the likeliest feature to be cut, and cutting it is a success.**~~ **Freelook is the feature most likely to cost a player a ban**, which is why its block list is sourced and tested, and why missing a server is the accepted risk named in ADR-0006. ADR-0006 exists so that ash never ships the feature that gets it banned; for freelook it now does that server by server.
 - **Windows-only runtime failures still have no CI signal** (ADR-0016). Manual acceptance remains the only gate on them, and the settings screen and the third-party mod path are new places for them to hide.
