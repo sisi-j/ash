@@ -83,7 +83,7 @@ button { cursor: pointer; }
 
 /* left strip */
 .strip { width: 5.2cqw; flex: none; background: rgba(0, 0, 0, var(--strip-alpha)); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 1.3cqw 0 0.75cqw; }
-.letters { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding-bottom: 1.8cqw; font-weight: 800; font-size: calc(var(--ui) * 2.2cqw); line-height: 1; color: var(--ink); }
+.letters { width: 100%; display: flex; flex-direction: column; justify-content: flex-start; gap: 0.5cqw; align-items: center; font-weight: 800; font-size: calc(var(--ui) * 2.2cqw); line-height: 1; color: var(--ink); }
 .strip .tools { margin-top: auto; display: flex; flex-direction: column; gap: 0.6cqw; width: 100%; padding: 0 0.75cqw; }
 .sq { width: 100%; aspect-ratio: 1; border: 0; border-radius: 0.65cqw; background: var(--fill); color: var(--icon); display: grid; place-items: center; transition: background 160ms ease-out, transform 160ms ease-out; }
 .sq:hover { background: var(--fill-2); }
@@ -291,6 +291,20 @@ button { cursor: pointer; }
 .irow .gear { margin-left: auto; width: 2cqw; height: 2cqw; opacity: 0; transition: opacity 160ms ease-out, background 160ms ease-out; }
 .irow .gear svg { width: 1.1cqw; height: 1.1cqw; }
 .irow:hover .gear, .irow[aria-selected="true"] .gear { opacity: 1; }
+
+.card.primary { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.3); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 1.8cqw rgba(255, 255, 255, 0.09); }
+
+/* LAUNCH feedback */
+.launch:active { transform: translate(-50%, -50%) scale(0.96); }
+.ripple { position: absolute; width: 4cqw; height: 4cqw; margin: -2cqw 0 0 -2cqw; border-radius: 50%; background: rgba(255, 255, 255, 0.55); pointer-events: none; animation: ripple 650ms ease-out forwards; }
+@keyframes ripple { from { transform: scale(0); opacity: 0.8; } to { transform: scale(9); opacity: 0; } }
+.hero canvas { transition: transform 5s var(--ease-out), filter 900ms ease-out; }
+.hero.launching canvas { transform: scale(1.07); filter: brightness(1.18) saturate(1.1); }
+.hero .sweep { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%); transform: translateX(-100%); }
+.hero.launching .sweep { animation: sweep 1.3s ease-out; }
+@keyframes sweep { to { transform: translateX(100%); } }
+.launch .tick { display: inline-block; width: 1.4cqw; height: 1.4cqw; vertical-align: -0.2cqw; margin-right: 0.4cqw; }
+.launch.done { background: linear-gradient(#2fc96a, #179c49); }
 
 /* other launcher pages */
 .lform { display: flex; flex-direction: column; gap: 0.4cqw; overflow-y: auto; }
@@ -883,7 +897,7 @@ button { cursor: pointer; }
     rows: ["hhhhhhhh", "hhhhhhhh", "hkkkkkkh", "hkkkkkkh", "hweknewh", "hkknnkkk", "kkkmmkkk", "kkdddddk"] });
   const ASH_ON = ["Crosshair", "Hit indicator", "FPS readout", "Toggle sprint"];
   const L = {
-    page: "play", sel: 0, menu: false, launching: false, tod: "auto", after: "minimise", defMem: 4, confirmDelete: false,
+    page: "play", sel: 0, menu: false, launching: false, tod: "auto", sound: true, after: "minimise", defMem: 4, confirmDelete: false,
     instances: [
       { name: "1.21.11", kind: "ash client", version: "1.21.11", ago: "2 hours ago", badge: "1.21", mem: 4, ash: true,
         play: "14 h 20 m", session: "48 min", mods: ["Sodium"],
@@ -956,7 +970,7 @@ button { cursor: pointer; }
       <button class="pill" data-icog="${L.sel}">${icon("gear")}Instance settings</button></div>`;
   }
   function instancesCard() {
-    return `<div class="card glass"><h3>Instances <button class="mini" data-new>${icon("plus")}New</button></h3>
+    return `<div class="card glass primary"><h3>Instances <button class="mini" data-new>${icon("plus")}New</button></h3>
       <div class="ilist" role="listbox" aria-label="Instances">${L.instances.map((i, n) => `<div class="irow" role="option" aria-selected="${n === L.sel}" data-inst="${n}">
         <div class="vbadge">${i.badge}</div><div class="t"><b>${i.name}</b><small>${i.kind} · ${i.ago}</small></div>
         <button class="gear" data-icog="${n}" aria-label="${i.name} settings">${icon("gear")}</button></div>`).join("")}</div></div>`;
@@ -968,7 +982,7 @@ button { cursor: pointer; }
       return `${welcome}<div class="emptystate">${icon("blocks")}<b>No instances yet</b><span>Create one to choose a version and play.</span><button class="pill" data-new>${icon("plus")}New instance</button></div>`;
     }
     return `${welcome}
-      <div class="hero"><canvas id="heroc" width="324" height="62"></canvas>
+      <div class="hero" id="hero"><canvas id="heroc" width="324" height="62"></canvas><div class="sweep"></div>
         <button class="launch" id="launch"><div class="bar" id="lbar"></div><span id="ltext">LAUNCH GAME</span><small id="lsub">${sel.name} · ${sel.kind}</small></button></div>
       <div class="below">${serversCard(sel)}${glanceCard(sel)}${instancesCard()}</div>`;
   }
@@ -1002,6 +1016,7 @@ button { cursor: pointer; }
       <div class="lform">
         <div class="opt"><span class="lbl">Default memory</span>${sliderHtml("defmem", L.defMem, 2, 16, " GB")}</div>
         <div class="opt"><span class="lbl">When the game starts</span><div class="chips">${[["open", "Keep ash open"], ["minimise", "Minimise ash"], ["close", "Close ash"]].map(([id, l]) => `<button class="chip" data-after="${id}" aria-pressed="${L.after === id}">${l}</button>`).join("")}</div></div>
+        <div class="opt"><span class="lbl">Launch sounds</span>${switchHtml("sound", L.sound)}</div>
         <div class="opt"><span class="lbl">Language</span><div class="chips"><button class="chip" aria-pressed="true">English</button></div></div>
       </div>`;
   }
@@ -1033,29 +1048,71 @@ button { cursor: pointer; }
     swapCard("#servers-card", serversCard(i));
     swapCard("#glance-card", glanceCard(i));
   }
-  function launch(subtitle) {
+  // ---- sound (synthesised here; the launcher would ship a real sound file) ----
+  let actx;
+  function sound(kind) {
+    if (!L.sound) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const now = actx.currentTime, out = actx.createGain();
+      out.gain.value = kind === "start" ? 0.12 : 0.2;
+      out.connect(actx.destination);
+      if (kind === "click") {
+        const len = 0.35, buf = actx.createBuffer(1, Math.floor(actx.sampleRate * len), actx.sampleRate), d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+        const src = actx.createBufferSource(), f = actx.createBiquadFilter();
+        src.buffer = buf; f.type = "bandpass"; f.Q.value = 0.9;
+        f.frequency.setValueAtTime(500, now); f.frequency.exponentialRampToValueAtTime(3200, now + len);
+        const g = actx.createGain(); g.gain.value = 0.7;
+        src.connect(f).connect(g).connect(out); src.start(now);
+      }
+      [[660, 0.05], [990, 0.13]].forEach(([hz, at]) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = "sine"; o.frequency.value = kind === "start" ? hz * 1.5 : hz;
+        g.gain.setValueAtTime(0, now + at); g.gain.linearRampToValueAtTime(0.5, now + at + 0.015); g.gain.exponentialRampToValueAtTime(0.001, now + at + 0.6);
+        o.connect(g).connect(out); o.start(now + at); o.stop(now + at + 0.65);
+      });
+    } catch (ignored) { /* no audio here: the visual feedback still runs */ }
+  }
+  function launch(subtitle, ev) {
     if (L.launching) return;
     L.launching = true;
+    const btn = $("#launch"), hero = $("#hero");
+    if (ev && btn) {
+      const r = btn.getBoundingClientRect(), rip = document.createElement("span");
+      rip.className = "ripple";
+      rip.style.left = (ev.clientX ? ev.clientX - r.left : r.width / 2) + "px";
+      rip.style.top = (ev.clientY ? ev.clientY - r.top : r.height / 2) + "px";
+      btn.appendChild(rip); setTimeout(() => rip.remove(), 700);
+    }
+    sound("click");
+    hero.classList.remove("launching"); void hero.offsetWidth; hero.classList.add("launching");
+    const steps = [["CHECKING FILES", 0, 30], ["DOWNLOADING", 30, 82], ["STARTING", 82, 100]];
     let p = 0;
-    $("#ltext").textContent = "PREPARING";
-    const step = () => {
+    const tick = () => {
       if (!$("#lbar")) { L.launching = false; return; }
-      p = Math.min(100, p + 4 + Math.random() * 9);
+      p = Math.min(100, p + 2 + Math.random() * 5);
+      const label = (steps.find(([, from, to]) => p >= from && p <= to) || steps[2])[0];
+      $("#ltext").textContent = label;
       $("#lbar").style.width = p + "%";
-      $("#lsub").textContent = p < 100 ? `Checking game files · ${Math.round(p)}%` : subtitle || "Starting Minecraft";
-      if (p < 100) setTimeout(step, 140);
-      else setTimeout(() => {
+      $("#lsub").textContent = label === "DOWNLOADING" ? `Game files · ${Math.round(p)}%` : label === "STARTING" ? (subtitle || "Starting Minecraft") : `${Math.round(p)}%`;
+      if (p < 100) { setTimeout(tick, 120); return; }
+      setTimeout(() => {
         if (!$("#ltext")) { L.launching = false; return; }
-        $("#ltext").textContent = "PLAYING";
+        sound("start");
+        $("#launch").classList.add("done");
+        $("#ltext").innerHTML = `<svg class="ico tick" viewBox="0 0 24 24" style="stroke-width:3">${P.check}</svg>PLAYING`;
+        $("#lsub").textContent = subtitle ? subtitle.replace("Joining", "On") : `${L.instances[L.sel].name} is running`;
         setTimeout(() => {
           L.launching = false;
           if (!$("#ltext")) return;
           const i = L.instances[L.sel];
+          $("#launch").classList.remove("done"); $("#hero").classList.remove("launching");
           $("#ltext").textContent = "LAUNCH GAME"; $("#lsub").textContent = `${i.name} · ${i.kind}`; $("#lbar").style.width = "0";
-        }, 1800);
-      }, 500);
+        }, 2400);
+      }, 400);
     };
-    step();
+    tick();
   }
   lroot.addEventListener("click", (e) => {
     const cog = e.target.closest("[data-icog]");
@@ -1063,7 +1120,7 @@ button { cursor: pointer; }
     const row = e.target.closest("[data-inst]");
     if (row && !L.launching) { if (+row.dataset.inst !== L.sel) selectInstance(+row.dataset.inst); return; }
     const join = e.target.closest("[data-join]");
-    if (join) { const s = L.instances[L.sel].servers[+join.dataset.join]; launch(`Joining ${s.addr}`); return; }
+    if (join) { const s = L.instances[L.sel].servers[+join.dataset.join]; launch(`Joining ${s.addr}`, e); return; }
     if (e.target.closest("[data-lback]")) { lgo("play"); return; }
     const del = e.target.closest("[data-del]");
     if (del) {
@@ -1075,8 +1132,8 @@ button { cursor: pointer; }
     const after = e.target.closest("[data-after]");
     if (after) { L.after = after.dataset.after; lroot.querySelectorAll("[data-after]").forEach((b) => b.setAttribute("aria-pressed", b === after)); return; }
     const sw = e.target.closest("[data-switch]");
-    if (sw) { sw.setAttribute("aria-checked", sw.getAttribute("aria-checked") !== "true"); return; }
-    if (e.target.closest("#launch")) launch();
+    if (sw) { const on = sw.getAttribute("aria-checked") !== "true"; sw.setAttribute("aria-checked", on); if (sw.dataset.switch === "sound") L.sound = on; return; }
+    if (e.target.closest("#launch")) launch(null, e);
   });
 
   // ---------- the LAUNCH area's pixel scene ----------
