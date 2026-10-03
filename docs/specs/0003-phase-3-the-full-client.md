@@ -490,7 +490,7 @@ No fixture substitutes for this.
      - where each target keeps its camera mode.
 
      It needs a pass through the mapped jars like research 0004's, and a check against the listed servers themselves.
-  9. **How each target can draw the final in-game design** (*added 2026-10-03*). This means:
+  9. ~~**How each target can draw the final in-game design**~~ *Answered 2026-10-03 in `docs/research/0007-drawing-the-final-in-game-design.md`, with a spike in both real games:* text, shapes and icons are rasterised by Java 2D in the shared module and drawn 1:1 at real resolution over each game's own blur, from cached pieces the GPU moves. (*Item added 2026-10-03.*) What it covered: This means:
      - drawing at the screen's real resolution instead of in GUI units;
      - text in Inter: 1.21.11 may load a TTF through its own font system; 1.8.9 has no TTF support, so ash would render its own glyphs;
      - anti-aliased rounded shapes;
@@ -499,7 +499,7 @@ No fixture substitutes for this.
      - what each costs in frame time while the panel is open.
 
      It decides how the screen surface grows. It needs a pass through both mapped jars and a working spike on each target before the drawing layer is ticketed.
-  10. **What the launcher's new Play page needs from the game and the system** (*added 2026-10-03*). This means:
+  10. ~~**What the launcher's new Play page needs from the game and the system**~~ *Answered 2026-10-03 in `docs/research/0008-what-the-launchers-play-page-needs.md`.* All of it is feasible; one finding needs a product decision: the server list records no recency, so "Recent servers" needs a source. (*Item added 2026-10-03.*) What it covered: This means:
       - reading an instance's server list (`servers.dat`, NBT) on both targets;
       - asking a server for its status and player count the way the game's own server list does, so the launcher sends nothing the game would not;
       - launching straight into a server on each target: 1.21.11's quick-play arguments and 1.8.9's server arguments;
