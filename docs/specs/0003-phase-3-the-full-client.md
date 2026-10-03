@@ -300,7 +300,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
     - ash draws the panel at the screen's real resolution, not in the game's scaled GUI units.
     - Text is ash's own: Inter, at any size.
     - Rounded shapes are anti-aliased.
-    - The game behind the panel is blurred on both targets.
+    - The game behind the panel is blurred on both targets. On 1.8.9 the game blurs before it draws the HUD, so ash hides the HUD while the panel is open there, and both targets look the same (*settled 2026-10-03, after `docs/research/0007`*).
   - **The shared module draws it and decides everything.** It draws through a screen surface. That surface grows from "fill a rectangle, draw text, measure text" to also cover rounded rectangles, text in a given size and weight, icons, clipping, and drawing a group at an opacity, all at real resolution. It takes input passed through from the target: mouse press, drag, release and scroll, keys mapped to ash's own names, and typed characters. Every widget, from the switch and the slider to the colour picker and the HUD editor, is ash's own and tested in the shared module against a fake surface with simulated input.
   - **Each target supplies only a thin screen.** That screen forwards the game's input, implements the surface, and closes on its key.
 - **The screen opens on a key binding, Right Shift by default**, registered like toggle sprint's and rebindable in Controls. A button on the title or pause screen is out of scope. The launcher names the key once, where a new player will see it.
@@ -386,7 +386,8 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
         - the button fills through named steps (checking files, downloading with a percentage, starting) and ends on a green tick and PLAYING;
         - a short sound plays on the click, and a quieter one when the game starts, unless launch sounds are off in Settings.
     - **Below it, left to right:**
-      - **Recent servers** for the selected instance, read from its own server list, each with its status and player count. **Join** launches the instance straight into that server. A server that is offline cannot be joined.
+      - **Recent servers** for the selected instance, each with its status and player count, the most recent first. **Join** launches the instance straight into that server. A server that is offline cannot be joined.
+        - *Settled 2026-10-03, after `docs/research/0008`:* the game's server list records no recency, so **ash's client records every server the player joins, with the time**, however they joined. A vanilla instance, or an ash instance that has joined nothing yet, shows its own server list in the player's order.
       - **This instance**: the ash features that are on, play time, the last session, the mods, and a shortcut to the instance's page.
       - **Instances**:
         - Each instance is a row with its version, name, "ash client" or "vanilla", and when it was last played.
