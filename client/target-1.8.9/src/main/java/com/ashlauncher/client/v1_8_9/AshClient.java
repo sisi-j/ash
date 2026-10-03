@@ -4,6 +4,9 @@ import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.fps.FpsReadout;
+import com.ashlauncher.client.hit.HitHook;
+import com.ashlauncher.client.hit.HitIndicator;
+import com.ashlauncher.client.hit.RecentAttacks;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
 import com.ashlauncher.client.report.Feature;
@@ -21,7 +24,10 @@ import net.legacyfabric.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.legacyfabric.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.InGameHud;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.Window;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,11 +58,19 @@ public final class AshClient implements ClientModInitializer {
 
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
+    private static final String HIT_ATTACK_MIXIN =
+            "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerInteractionManagerMixin";
+
+    private static final String HIT_HURT_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.ClientPlayNetworkHandlerMixin";
+
     /**
      * The FPS readout this session draws, so the real-game test can ask it -
      * not the screenshot - whether it draws. Package-private and set once.
      */
     static FpsReadout fpsReadout;
+
+    /** The hit indicator this session draws, if both its mixins landed, for the smoke test to ask. */
+    static HitIndicator hitIndicator;
 
     @Override
     public void onInitializeClient() {
@@ -75,6 +89,10 @@ public final class AshClient implements ClientModInitializer {
             LegacyHudSurface surface = new LegacyHudSurface(minecraft);
             marker.draw(surface);
             fpsReadout.draw(surface);
+            // Around the middle pixel of the game's crosshair, which it draws
+            // at (width / 2 - 7, height / 2 - 7) with its centre on pixel 7.
+            Window window = new Window(minecraft);
+            HitHook.draw(surface, window.getWidth() / 2, window.getHeight() / 2);
         });
 
         // Every feature, less any whose mixin did not land. The settings
@@ -96,6 +114,22 @@ public final class AshClient implements ClientModInitializer {
             CrosshairHook.install(new Crosshair(() -> settings.get(Settings.CROSSHAIR), () -> Cross.of(settings)));
         } else {
             landed.remove(Feature.CROSSHAIR);
+        }
+
+        // The hit indicator. 1.8.9's "this entity was hurt" names no attacker,
+        // so it takes both halves: the player's attack, and the server's
+        // hurt matched to it. Either missing, and it degrades alone.
+        boolean hitAttackLanded = MixinFeature.landed(() -> ClientPlayerInteractionManager.class, HIT_ATTACK_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_INDICATOR.displayName(), why)));
+        boolean hitHurtLanded = MixinFeature.landed(() -> ClientPlayNetworkHandler.class, HIT_HURT_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_INDICATOR.displayName(), why)));
+        if (hitAttackLanded && hitHurtLanded) {
+            hitIndicator = new HitIndicator(() -> settings.get(Settings.HIT_INDICATOR),
+                    () -> settings.get(Settings.HIT_INDICATOR_COLOUR), () -> settings.get(Settings.HIT_INDICATOR_DURATION),
+                    AshClient::clockMillis);
+            HitHook.install(hitIndicator, new RecentAttacks(AshClient::clockMillis));
+        } else {
+            landed.remove(Feature.HIT_INDICATOR);
         }
 
         // R, in the game's own Movement category beside Sprint - free by
@@ -143,6 +177,11 @@ public final class AshClient implements ClientModInitializer {
         } catch (IOException unwritable) {
             LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
         }
+    }
+
+    /** A clock that only goes forward, unlike the wall clock a player can change mid-session. */
+    private static long clockMillis() {
+        return System.nanoTime() / 1_000_000L;
     }
 
     private static String clientVersion() {

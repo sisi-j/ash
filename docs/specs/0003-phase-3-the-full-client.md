@@ -179,6 +179,10 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 - **Hit indicator.** Fires on the server's confirmation that an entity the player attacked was hurt, never on the click. It reads only what the client already receives, and never shows an amount of damage or anyone's health. Showing health is information the game does not give, and it fails ADR-0006. *Settled 2026-09-29 by `docs/research/0004`:*
   - **On 1.21.11 it is exact.** The damage-event packet names the attacker's entity id, so the indicator fires when that id is the local player's. The hook is inside the packet handler at its hand-off to the entity, because the handler runs twice per packet.
   - **On 1.8.9 it is a match.** The hurt status names no attacker, so it is matched by entity id and a short time window to the player's own recent attack. Legacy Fabric API has no attack event, so recording the attack is a mixin too.
+    - *Settled 2026-10-03 by #35:* the window is **1000 ms** from the attack, long enough for a ping of most of a second. Each attack lights at most one mark.
+    - Its limit: if the player's own swing did not land (the entity was still invulnerable from an earlier hit) and someone else's lands on the same entity inside the window, the mark lights for a hit that was not theirs.
+    - On a connection slower than the window, the player sees no mark at all, never a wrong one.
+  - The mark is four short diagonals around the crosshair's centre, clear of its arms. It is solid for the first half of its duration and then fades. The player sets its colour and opacity, and its duration from 100 to 1000 ms in steps of 50.
   - Traps the ticket must avoid, all from the bytecode:
     - on 1.21.11, entity event 2 is not "hurt";
     - the hurt-animation packet goes only to the player who was hurt, about themselves;

@@ -24,6 +24,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.world.phys.EntityHitResult;
 
 /**
  * A real vanilla client, launched, with ash in it.
@@ -82,6 +83,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             "{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
             "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
+            "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             assertReportSays(feature);
@@ -117,6 +119,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             settingsScreenWorks(context);
             crosshairOptionsWork(context);
             crosshairWorks(context);
+            hitIndicatorWorks(context, server);
         }
     }
 
@@ -206,6 +209,62 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         }
 
         switchCrosshair(context, settingsKey, "crosshair.enabled=true");
+    }
+
+    /**
+     * The hit indicator, against the test's own server. Its options are set
+     * on the settings screen first - the longest duration, so the mark is
+     * still up when it is looked for. Then a swing at the empty sky, which
+     * must not mark: a click is not a hit. Then a pig, looked at and hit,
+     * which must: the server's damage event names this player as its cause.
+     */
+    private static void hitIndicatorWorks(ClientGameTestContext context, TestDedicatedServerContext server) {
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickOn(context, "the hit indicator's options link", panel -> panel.optionsLinkOf(Feature.HIT_INDICATOR));
+        clickOn(context, "1000 ms on its slider", panel -> panel.sliderAt(Settings.HIT_INDICATOR_DURATION, 1000));
+        clickOn(context, "the green swatch", panel -> panel.swatchOf(Settings.HIT_INDICATOR_COLOUR, 0x4DFF88));
+        // By eye: the page, with Duration at 1000 ms and green chosen.
+        context.takeScreenshot("ash-hit-indicator-options");
+        assertFileSays("hit-indicator.duration=1000");
+        assertFileSays("hit-indicator.colour=#4DFF88FF");
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+
+        server.runCommand("execute as @a at @s run tp @s ~ ~ ~ ~ -90");
+        context.waitTicks(10);
+        context.getInput().pressKey(options -> options.keyAttack);
+        context.waitTicks(10);
+        if (hitIndicatorShows(context)) {
+            throw new AssertionError("a swing at the empty sky lit the hit indicator");
+        }
+
+        // Level with the player, so the pig is two blocks straight ahead, and
+        // NoAI so it is still there when the swing arrives.
+        server.runCommand("execute as @a at @s rotated ~ 0 run summon minecraft:pig ^ ^ ^2 {NoAI:1b,Tags:[\"ash_target\"]}");
+        server.runCommand("execute as @a at @s run tp @s ~ ~ ~ facing entity @e[tag=ash_target,limit=1] eyes");
+        context.waitTicks(10);
+        if (!context.computeOnClient(client -> client.hitResult instanceof EntityHitResult)) {
+            throw new AssertionError("the pig is not under the crosshair, so the hit below would prove nothing");
+        }
+        context.getInput().pressKey(options -> options.keyAttack);
+        context.waitTicks(4);
+        if (!hitIndicatorShows(context)) {
+            throw new AssertionError("a hit on the pig, confirmed by the server, did not light the hit indicator");
+        }
+        // By eye: four short green diagonals around the crosshair, on the pig.
+        context.takeScreenshot("ash-hit-indicator");
+        server.runCommand("kill @e[tag=ash_target]");
+    }
+
+    /** Whether the hit indicator draws a mark right now, asked of the feature itself. */
+    private static boolean hitIndicatorShows(ClientGameTestContext context) {
+        return context.computeOnClient(client -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.hitIndicator.draw(surface, 0, 0);
+            return surface.fills > 0;
+        });
     }
 
     /** Opens ash's settings, presses one switch, checks the file, and closes them again. */

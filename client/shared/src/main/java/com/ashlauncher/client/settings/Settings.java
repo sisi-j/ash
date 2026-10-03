@@ -90,6 +90,18 @@ public final class Settings {
     public static final OnOff CROSSHAIR_OUTLINE = new OnOff(Feature.CROSSHAIR, "crosshair.outline", "Outline", true,
             "A dark outline around the crosshair, so it shows against snow and sky. true or false.");
 
+    public static final OnOff HIT_INDICATOR = new OnOff(Feature.HIT_INDICATOR, Category.PVP,
+            "A mark at your crosshair when the server confirms your hit landed.", "hit-indicator.enabled", true,
+            "Mark the crosshair when the server confirms one of your hits. Never shows damage or health."
+                    + " true or false.");
+
+    public static final Colour HIT_INDICATOR_COLOUR = new Colour(Feature.HIT_INDICATOR, "hit-indicator.colour",
+            "Colour", 0xFFFF4D4D, "The mark's colour and opacity, as #RRGGBBAA. #FF4D4DFF is opaque red.");
+
+    public static final Whole HIT_INDICATOR_DURATION = new Whole(Feature.HIT_INDICATOR, "hit-indicator.duration",
+            "Duration", 300, 100, 1000, 50, "ms",
+            "How long the mark shows after a hit, in milliseconds: a whole number from 100 to 1000.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
@@ -99,7 +111,8 @@ public final class Settings {
      */
     private static final List<Setting<?>> DECLARED = Collections.unmodifiableList(Arrays.<Setting<?>>asList(
             FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
-            CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE));
+            CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
+            HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;

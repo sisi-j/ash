@@ -146,7 +146,8 @@ class SettingsTest {
     void every_setting_is_declared_once_in_the_order_a_first_run_writes_them() throws IOException {
         assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
                 Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
-                Settings.CROSSHAIR_OUTLINE), Settings.declared());
+                Settings.CROSSHAIR_OUTLINE, Settings.HIT_INDICATOR, Settings.HIT_INDICATOR_COLOUR,
+                Settings.HIT_INDICATOR_DURATION), Settings.declared());
 
         Settings.load(configDir);
 
@@ -171,7 +172,14 @@ class SettingsTest {
                         + "# The crosshair's colour and opacity, as #RRGGBBAA. #FFFFFFFF is opaque white.\n"
                         + "crosshair.colour=#FFFFFFFF\n"
                         + "# A dark outline around the crosshair, so it shows against snow and sky. true or false.\n"
-                        + "crosshair.outline=true\n",
+                        + "crosshair.outline=true\n"
+                        + "# Mark the crosshair when the server confirms one of your hits. Never shows damage or"
+                        + " health. true or false.\n"
+                        + "hit-indicator.enabled=true\n"
+                        + "# The mark's colour and opacity, as #RRGGBBAA. #FF4D4DFF is opaque red.\n"
+                        + "hit-indicator.colour=#FF4D4DFF\n"
+                        + "# How long the mark shows after a hit, in milliseconds: a whole number from 100 to 1000.\n"
+                        + "hit-indicator.duration=300\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

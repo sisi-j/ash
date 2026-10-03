@@ -4,6 +4,8 @@ import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.fps.FpsReadout;
+import com.ashlauncher.client.hit.HitHook;
+import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
 import com.ashlauncher.client.report.Feature;
@@ -24,6 +26,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.KeyboardInput;
 import net.minecraft.resources.Identifier;
 import org.apache.logging.log4j.LogManager;
@@ -51,16 +54,23 @@ public final class AshClient implements ClientModInitializer {
 
     private static final Identifier FPS_READOUT = Identifier.fromNamespaceAndPath("ash", "fps_readout");
 
+    private static final Identifier HIT_INDICATOR = Identifier.fromNamespaceAndPath("ash", "hit_indicator");
+
     /** By name: a mixin class cannot be named by a class literal, because loading one directly is an error. */
     private static final String TOGGLE_SPRINT_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.KeyboardInputMixin";
 
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.GuiCrosshairMixin";
+
+    private static final String HIT_INDICATOR_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.ClientPacketListenerMixin";
 
     /**
      * The FPS readout this session draws, so the real-game test can ask it -
      * not the screenshot - whether it draws. Package-private and set once.
      */
     static FpsReadout fpsReadout;
+
+    /** The hit indicator this session draws, if its mixin landed, for the real-game test to ask. */
+    static HitIndicator hitIndicator;
 
     @Override
     public void onInitializeClient() {
@@ -102,6 +112,24 @@ public final class AshClient implements ClientModInitializer {
             CrosshairHook.install(new Crosshair(() -> settings.get(Settings.CROSSHAIR), () -> Cross.of(settings)));
         } else {
             landed.remove(Feature.CROSSHAIR);
+        }
+
+        // The hit indicator: the server's damage event names who caused it, so
+        // a hit is the player's exactly, with no guessing from their clicks.
+        boolean hitIndicatorLanded = MixinFeature.landed(() -> ClientPacketListener.class, HIT_INDICATOR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_INDICATOR.displayName(), why)));
+        if (hitIndicatorLanded) {
+            hitIndicator = new HitIndicator(() -> settings.get(Settings.HIT_INDICATOR),
+                    () -> settings.get(Settings.HIT_INDICATOR_COLOUR), () -> settings.get(Settings.HIT_INDICATOR_DURATION),
+                    () -> System.nanoTime() / 1_000_000L);
+            HitHook.install(hitIndicator, null);
+            // Around the middle pixel of the game's crosshair, which it draws
+            // at ((width - 15) / 2, (height - 15) / 2) with its centre on pixel 7.
+            HudElementRegistry.addLast(HIT_INDICATOR, (graphics, tickCounter) ->
+                    HitHook.draw(new GuiGraphicsHudSurface(graphics), (graphics.guiWidth() - 15) / 2 + 7,
+                            (graphics.guiHeight() - 15) / 2 + 7));
+        } else {
+            landed.remove(Feature.HIT_INDICATOR);
         }
 
         // R, under Movement beside the game's own Sprint. Free by default on

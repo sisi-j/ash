@@ -293,4 +293,27 @@ class OptionsPageTest {
 
         assertNull(panel.optionsLinkOf(Feature.CROSSHAIR), "options for a crosshair the game is not drawing");
     }
+
+    @Test
+    void the_hit_indicator_s_page_sets_its_colour_and_how_long_it_shows_in_steps_of_50_ms() throws IOException {
+        settings = Settings.load(configDir);
+        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> "Right Shift", () -> { });
+        panel.resize(427, 240);
+        render();
+        click(panel.optionsLinkOf(Feature.HIT_INDICATOR));
+        FakeScreenSurface surface = render();
+
+        for (String line : new String[] {"Hit indicator", "Colour", "Opacity", "Duration", "300 ms"}) {
+            assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.lines());
+        }
+        assertFalse(surface.drew("Preview"), "a preview of a crosshair on the hit indicator's page");
+
+        for (int wanted = 100; wanted <= 1000; wanted += 50) {
+            click(panel.sliderAt(Settings.HIT_INDICATOR_DURATION, wanted));
+            assertEquals(wanted, settings.get(Settings.HIT_INDICATOR_DURATION), "aiming at " + wanted);
+        }
+        click(panel.swatchOf(Settings.HIT_INDICATOR_COLOUR, 0x4DFF88));
+        assertTrue(file().contains("\nhit-indicator.colour=#4DFF88FF\n"), file());
+        assertTrue(file().contains("\nhit-indicator.duration=1000\n"), file());
+    }
 }
