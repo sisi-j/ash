@@ -1067,14 +1067,28 @@ mod tests {
     /// modern target's build directory - and only a manual run found it.
     #[test]
     fn every_client_jar_a_pin_names_is_one_the_installer_ships() {
-        let bundle = include_str!("../../src-tauri/tauri.bundle.conf.json");
+        // Where each jar lands, not only that it is mentioned. The source path
+        // names the jar too, so "the file mentions it" held while the
+        // installer wrote both jars over one another to a single file called
+        // `client`: a destination of `client/` reads as a file name, not a
+        // folder, and the launcher looks for `client/<jar>`.
+        let bundle: serde_json::Value =
+            serde_json::from_str(include_str!("../../src-tauri/tauri.bundle.conf.json"))
+                .expect("tauri.bundle.conf.json is JSON");
+        let resources = bundle["bundle"]["resources"]
+            .as_object()
+            .expect("tauri.bundle.conf.json maps its resources, source to destination");
+        let destinations: Vec<&str> = resources.values().filter_map(|d| d.as_str()).collect();
 
         let mut checked = 0;
         for pin in PINS {
             let Some(jar) = pin.client_jar else { continue };
+            let wanted = format!("client/{jar}");
             assert!(
-                bundle.contains(jar),
-                "`{jar}` is named by the {} pin but `tauri.bundle.conf.json` does not ship it,                  so an installed ash would refuse to launch {} at all",
+                destinations.contains(&wanted.as_str()),
+                "`{jar}` is named by the {} pin but `tauri.bundle.conf.json` does not install it at \
+                 `{wanted}`, where the launcher looks, so an installed ash would refuse to launch {} \
+                 at all; it installs to {destinations:?}",
                 pin.version_id,
                 pin.version_id,
             );
