@@ -56,14 +56,17 @@ public final class Settings {
     /** In the loader's config directory, named for the mod id, as Fabric mods do. */
     static final String FILE_NAME = "ash.properties";
 
-    public static final OnOff FPS_READOUT = new OnOff(Feature.FPS_READOUT, "fps-readout.enabled", true,
+    public static final OnOff FPS_READOUT = new OnOff(Feature.FPS_READOUT, Category.HUD, "Your frame rate on screen.",
+            "fps-readout.enabled", true,
             "Show the frame rate in the top-left corner. true or false.");
 
-    public static final OnOff TOGGLE_SPRINT = new OnOff(Feature.TOGGLE_SPRINT, "toggle-sprint.enabled", true,
+    public static final OnOff TOGGLE_SPRINT = new OnOff(Feature.TOGGLE_SPRINT, Category.MOVEMENT,
+            "Keep sprinting after one press of a key, until the next.", "toggle-sprint.enabled", true,
             "Sprint on a key press instead of a held key. The key is in Options, Controls, Movement."
                     + " true or false.");
 
-    public static final OnOff CROSSHAIR = new OnOff(Feature.CROSSHAIR, "crosshair.enabled", true,
+    public static final OnOff CROSSHAIR = new OnOff(Feature.CROSSHAIR, Category.PVP, "Your own crosshair in place of the game's.",
+            "crosshair.enabled", true,
             "Draw ash's crosshair in place of the game's. true or false.");
 
     /**

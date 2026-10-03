@@ -4,7 +4,8 @@ package com.ashlauncher.client.report;
  * One of ash's features, as the load report names it.
  *
  * <p>The id is the report's key and the same word the settings file uses;
- * the name is what the launcher shows a player when one did not load.
+ * the name is what the launcher shows a player when one did not load, and
+ * what the settings screen titles its card.
  */
 public enum Feature {
     FPS_READOUT("fps-readout", "FPS readout"),

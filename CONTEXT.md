@@ -85,7 +85,7 @@ The client's own configuration file, `config/ash.properties` in an instance's ga
 _Avoid_: config (unqualified), options (that is the game's own `options.txt`), synced settings (Phase 4, and a different thing)
 
 **Settings screen**:
-ash's in-game screen for its own features, opened with Right Shift by default and rebindable in Controls. One switch per feature, built by walking the declared client settings, so a feature declared there appears on it with no screen code of its own; a feature that did not load is shown as such and cannot be switched. A change takes effect at once and is saved as it is made, into the client settings - the screen is a second editor of that file, never a second writer.
+ash's in-game screen for its own features, opened with Right Shift by default and rebindable in Controls. Drawn by ash itself, the same on both version targets - a panel of categories, search and a card per feature - never with the game's own widgets. One switch per feature, built by walking the declared client settings, so a feature declared there appears on it with no screen code of its own; a feature that did not load is shown as such and cannot be switched. A change takes effect at once and is saved as it is made, into the client settings - the screen is a second editor of that file, never a second writer.
 _Avoid_: menu, mod menu, options (that is the game's own screen), config screen
 
 **Third-party mod**:

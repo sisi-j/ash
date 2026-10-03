@@ -3,12 +3,14 @@ package com.ashlauncher.client.settings;
 import com.ashlauncher.client.report.Feature;
 
 /**
- * One on/off setting, as it is declared: the feature it switches, its key in
- * the file, its value when the file does not say, and the comment a first run
- * writes above it.
+ * One on/off setting, as it is declared: the feature it switches, where its
+ * card is filed and what the card says, its key in the file, its value when
+ * the file does not say, and the comment a first run writes above it.
  *
  * <p>The feature is what the settings screen calls it, and how the screen knows
  * a switch would do nothing: a feature that did not load is shown as such.
+ * The card's sentence is for a player looking at the screen; the comment is
+ * for one reading the file, and says how to write the value.
  *
  * <p>Declared only in {@link Settings}, which is why the constructor is not
  * public - a setting that is not in {@link Settings#declared()} would have no
@@ -21,12 +23,16 @@ import com.ashlauncher.client.report.Feature;
 public final class OnOff {
 
     private final Feature feature;
+    private final Category category;
+    private final String description;
     private final String key;
     private final boolean fallback;
     private final String comment;
 
-    OnOff(Feature feature, String key, boolean fallback, String comment) {
+    OnOff(Feature feature, Category category, String description, String key, boolean fallback, String comment) {
         this.feature = feature;
+        this.category = category;
+        this.description = description;
         this.key = key;
         this.fallback = fallback;
         this.comment = comment;
@@ -35,6 +41,16 @@ public final class OnOff {
     /** The feature this switches on and off. */
     public Feature feature() {
         return feature;
+    }
+
+    /** Where its card is filed on the settings screen. */
+    public Category category() {
+        return category;
+    }
+
+    /** One sentence on its card, for a player, on what the feature does. */
+    public String description() {
+        return description;
     }
 
     /** Its key in the settings file, such as {@code fps-readout.enabled}. */

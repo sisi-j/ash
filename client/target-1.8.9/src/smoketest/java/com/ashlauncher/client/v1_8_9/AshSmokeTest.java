@@ -17,14 +17,15 @@ import java.util.concurrent.TimeoutException;
 import javax.imageio.ImageIO;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.hud.HudSurface;
+import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
+import com.ashlauncher.client.ui.Rect;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.client.util.Window;
@@ -223,16 +224,13 @@ public final class AshSmokeTest implements ClientModInitializer {
         AshSettingsScreen screen = await("open ash's settings on their key", () ->
                 client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
         pause(500L);
-        screenshot(client, "ash-settings.png");
+        screenshot(client, "ash-settings-panel.png");
 
-        click(client, screen, "FPS readout: On");
+        click(client, screen, Feature.FPS_READOUT);
         pause(500L);
         expectFileSays("fps-readout.enabled=false");
         expectReportSays("{ \"id\": \"fps-readout\", \"name\": \"FPS readout\", \"status\": \"off\" }");
         expectReadoutDraws(client, false, "the FPS readout still draws after it was switched off");
-        if (onClient(client, () -> screen.buttonLabelled("FPS readout: Off")) == null) {
-            fail("the FPS readout's switch did not change its label");
-        }
         // By eye: no frame rate top-left, the marker still bottom-left, the
         // HUD readable through the screen.
         screenshot(client, "ash-settings-fps-readout-off.png");
@@ -243,7 +241,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         tap(client, settingsKey.getCode());
         AshSettingsScreen again = await("open ash's settings a second time", () ->
                 client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
-        click(client, again, "FPS readout: Off");
+        click(client, again, Feature.FPS_READOUT);
         pause(500L);
         expectFileSays("fps-readout.enabled=true");
         expectReadoutDraws(client, true, "the FPS readout did not come back when it was switched on");
@@ -283,7 +281,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         ash.expect(5, 0, 0x000000, "ash's crosshair's outline");
 
         KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
-        switchCrosshair(client, settingsKey, "Crosshair: On", "crosshair.enabled=false");
+        switchCrosshair(client, settingsKey, "crosshair.enabled=false");
         Boolean stillDraws = onClient(client, () -> CrosshairHook.draw(new RecordingSurface(), 0, 0));
         if (stillDraws == null || stillDraws) {
             fail("ash's crosshair still draws after it was switched off");
@@ -294,15 +292,15 @@ public final class AshSmokeTest implements ClientModInitializer {
             game.expectInverseOf(none, at[0], at[1]);
         }
 
-        switchCrosshair(client, settingsKey, "Crosshair: Off", "crosshair.enabled=true");
+        switchCrosshair(client, settingsKey, "crosshair.enabled=true");
     }
 
     /** Opens ash's settings, presses one switch, checks the file, and closes them again. */
-    private static void switchCrosshair(MinecraftClient client, KeyBinding settingsKey, String label, String fileSays) {
+    private static void switchCrosshair(MinecraftClient client, KeyBinding settingsKey, String fileSays) {
         tap(client, settingsKey.getCode());
         AshSettingsScreen screen = await("open ash's settings for the crosshair", () ->
                 client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
-        click(client, screen, label);
+        click(client, screen, Feature.CROSSHAIR);
         pause(500L);
         expectFileSays(fileSays);
         keyIntoScreen(client, screen, settingsKey.getCode());
@@ -411,18 +409,21 @@ public final class AshSmokeTest implements ClientModInitializer {
         return found;
     }
 
-    /** A left click in the middle of the button with this label, as the game's input loop delivers one. */
-    private static void click(MinecraftClient client, AshSettingsScreen screen, String label) {
+    /**
+     * A left click in the middle of a feature's switch on ash's panel, as the
+     * game's input loop delivers one: the panel says where it drew the switch.
+     */
+    private static void click(MinecraftClient client, AshSettingsScreen screen, Feature feature) {
         Boolean clicked = onClient(client, () -> {
-            ButtonWidget button = screen.buttonLabelled(label);
-            if (button == null) {
+            Rect toggle = screen.panel().switchOf(feature);
+            if (toggle == null) {
                 return false;
             }
-            screen.mouseClicked(button.x + button.getWidth() / 2, button.y + 10, 0);
+            screen.mouseClicked(toggle.centreX(), toggle.centreY(), 0);
             return true;
         });
         if (clicked == null || !clicked) {
-            fail("there is no \"" + label + "\" button on ash's settings screen");
+            fail("ash's panel shows no switch for " + feature);
         }
     }
 

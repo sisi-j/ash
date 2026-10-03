@@ -9,18 +9,18 @@ import java.util.function.Predicate;
 /**
  * What ash's settings screen shows and does, decided once for both targets.
  *
- * <p>Each version target draws these rows with its own vanilla buttons - one
- * button per row, labelled {@link Row#label()}, inactive unless
- * {@link Row#available()}, calling {@link Row#press()} - and draws
- * {@link #footer()} beneath them. It decides nothing else, so the two targets
- * cannot come to disagree about what the screen says.
+ * <p>The model behind the panel ash draws ({@code ui.Panel}): which switches
+ * there are, which can be pressed, what pressing does, and what the notice
+ * says. The panel decides how they look. The version targets only map the
+ * game's input to ash's own names and pass it on - so the two cannot come to
+ * disagree about what the screen says.
  *
  * <p>The rows are {@link Settings#declared()}, walked: a setting declared
  * there has a row without a line of screen code.
  */
 public final class SettingsScreen {
 
-    /** The screen's title, on both targets. */
+    /** What the screen is called where the game asks - 1.21.11's narrator reads a screen's title. */
     public static final String TITLE = "ash settings";
 
     /** The key binding's name in Controls, on both targets. As with toggle sprint's, shown as written. */
@@ -100,14 +100,27 @@ public final class SettingsScreen {
             this.setting = setting;
         }
 
-        /** "FPS readout: On", "FPS readout: Off" or "FPS readout: Did not load". */
-        public String label() {
-            String state = !available() ? "Did not load" : settings.get(setting) ? "On" : "Off";
-            return name() + ": " + state;
+        /** The feature this row switches. */
+        public Feature feature() {
+            return setting.feature();
         }
 
-        private String name() {
+        /** What its card is titled: the feature's own name. */
+        public String name() {
             return setting.feature().displayName();
+        }
+
+        public Category category() {
+            return setting.category();
+        }
+
+        public String description() {
+            return setting.description();
+        }
+
+        /** Whether the player has it on this session. */
+        public boolean on() {
+            return settings.get(setting);
         }
 
         /** Whether pressing it does anything. False for a feature whose mixins did not land. */
@@ -117,8 +130,8 @@ public final class SettingsScreen {
 
         /**
          * Flips the setting, at once and in the file. Does nothing for a row
-         * that is not {@link #available()}: the button for it is inactive,
-         * and this does not rely on that.
+         * that is not {@link #available()}: its switch is drawn as one that
+         * cannot be pressed, and this does not rely on that.
          */
         public void press() {
             if (!available()) {
