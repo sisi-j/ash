@@ -6,7 +6,6 @@ import com.ashlauncher.client.settings.Choice;
 import com.ashlauncher.client.settings.Colour;
 import com.ashlauncher.client.settings.OnOff;
 import com.ashlauncher.client.settings.Setting;
-import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.settings.Whole;
 import java.util.ArrayList;
@@ -16,7 +15,7 @@ import java.util.Locale;
 /**
  * A feature's page of options in ash's panel, in place of the cards: the
  * feature and its switch at the top, then one row per option - a choice, a
- * slider, a colour - and "Reset options", with a live preview beside them
+ * slider, a colour - and "Reset to defaults", with a live preview beside them
  * where one helps.
  *
  * <p>Every frame records where it drew each thing that can be clicked, and
@@ -142,17 +141,19 @@ final class OptionsPage {
         return editing != null;
     }
 
-    /** A key while typing a colour: Enter applies it, Escape stops typing, Backspace deletes. */
+    /**
+     * A key while typing a colour: Backspace deletes, and Enter or Escape stop
+     * typing. A whole colour has already been applied as it was typed.
+     */
     boolean keyPressed(Key key) {
         if (editing == null) {
             return false;
         }
-        if (key == Key.ENTER) {
-            commitHex();
-        } else if (key == Key.ESCAPE) {
+        if (key == Key.ENTER || key == Key.ESCAPE) {
             editing = null;
         } else if (key == Key.BACKSPACE && !hexText.isEmpty()) {
             hexText = hexText.substring(0, hexText.length() - 1);
+            applyWholeColour();
         }
         return true;
     }
@@ -161,12 +162,22 @@ final class OptionsPage {
         boolean hexDigit = Character.digit(codePoint, 16) >= 0 && codePoint < 128;
         if (editing != null && (hexDigit || codePoint == '#') && hexText.length() < 7) {
             hexText += (char) codePoint;
+            applyWholeColour();
         }
     }
 
+    /** Ends typing in a colour's box. What was typed is already applied, if it was ever a whole colour. */
     private void commitHex() {
-        Colour colour = editing;
         editing = null;
+    }
+
+    /**
+     * Applies what has been typed the moment it is a whole colour - six hex
+     * digits, with or without the {@code #} - keeping the opacity it had, so
+     * the change shows as it is typed and nothing typed is lost to a click
+     * elsewhere. Half a colour changes nothing.
+     */
+    private void applyWholeColour() {
         String digits = hexText.startsWith("#") ? hexText.substring(1) : hexText;
         if (digits.length() != 6) {
             return;
@@ -176,8 +187,10 @@ final class OptionsPage {
                 return;
             }
         }
-        int alpha = model.value(colour) & 0xFF000000;
-        model.change(colour, alpha | Integer.parseInt(digits, 16));
+        int wanted = (model.value(editing) & 0xFF000000) | Integer.parseInt(digits, 16);
+        if (model.value(editing) != wanted) {
+            model.change(editing, wanted);
+        }
     }
 
     // ---- where things are ----
@@ -234,17 +247,23 @@ final class OptionsPage {
         targets.add(new Target("switch:" + feature.feature().id(), toggle, (x, yy) -> feature.press()));
         y += lineHeight + 7;
 
-        int labelWidth = 0;
+        List<Row> shown = new ArrayList<>();
         for (Row row : rows) {
+            if (row.setting == null || model.settings().applies(row.setting)) {
+                shown.add(row);
+            }
+        }
+        int labelWidth = 0;
+        for (Row row : shown) {
             labelWidth = Math.max(labelWidth, surface.textWidth(row.label));
         }
         labelWidth += 8;
 
         int capacity = Math.max(1, (area.y + area.height - y) / rowHeight);
-        maxScroll = Math.max(0, rows.size() - capacity);
+        maxScroll = Math.max(0, shown.size() - capacity);
         scroll = Math.min(scroll, maxScroll);
-        for (int i = scroll; i < rows.size() && i < scroll + capacity; i++) {
-            Row row = rows.get(i);
+        for (int i = scroll; i < shown.size() && i < scroll + capacity; i++) {
+            Row row = shown.get(i);
             int top = y + (i - scroll) * rowHeight;
             surface.drawText(row.label, column.x, top + 2, Palette.MUTED);
             Rect controls = new Rect(column.x + labelWidth, top, column.width - labelWidth, lineHeight + 3);
@@ -252,7 +271,7 @@ final class OptionsPage {
         }
         if (maxScroll > 0) {
             int height = capacity * rowHeight;
-            int thumb = Math.max(6, height * capacity / rows.size());
+            int thumb = Math.max(6, height * capacity / shown.size());
             int x = column.x + column.width + 3;
             surface.fill(x, y, 2, height, Palette.LINE);
             surface.fill(x, y + (height - thumb) * scroll / maxScroll, 2, thumb, Palette.MUTED);
@@ -288,10 +307,12 @@ final class OptionsPage {
                 break;
             case OPACITY: {
                 Colour colour = (Colour) row.setting;
-                int minPercent = (int) Math.ceil(Colour.MIN_ALPHA * 100 / 255.0);
+                // Rounded both ways, so the faintest colour reads as the
+                // slider's lowest step and that step sets exactly it.
+                int minPercent = (int) Math.round(Colour.MIN_ALPHA * 100 / 255.0);
                 int percent = Math.max(minPercent, (int) Math.round((model.value(colour) >>> 24) * 100 / 255.0));
                 drawSlider(surface, "opacity:" + colour.key(), area, percent, minPercent, 100, "%", value -> {
-                    int alpha = (int) Math.round(value * 255 / 100.0);
+                    int alpha = Math.max(Colour.MIN_ALPHA, (int) Math.round(value * 255 / 100.0));
                     int wanted = (alpha << 24) | (model.value(colour) & 0xFFFFFF);
                     if (model.value(colour) != wanted) {
                         model.change(colour, wanted);
@@ -307,10 +328,10 @@ final class OptionsPage {
                 break;
             }
             case RESET: {
-                String text = "Reset options";
+                String text = "Reset to defaults";
                 Rect link = new Rect(column.x, area.y, surface.textWidth(text) + 2, area.height);
                 surface.drawText(text, column.x, area.y + 3, link.contains(mouseX, mouseY) ? Palette.TEXT : Palette.MUTED);
-                targets.add(new Target("reset", link, (x, y) -> model.resetOptions(feature.feature())));
+                targets.add(new Target("reset", link, (x, y) -> model.resetToDefaults(feature.feature())));
                 break;
             }
             default:
@@ -350,7 +371,9 @@ final class OptionsPage {
         String shown = value + unit;
         surface.drawText(shown, area.x + area.width - surface.textWidth(shown), area.y + 3, Palette.TEXT);
         targets.add(new Target(id, track, (x, y) -> {
-            int under = min + (int) Math.round((x - track.x) * (max - min) / (double) (track.width - 3));
+            // From the handle's middle, one unit in from where it is drawn,
+            // so pressing the handle where it stands leaves it there.
+            int under = min + (int) Math.round((x - track.x - 1) * (max - min) / (double) (track.width - 3));
             slide.to(Math.max(min, Math.min(max, under)));
         }));
     }
@@ -396,9 +419,7 @@ final class OptionsPage {
         int top = column.y + lineHeight + 4;
         int box = Math.max(12, Math.min(column.width, (column.y + column.height - top - 3 * (lineHeight + 4)) / 3));
         Cross cross = Cross.of(model.settings());
-        int extent = 2 * (model.value(Settings.CROSSHAIR_SIZE) + model.value(Settings.CROSSHAIR_GAP))
-                + model.value(Settings.CROSSHAIR_THICKNESS) + 2;
-        int scale = Math.max(1, (box - 4) / extent);
+        int scale = Math.max(1, (box - 4) / cross.extent());
         for (int i = 0; i < PREVIEW_GROUNDS.length; i++) {
             Rect ground = new Rect(column.x, top, box, box);
             Shapes.rounded(surface, ground, 2, PREVIEW_GROUNDS[i]);

@@ -24,9 +24,11 @@ import java.util.function.Supplier;
  * "Options" link on its card, which opens its {@link OptionsPage} in place of
  * the cards. Still to come: "Edit HUD", with #41.
  *
- * <p>Laid out afresh from the screen size and the font on every frame and
- * every click, so what is drawn and what a click hits can never disagree.
- * Everything is in GUI units and made of rectangles and text.
+ * <p>The cards are laid out afresh from the screen size and the font on every
+ * frame and every click; an options page records where it drew each control
+ * and matches a click against that record. Either way, what a click hits is
+ * what is on screen. Everything is in GUI units and made of rectangles and
+ * text.
  *
  * <p>The version target's screen passes the game's input on - a click, a
  * scroll, a typed character, a {@link Key} - and draws through a
@@ -111,7 +113,7 @@ public final class Panel {
                 row.press();
                 return true;
             }
-            if (row.hasOptions() && optionsLinkIn(card).contains(x, y)) {
+            if (row.hasOptions() && row.available() && optionsLinkIn(card).contains(x, y)) {
                 page = new OptionsPage(model, row, () -> page = null);
                 return true;
             }
@@ -148,6 +150,10 @@ public final class Panel {
     public void keyPressed(Key key) {
         if (page != null && page.keyPressed(key)) {
             return;
+        }
+        if (page != null && key == Key.BACKSPACE) {
+            // As typing does: the search is the cards', so editing it goes back to them.
+            page = null;
         }
         if (key == Key.ESCAPE) {
             close.run();
@@ -210,7 +216,7 @@ public final class Panel {
             return null;
         }
         for (SettingsScreen.Row row : visibleRows()) {
-            if (row.feature() == feature && row.hasOptions()) {
+            if (row.feature() == feature && row.hasOptions() && row.available()) {
                 Rect card = cardOf(feature);
                 return card == null ? null : optionsLinkIn(card);
             }
@@ -247,7 +253,13 @@ public final class Panel {
         return page == null ? null : page.target("opacity:" + colour.key());
     }
 
-    public Rect resetOptions() {
+    /** The point along a colour's opacity slider that stands for {@code percent}. */
+    public Rect opacityAt(Colour colour, int percent) {
+        int min = (int) Math.round(Colour.MIN_ALPHA * 100 / 255.0);
+        return page == null ? null : page.pointOn("opacity:" + colour.key(), percent, min, 100);
+    }
+
+    public Rect resetToDefaults() {
         return page == null ? null : page.target("reset");
     }
 
@@ -498,7 +510,8 @@ public final class Panel {
             surface.drawText(Text.fit(surface, row.name(), nameRoom), card.x + 6, card.y + 6, Palette.TEXT);
             Shapes.onOffSwitch(surface, toggle, row.on(), row.available());
 
-            if (row.hasOptions()) {
+            // A feature that did not load offers no options: they would change nothing.
+            if (row.hasOptions() && row.available()) {
                 String options = "Options >";
                 optionsLinkWidth = surface.textWidth(options);
                 Rect link = optionsLinkIn(card);

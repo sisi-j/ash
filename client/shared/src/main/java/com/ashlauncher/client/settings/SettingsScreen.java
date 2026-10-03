@@ -78,8 +78,16 @@ public final class SettingsScreen {
         changed.run();
     }
 
-    /** Puts every one of a feature's options back to its default. The feature stays switched as it was. */
-    public void resetOptions(Feature feature) {
+    /**
+     * Puts a feature back to its defaults - every option, and its switch -
+     * as a player who has lost track of what they changed would expect.
+     */
+    public void resetToDefaults(Feature feature) {
+        for (OnOff setting : Settings.switches()) {
+            if (setting.feature() == feature) {
+                resetOne(setting);
+            }
+        }
         for (Setting<?> option : optionsOf(feature)) {
             resetOne(option);
         }

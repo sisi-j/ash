@@ -415,7 +415,7 @@ public final class AshSmokeTest implements ClientModInitializer {
     /**
      * The crosshair's options page, used as a player would: open it from the
      * card, choose a shape, set a size on the slider, pick a colour, and the
-     * file and the crosshair the game draws both follow. Then "Reset options",
+     * file and the crosshair the game draws both follow. Then "Reset to defaults",
      * which the crosshair check after this one relies on.
      */
     private static void crosshairOptionsWork(MinecraftClient client) {
@@ -435,16 +435,24 @@ public final class AshSmokeTest implements ClientModInitializer {
         expectFileSays("crosshair.shape=dot");
         expectFileSays("crosshair.size=6");
         expectFileSays("crosshair.colour=#FF4D4DFF");
-        List<Integer> drawn = onClient(client, () -> {
-            RecordingSurface surface = new RecordingSurface();
-            CrosshairHook.draw(surface, 0, 0);
-            return surface.colours;
-        });
-        if (drawn == null || drawn.size() != 2 || !drawn.contains(0xFFFF4D4D)) {
-            fail("the game's crosshair is not a red dot and its outline; it drew " + drawn);
-        }
 
-        clickOn(client, screen, "Reset options", Panel::resetOptions);
+        // The panel closed, the world's own frame: a red square six wide,
+        // from three left of the centre to two right of it, outlined.
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings to see the red dot", () -> client.currentScreen == null ? client : null);
+        Frame dot = frame(client, "ash-crosshair-red-dot.png", false);
+        for (int[] at : new int[][] {{0, 0}, {2, 2}, {-3, -3}, {2, -3}}) {
+            dot.expect(at[0], at[1], 0xFF4D4D, "the red dot");
+        }
+        dot.expect(3, 0, 0x000000, "the dot's outline");
+        dot.expect(-4, 0, 0x000000, "the dot's outline");
+
+        tap(client, settingsKey.getCode());
+        screen = await("reopen ash's settings to reset the crosshair", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        pause(300L);
+        clickOn(client, screen, "the crosshair's options link", panel -> panel.optionsLinkOf(Feature.CROSSHAIR));
+        clickOn(client, screen, "Reset to defaults", Panel::resetToDefaults);
         expectFileSays("crosshair.shape=cross");
         expectFileSays("crosshair.size=4");
         expectFileSays("crosshair.colour=#FFFFFFFF");
@@ -662,7 +670,6 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
-        final List<Integer> colours = new ArrayList<>();
         int fills;
 
         @Override
@@ -683,7 +690,6 @@ public final class AshSmokeTest implements ClientModInitializer {
         @Override
         public void fill(int x, int y, int width, int height, int colour) {
             fills++;
-            colours.add(colour);
         }
 
         @Override

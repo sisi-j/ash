@@ -25,7 +25,7 @@ public final class OnOff extends Setting<Boolean> {
     }
 
     /** One of a feature's options. */
-    OnOff(Feature feature, String label, String key, boolean fallback, String comment) {
+    OnOff(Feature feature, String key, String label, boolean fallback, String comment) {
         super(feature, key, label, fallback, comment);
         this.category = null;
         this.description = null;

@@ -76,7 +76,7 @@ public final class Settings {
             "The crosshair's shape: cross, t, dot or box.", "cross", "Cross", "t", "T", "dot", "Dot", "box", "Box");
 
     public static final Whole CROSSHAIR_SIZE = new Whole(Feature.CROSSHAIR, "crosshair.size", "Size", 4, 1, 10,
-            "How long each arm of the crosshair is: a whole number from 1 to 10.");
+            "How long each arm of the crosshair is, or how wide a dot is: a whole number from 1 to 10.");
 
     public static final Whole CROSSHAIR_GAP = new Whole(Feature.CROSSHAIR, "crosshair.gap", "Gap", 0, 0, 5,
             "How far the arms start from the centre: a whole number from 0 to 5.");
@@ -87,7 +87,7 @@ public final class Settings {
     public static final Colour CROSSHAIR_COLOUR = new Colour(Feature.CROSSHAIR, "crosshair.colour", "Colour", 0xFFFFFFFF,
             "The crosshair's colour and opacity, as #RRGGBBAA. #FFFFFFFF is opaque white.");
 
-    public static final OnOff CROSSHAIR_OUTLINE = new OnOff(Feature.CROSSHAIR, "Outline", "crosshair.outline", true,
+    public static final OnOff CROSSHAIR_OUTLINE = new OnOff(Feature.CROSSHAIR, "crosshair.outline", "Outline", true,
             "A dark outline around the crosshair, so it shows against snow and sky. true or false.");
 
     /**
@@ -116,8 +116,14 @@ public final class Settings {
         return DECLARED;
     }
 
+    private static final List<OnOff> SWITCHES = collectSwitches();
+
     /** Every feature's switch, in the order the file lists them: one card each on the settings screen. */
     public static List<OnOff> switches() {
+        return SWITCHES;
+    }
+
+    private static List<OnOff> collectSwitches() {
         List<OnOff> switches = new ArrayList<>();
         for (Setting<?> setting : DECLARED) {
             if (setting instanceof OnOff && ((OnOff) setting).isSwitch()) {
@@ -125,6 +131,16 @@ public final class Settings {
             }
         }
         return Collections.unmodifiableList(switches);
+    }
+
+    /**
+     * Whether an option does anything as the feature is set up now. A dot has
+     * no arms, so it has no gap and no line thickness: the settings screen
+     * does not offer sliders that would change nothing.
+     */
+    public boolean applies(Setting<?> option) {
+        boolean dot = "dot".equals(get(CROSSHAIR_SHAPE));
+        return !(dot && (option == CROSSHAIR_GAP || option == CROSSHAIR_THICKNESS));
     }
 
     /** A feature's options, in the order the file lists them: everything that belongs to it but its switch. */

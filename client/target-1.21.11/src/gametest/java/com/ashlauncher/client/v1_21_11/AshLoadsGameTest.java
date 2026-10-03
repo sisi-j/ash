@@ -299,7 +299,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     /**
      * The crosshair's options page, used as a player would: open it from the
      * card, choose a shape, set a size on the slider, pick a colour, and the
-     * file and the crosshair the game draws both follow. Then "Reset options",
+     * file and the crosshair the game draws both follow. Then "Reset to defaults",
      * which the crosshair check after this one relies on.
      */
     private static void crosshairOptionsWork(ClientGameTestContext context) {
@@ -317,16 +317,22 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         assertFileSays("crosshair.shape=dot");
         assertFileSays("crosshair.size=6");
         assertFileSays("crosshair.colour=#FF4D4DFF");
-        List<Integer> drawn = context.computeOnClient(client -> {
-            RecordingSurface surface = new RecordingSurface();
-            CrosshairHook.draw(surface, 0, 0);
-            return surface.colours;
-        });
-        if (drawn.size() != 2 || !drawn.contains(0xFFFF4D4D)) {
-            throw new AssertionError("the game's crosshair is not a red dot and its outline; it drew " + drawn);
-        }
 
-        clickOn(context, "Reset options", Panel::resetOptions);
+        // The panel closed, the world's own frame: a red square six wide,
+        // from three left of the centre to two right of it, outlined.
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        Frame dot = frame(context, "ash-crosshair-red-dot", false);
+        for (int[] at : new int[][] {{0, 0}, {2, 2}, {-3, -3}, {2, -3}}) {
+            dot.expect(at[0], at[1], 0xFF4D4D, "the red dot");
+        }
+        dot.expect(3, 0, 0x000000, "the dot's outline");
+        dot.expect(-4, 0, 0x000000, "the dot's outline");
+
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickOn(context, "the crosshair's options link", panel -> panel.optionsLinkOf(Feature.CROSSHAIR));
+        clickOn(context, "Reset to defaults", Panel::resetToDefaults);
         assertFileSays("crosshair.shape=cross");
         assertFileSays("crosshair.size=4");
         assertFileSays("crosshair.colour=#FFFFFFFF");
@@ -473,7 +479,6 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
-        final List<Integer> colours = new ArrayList<>();
         int fills;
 
         @Override
@@ -494,7 +499,6 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         @Override
         public void fill(int x, int y, int width, int height, int colour) {
             fills++;
-            colours.add(colour);
         }
 
         @Override

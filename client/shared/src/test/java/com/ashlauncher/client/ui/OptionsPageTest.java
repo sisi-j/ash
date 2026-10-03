@@ -75,7 +75,7 @@ class OptionsPageTest {
         FakeScreenSurface surface = render();
 
         for (String line : new String[] {"< All features", "Crosshair", "Shape", "Size", "Gap", "Thickness", "Colour",
-                "Opacity", "Outline", "Reset options", "Preview"}) {
+                "Opacity", "Outline", "Reset to defaults", "Preview"}) {
             assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.lines());
         }
         assertNotNull(panel.switchOf(Feature.CROSSHAIR), "the feature's own switch is not on its page");
@@ -144,7 +144,7 @@ class OptionsPageTest {
     }
 
     @Test
-    void a_colour_typed_into_its_box_is_applied_on_enter_and_a_bad_one_is_not() {
+    void a_colour_typed_into_its_box_applies_as_soon_as_it_is_whole_and_half_of_one_does_not() {
         open();
 
         click(panel.hexBoxOf(Settings.CROSSHAIR_COLOUR));
@@ -192,19 +192,19 @@ class OptionsPageTest {
     }
 
     @Test
-    void reset_puts_every_option_back_and_leaves_the_feature_switched_as_it_was() {
+    void reset_puts_every_option_and_the_switch_back_to_their_defaults() {
         open();
         click(panel.choiceOf(Settings.CROSSHAIR_SHAPE, "box"));
         click(panel.sliderAt(Settings.CROSSHAIR_THICKNESS, 3));
         click(panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
         click(panel.switchOf(Feature.CROSSHAIR));
 
-        click(panel.resetOptions());
+        click(panel.resetToDefaults());
 
         for (Setting<?> option : Settings.optionsOf(Feature.CROSSHAIR)) {
             assertEquals(option.fallback(), settings.get(option), option.key() + " was not reset");
         }
-        assertFalse(settings.get(Settings.CROSSHAIR), "reset switched the crosshair back on");
+        assertTrue(settings.get(Settings.CROSSHAIR), "the crosshair's own switch was not put back to its default");
     }
 
     @Test
@@ -240,10 +240,57 @@ class OptionsPageTest {
             assertTrue(text.x() >= 0 && text.x() + surface.textWidth(text.text()) <= 320 && text.y() + 9 <= 240,
                     "off screen: " + text);
         }
-        for (int i = 0; i < 20 && panel.resetOptions() == null; i++) {
+        for (int i = 0; i < 20 && panel.resetToDefaults() == null; i++) {
             panel.mouseScrolled(-1);
             render();
         }
-        assertNotNull(panel.resetOptions(), "Reset options cannot be reached, even by scrolling");
+        assertNotNull(panel.resetToDefaults(), "Reset to defaults cannot be reached, even by scrolling");
+    }
+
+    @Test
+    void the_opacity_slider_sets_the_opacity_under_the_mouse() {
+        open();
+
+        click(panel.opacityAt(Settings.CROSSHAIR_COLOUR, 50));
+
+        assertEquals(0x80, settings.get(Settings.CROSSHAIR_COLOUR) >>> 24, "50% is not half opaque");
+    }
+
+    @Test
+    void pressing_a_slider_s_handle_where_it_stands_leaves_it_there() {
+        // The opacity slider has nearly a hundred steps on a short track, so
+        // a press one unit off the handle's middle would move it.
+        open();
+        settings.set(Settings.CROSSHAIR_COLOUR, 0x80FFFFFF);
+        render();
+
+        click(panel.opacityAt(Settings.CROSSHAIR_COLOUR, 50));
+
+        assertEquals(0x80FFFFFF, (int) settings.get(Settings.CROSSHAIR_COLOUR));
+    }
+
+    @Test
+    void a_dot_is_not_offered_a_gap_or_a_thickness_it_would_ignore() {
+        open();
+
+        click(panel.choiceOf(Settings.CROSSHAIR_SHAPE, "dot"));
+        FakeScreenSurface surface = render();
+
+        assertFalse(surface.drew("Gap"), "a dot is offered a gap");
+        assertFalse(surface.drew("Thickness"), "a dot is offered a thickness");
+        assertTrue(surface.drew("Size"), "a dot is not offered a size");
+        click(panel.choiceOf(Settings.CROSSHAIR_SHAPE, "cross"));
+        assertTrue(render().drew("Gap"), "a cross is not offered a gap");
+    }
+
+    @Test
+    void a_crosshair_that_did_not_load_offers_no_options() {
+        settings = Settings.load(configDir);
+        panel = new Panel(new SettingsScreen(settings, feature -> feature != Feature.CROSSHAIR, () -> { }),
+                () -> "Right Shift", () -> { });
+        panel.resize(427, 240);
+        render();
+
+        assertNull(panel.optionsLinkOf(Feature.CROSSHAIR), "options for a crosshair the game is not drawing");
     }
 }

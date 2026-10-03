@@ -64,6 +64,13 @@ public final class Choice extends Setting<String> {
         return value;
     }
 
+    /** An id it does not offer is its default: whatever draws from it can rely on a known id. */
+    @Override
+    String normalise(String value) {
+        String known = value == null ? null : parse(value);
+        return known == null ? fallback() : known;
+    }
+
     /** "cross, t, dot or box". */
     @Override
     String expected() {
