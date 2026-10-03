@@ -20,8 +20,8 @@
   --green: #22c55e;
   --red: #f0433a;
   --grey: #a7ada6;
-  --panel-alpha: 0.42;
-  --strip-alpha: 0.66;
+  --panel-alpha: 0.55;
+  --strip-alpha: 0.79;
   --ui: 1;
   --open-ms: 350ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -83,7 +83,7 @@ button { cursor: pointer; }
 
 /* left strip */
 .strip { width: 5.2cqw; flex: none; background: rgba(0, 0, 0, var(--strip-alpha)); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 1.3cqw 0 0.75cqw; }
-.letters { height: 60%; display: flex; flex-direction: column; justify-content: space-between; align-items: center; font-weight: 700; font-size: calc(var(--ui) * 1.25cqw); letter-spacing: 0; color: var(--ink); }
+.letters { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; justify-content: space-between; align-items: center; padding-bottom: 1.8cqw; font-weight: 800; font-size: calc(var(--ui) * 2.2cqw); line-height: 1; color: var(--ink); }
 .strip .tools { margin-top: auto; display: flex; flex-direction: column; gap: 0.6cqw; width: 100%; padding: 0 0.75cqw; }
 .sq { width: 100%; aspect-ratio: 1; border: 0; border-radius: 0.65cqw; background: var(--fill); color: var(--icon); display: grid; place-items: center; transition: background 160ms ease-out, transform 160ms ease-out; }
 .sq:hover { background: var(--fill-2); }
@@ -114,9 +114,9 @@ button { cursor: pointer; }
 .tile.enter { opacity: 0; transform: translateY(1.3cqw); }
 .tile .name { align-self: stretch; text-align: center; font-weight: 600; font-size: 1.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .glyph { width: 3.2cqw; height: 3.2cqw; color: var(--icon); margin: 0.35cqw 0 0.15cqw; }
-.fpsmark { display: flex; flex-direction: column; align-items: center; gap: 0.15cqw; }
-.fpsmark svg { width: 1.15cqw; height: 0.85cqw; }
-.fpsmark span { font-size: 0.68em; font-weight: 700; letter-spacing: 0.08em; color: var(--ink-2); }
+.fpsmark { display: flex; flex-direction: column; align-items: center; gap: 0.25cqw; }
+.fpsmark svg { width: 1.55cqw; height: 1.2cqw; }
+.fpsmark span { font-size: 0.8em; font-weight: 700; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.75); }
 .tile .row { align-self: stretch; display: flex; gap: 0.45cqw; margin-top: 0.25cqw; }
 .gear { flex: none; width: 2.3cqw; height: 2.3cqw; border: 0; border-radius: 0.55cqw; background: var(--fill); color: var(--icon); display: grid; place-items: center; transition: background 160ms ease-out; }
 .gear:hover { background: var(--fill-3); }
@@ -198,7 +198,7 @@ button { cursor: pointer; }
 .shake { animation: shake 320ms ease-out; }
 
 /* ---- launcher ---- */
-.lwin { position: absolute; inset: 0; display: grid; grid-template-rows: 4.3cqw 1fr; grid-template-columns: 15cqw 1fr; font-size: 0.95cqw; background: radial-gradient(60cqw 34cqw at 78% -6%, rgba(150, 165, 255, 0.11), transparent 70%), radial-gradient(48cqw 30cqw at 8% 108%, rgba(255, 255, 255, 0.05), transparent 70%), #0b0b0d; }
+.lwin { position: absolute; inset: 0; display: grid; grid-template-rows: 4.3cqw 1fr; grid-template-columns: 4.9cqw 1fr; font-size: 0.95cqw; background: radial-gradient(60cqw 34cqw at 78% -6%, rgba(150, 165, 255, 0.1), transparent 70%), radial-gradient(48cqw 30cqw at 8% 108%, rgba(255, 255, 255, 0.04), transparent 70%), #0b0b0d; }
 .ltitle { grid-column: 1 / -1; display: flex; align-items: center; gap: 1cqw; padding: 0 0 0 1.5cqw; border-bottom: 1px solid var(--line); }
 .wordmark { font-weight: 800; font-size: 1.75cqw; letter-spacing: -0.04em; }
 .acct { position: relative; margin-left: auto; }
@@ -219,39 +219,80 @@ button { cursor: pointer; }
 .winctl button:hover { background: var(--fill); color: var(--ink); }
 .winctl button.x:hover { background: #c42b1c; }
 .winctl svg { width: 1cqw; height: 1cqw; }
-.lside { border-right: 1px solid var(--line); padding: 1.2cqw 0.9cqw; display: flex; flex-direction: column; gap: 0.3cqw; }
-.nav { display: flex; align-items: center; gap: 0.8cqw; border: 0; background: transparent; padding: 0.75cqw 0.9cqw; border-radius: 0.7cqw; color: var(--ink-2); font-weight: 600; text-align: left; transition: background 160ms ease-out, color 160ms ease-out; }
+.lside { position: relative; z-index: 3; border-right: 1px solid var(--line); padding: 1cqw 0.7cqw; display: flex; flex-direction: column; gap: 0.5cqw; }
+.nav { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; border: 0; background: transparent; border-radius: 0.7cqw; color: var(--ink-2); transition: background 160ms ease-out, color 160ms ease-out; }
 .nav:hover { color: var(--ink); background: var(--fill); }
 .nav[aria-current="page"] { background: var(--fill-2); color: var(--ink); }
-.nav svg { width: 1.25cqw; height: 1.25cqw; color: var(--icon); }
-.lside .ver { margin-top: auto; color: var(--ink-3); font-size: 0.85em; padding: 0 0.9cqw; }
+.nav svg { width: 1.45cqw; height: 1.45cqw; color: var(--icon); }
+.nav::after { content: attr(data-label); position: absolute; left: calc(100% + 0.9cqw); top: 50%; transform: translate(-0.3cqw, -50%); opacity: 0; background: rgba(24, 24, 28, 0.96); border: 1px solid var(--line); padding: 0.35cqw 0.7cqw; border-radius: 0.5cqw; white-space: nowrap; font-weight: 600; color: var(--ink); pointer-events: none; transition: opacity 140ms ease-out, transform 200ms var(--ease-out); }
+.nav:hover::after, .nav:focus-visible::after { opacity: 1; transform: translate(0, -50%); }
+.nav.bottom { margin-top: auto; }
 .lmain { position: relative; min-width: 0; }
-.lpage { position: absolute; inset: 0; padding: 1.8cqw 2.2cqw; display: flex; flex-direction: column; gap: 1.2cqw; transition: opacity 180ms ease-out, transform 220ms var(--ease-out); }
+.lpage { position: absolute; inset: 0; padding: 1.4cqw 1.8cqw 1.5cqw; display: flex; flex-direction: column; gap: 1.1cqw; transition: opacity 180ms ease-out, transform 220ms var(--ease-out); }
 .lpage.leaving { opacity: 0; transition-duration: 110ms; }
 .lpage.entering { opacity: 0; transform: translateY(0.8cqw); }
 .lhead { display: flex; align-items: center; gap: 0.8cqw; }
 .lhead h2 { margin: 0; font-size: 1.6em; font-weight: 700; letter-spacing: -0.02em; }
 .lhead .pill { margin-left: auto; }
+.welcome { display: flex; align-items: center; gap: 0.6cqw; margin: 0; font-size: 1.75em; font-weight: 700; letter-spacing: -0.02em; }
+.welcome .face { width: 2.3cqw; height: 2.3cqw; }
 .pill { border: 0; background: var(--fill-2); border-radius: 0.6cqw; padding: 0.55cqw 1cqw; font-weight: 600; display: inline-flex; align-items: center; gap: 0.5cqw; }
 .pill:hover { background: var(--fill-3); }
 .pill svg { width: 1cqw; height: 1cqw; }
+.mini { border: 0; background: var(--fill-2); border-radius: 0.5cqw; padding: 0.3cqw 0.65cqw; font-weight: 600; font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.35cqw; margin-left: auto; }
+.mini:hover { background: var(--fill-3); }
+.mini svg { width: 0.85cqw; height: 0.85cqw; }
 .glass { background: var(--fill); border: 1px solid var(--line); border-radius: 1cqw; }
-.ilist { padding: 0.5cqw; display: flex; flex-direction: column; gap: 0.3cqw; overflow-y: auto; min-height: 0; flex: 1; }
-.irow { display: flex; align-items: center; gap: 1cqw; padding: 0.75cqw 0.9cqw; border-radius: 0.7cqw; cursor: pointer; transition: background 180ms ease-out; }
+
+/* the LAUNCH area */
+.hero { position: relative; flex: none; height: 17.5cqw; border-radius: 1.1cqw; overflow: hidden; box-shadow: 0 0.8cqw 2.4cqw rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.06); }
+.hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+.hero::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.35)); pointer-events: none; }
+.launch { position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 25cqw; padding: 1.05cqw 0 0.9cqw; border: 0; border-radius: 0.9cqw; background: linear-gradient(#34d572, #1fb457); color: #fff; overflow: hidden; box-shadow: 0 0.6cqw 1.8cqw rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.28); transition: transform 180ms var(--ease-out), filter 160ms ease-out; }
+.launch:hover { filter: brightness(1.06); transform: translate(-50%, -50%) scale(1.015); }
+.launch:active { transform: translate(-50%, -50%) scale(0.99); }
+.launch .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(0, 0, 0, 0.18); transition: width 200ms linear; }
+.launch span { position: relative; display: block; font-weight: 800; font-size: 1.75em; letter-spacing: 0.03em; }
+.launch small { position: relative; display: block; margin-top: 0.2cqw; font-size: 0.95em; font-weight: 600; opacity: 0.92; }
+
+/* below the LAUNCH area */
+.below { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr 0.95fr; gap: 1.1cqw; }
+.card { padding: 1cqw; display: flex; flex-direction: column; gap: 0.55cqw; min-height: 0; min-width: 0; }
+.card h3 { margin: 0 0 0.2cqw; font-size: 1.05em; font-weight: 700; display: flex; align-items: center; gap: 0.5cqw; }
+.card h3 small { color: var(--ink-3); font-weight: 500; font-size: 0.9em; }
+.scroll { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 0.25cqw; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent; }
+.srow { display: flex; align-items: center; gap: 0.8cqw; padding: 0.5cqw 0.55cqw; border-radius: 0.6cqw; transition: background 160ms ease-out; }
+.srow:hover { background: var(--fill); }
+.sicon { width: 2.5cqw; height: 2.5cqw; border-radius: 0.55cqw; display: grid; place-items: center; font-weight: 800; font-size: 1.05em; color: #fff; flex: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15); }
+.srow .t { min-width: 0; }
+.srow .t b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .t small { color: var(--ink-2); font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.35cqw; }
+.dot { width: 0.5cqw; height: 0.5cqw; border-radius: 50%; background: var(--green); display: inline-block; }
+.dot.off { background: var(--grey); opacity: 0.6; }
+.join { margin-left: auto; flex: none; border: 0; background: var(--fill-2); border-radius: 0.5cqw; padding: 0.45cqw 0.9cqw; font-weight: 700; transition: background 160ms ease-out; }
+.join:hover { background: var(--green); }
+.join:disabled { opacity: 0.4; cursor: default; background: var(--fill); }
+.kv { display: flex; align-items: baseline; justify-content: space-between; gap: 1cqw; padding: 0.35cqw 0.2cqw; border-bottom: 1px solid var(--line); }
+.kv:last-of-type { border-bottom: 0; }
+.kv span { color: var(--ink-2); }
+.kv b { font-weight: 600; text-align: right; }
+.fchips { display: flex; flex-wrap: wrap; gap: 0.3cqw; justify-content: flex-end; }
+.fchip { font-size: 0.82em; font-weight: 600; background: var(--fill-2); border-radius: 0.4cqw; padding: 0.15cqw 0.5cqw; }
+.hint { color: var(--ink-3); font-size: 0.85em; }
+.card .pill { align-self: flex-start; margin-top: auto; }
+.ilist { display: flex; flex-direction: column; gap: 0.25cqw; overflow-y: auto; min-height: 0; flex: 1; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent; }
+.irow { display: flex; align-items: center; gap: 0.8cqw; padding: 0.6cqw 0.65cqw; border-radius: 0.7cqw; cursor: pointer; transition: background 180ms ease-out; }
 .irow:hover { background: var(--fill); }
 .irow[aria-selected="true"] { background: rgba(255, 255, 255, 0.14); }
-.vbadge { width: 3cqw; height: 3cqw; border-radius: 0.6cqw; background: var(--fill-2); display: grid; place-items: center; font-weight: 700; font-size: 0.8em; color: var(--ink); flex: none; }
+.vbadge { width: 2.6cqw; height: 2.6cqw; border-radius: 0.55cqw; background: var(--fill-2); display: grid; place-items: center; font-weight: 700; font-size: 0.8em; color: var(--ink); flex: none; }
 .irow .t { min-width: 0; }
-.irow .t b { display: block; font-weight: 600; }
-.irow .t small { color: var(--ink-2); font-size: 0.88em; }
-.irow .gear { margin-left: auto; opacity: 0; transition: opacity 160ms ease-out, background 160ms ease-out; }
+.irow .t b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.irow .t small { color: var(--ink-2); font-size: 0.85em; }
+.irow .gear { margin-left: auto; width: 2cqw; height: 2cqw; opacity: 0; transition: opacity 160ms ease-out, background 160ms ease-out; }
+.irow .gear svg { width: 1.1cqw; height: 1.1cqw; }
 .irow:hover .gear, .irow[aria-selected="true"] .gear { opacity: 1; }
-.launch { position: relative; height: 4.6cqw; border: 0; border-radius: 0.9cqw; background: #fff; color: #0b0b0c; font-weight: 800; font-size: 1.25em; letter-spacing: 0.08em; overflow: hidden; transition: transform 160ms var(--ease-out), filter 160ms ease-out; }
-.launch:hover { filter: brightness(0.94); }
-.launch:active { transform: scale(0.99); }
-.launch .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(34, 197, 94, 0.35); transition: width 200ms linear; }
-.launch span { position: relative; }
-.launch small { display: block; position: relative; font-size: 0.55em; letter-spacing: 0.04em; font-weight: 600; color: rgba(11, 11, 12, 0.6); }
+
+/* other launcher pages */
 .lform { display: flex; flex-direction: column; gap: 0.4cqw; overflow-y: auto; }
 .lform .opt { grid-template-columns: 13cqw 1fr; }
 .tin { height: 2.4cqw; border: 0; border-radius: 0.55cqw; background: var(--fill-2); padding: 0 0.8cqw; outline: none; box-shadow: inset 0 0 0 1px transparent; transition: box-shadow 160ms ease-out; max-width: 20cqw; }
@@ -263,6 +304,8 @@ button { cursor: pointer; }
 .emptystate svg { width: 3.4cqw; height: 3.4cqw; color: var(--ink-3); }
 .emptystate b { color: var(--ink); font-size: 1.15em; }
 .tag { font-size: 0.72em; font-weight: 700; letter-spacing: 0.06em; color: var(--ink-3); border: 1px solid var(--line); border-radius: 0.4cqw; padding: 0.1cqw 0.4cqw; margin-left: 0.5cqw; }
+.modlist { flex: none; padding: 0.5cqw; display: flex; flex-direction: column; gap: 0.25cqw; }
+.modlist .irow { cursor: default; }
 
 @media (prefers-reduced-motion: reduce) {
   :root { --open-ms: 1ms; }
@@ -279,8 +322,9 @@ button { cursor: pointer; }
     <button id="show-game" aria-pressed="true">In game</button>
     <button id="show-launcher" aria-pressed="false">Launcher</button>
   </div>
+  <div class="seg" id="tod" role="group" aria-label="Time of day" hidden><button data-tod="auto" aria-pressed="true">Auto</button><button data-tod="day" aria-pressed="false">Day</button><button data-tod="sunset" aria-pressed="false">Sunset</button><button data-tod="night" aria-pressed="false">Night</button></div>
   <button class="mock-btn" id="toggle-panel">Close panel (Right Shift)</button>
-  <label class="mock-range" for="alpha">Panel darkness <input id="alpha" type="range" min="30" max="50" value="42"> <output id="alpha-out">42%</output></label>
+  <label class="mock-range" for="alpha">Panel darkness <input id="alpha" type="range" min="30" max="65" value="55"> <output id="alpha-out">55%</output></label>
 </div>
 
 <div class="frame-scroll">
@@ -319,12 +363,12 @@ button { cursor: pointer; }
   <div class="note"><h2>Examples, not real</h2><ul>
     <li><b>Entity culling</b> and <b>Motion blur</b> are not planned features. They're here only to show the green and red FPS marks.</li>
     <li><b>Snaplook</b> is shown as if it failed to load, to show the UNAVAILABLE tile and the shake.</li>
-    <li>The game scene, the mods list and the accounts are stand-ins.</li>
+    <li>The game scene, the servers and their player counts, the mods list and the accounts are stand-ins.</li>
   </ul></div>
   <div class="note"><h2>Still open</h2><ul>
     <li>Features with no options yet (FPS readout, Toggle sprint) keep their gear; it opens a page saying so.</li>
-    <li>Panel darkness is adjustable above (30–50%) so you can pick the value.</li>
-    <li>The LAUNCH button is white (the highlight colour); it could be green instead.</li>
+    <li>Panel darkness now starts at 55%; the slider above still goes 30–65%.</li>
+    <li>Launcher: the time-of-day buttons above preview the scene behind LAUNCH GAME; Auto follows your clock.</li>
   </ul></div>
 </div>
 
@@ -363,14 +407,16 @@ button { cursor: pointer; }
   };
   const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${P[name]}</svg>`;
 
+  // An even triangle on a 24 x 18 box, its corners rounded by a round-joined
+  // stroke of its own colour; the "no change" line is as wide as its base.
   const fpsMark = (d) => {
     const shape = d > 0
-      ? `<path d="M12 3.5 Q13 2 14 3.5 L22 15.5 Q23 17 21.2 17 H2.8 Q1 17 2 15.5 Z" fill="var(--green)" stroke="var(--green)" stroke-width="1.6" stroke-linejoin="round" transform="translate(0 1)"/>`
+      ? `<polygon points="12,3 21.5,15 2.5,15" fill="var(--green)" stroke="var(--green)" stroke-width="3" stroke-linejoin="round"/>`
       : d < 0
-        ? `<path d="M12 18.5 Q13 20 14 18.5 L22 6.5 Q23 5 21.2 5 H2.8 Q1 5 2 6.5 Z" fill="var(--red)" stroke="var(--red)" stroke-width="1.6" stroke-linejoin="round" transform="translate(0 -1)"/>`
-        : `<rect x="2" y="9" width="20" height="4" rx="2" fill="var(--grey)"/>`;
+        ? `<polygon points="12,15 21.5,3 2.5,3" fill="var(--red)" stroke="var(--red)" stroke-width="3" stroke-linejoin="round"/>`
+        : `<rect x="1" y="7" width="22" height="4" rx="2" fill="var(--grey)"/>`;
     const what = d > 0 ? "Raises FPS" : d < 0 ? "Lowers FPS" : "No change to FPS";
-    return `<div class="fpsmark" title="${what}"><svg viewBox="0 0 24 22" aria-hidden="true">${shape}</svg><span>FPS</span></div>`;
+    return `<div class="fpsmark" title="${what}"><svg viewBox="0 0 24 18" aria-hidden="true">${shape}</svg><span>FPS</span></div>`;
   };
 
   // ---------- state ----------
@@ -828,22 +874,35 @@ button { cursor: pointer; }
   function faceUrl(palette) {
     const c = document.createElement("canvas"); c.width = 8; c.height = 8;
     const g = c.getContext("2d");
-    const rows = palette.rows;
-    rows.forEach((row, y) => [...row].forEach((ch, x) => { g.fillStyle = palette.map[ch]; g.fillRect(x, y, 1, 1); }));
+    palette.rows.forEach((row, y) => [...row].forEach((ch, x) => { g.fillStyle = palette.map[ch]; g.fillRect(x, y, 1, 1); }));
     return c.toDataURL();
   }
   const steve = faceUrl({ map: { h: "#2c1e0e", k: "#b88a6e", d: "#9c6e52", w: "#ffffff", e: "#4a3aa8", m: "#6a4030", n: "#8d5d43" },
     rows: ["hhhhhhhh", "hhhhhhhh", "hkkkkkkh", "kkkkkkkk", "kweknewk", "kkknnkkk", "kkmmmmkk", "kkdddddk"] });
   const alex = faceUrl({ map: { h: "#e98a3a", k: "#f1c9a5", d: "#e2b28c", w: "#ffffff", e: "#3d8a3d", m: "#c98a6e", n: "#e6b896" },
     rows: ["hhhhhhhh", "hhhhhhhh", "hkkkkkkh", "hkkkkkkh", "hweknewh", "hkknnkkk", "kkkmmkkk", "kkdddddk"] });
+  const ASH_ON = ["Crosshair", "Hit indicator", "FPS readout", "Toggle sprint"];
   const L = {
-    page: "play", sel: 0, menu: false, launching: false,
+    page: "play", sel: 0, menu: false, launching: false, tod: "auto", after: "minimise", defMem: 4, confirmDelete: false,
     instances: [
-      { name: "1.21.11", sub: "ash client · last played 2 hours ago", badge: "1.21", mem: 4 },
-      { name: "1.8.9", sub: "ash client · last played yesterday", badge: "1.8", mem: 3 },
-      { name: "1.21.11 vanilla", sub: "vanilla · last played 5 days ago", badge: "1.21", mem: 4 }
-    ],
-    after: "minimise", defMem: 4, confirmDelete: false
+      { name: "1.21.11", kind: "ash client", version: "1.21.11", ago: "2 hours ago", badge: "1.21", mem: 4, ash: true,
+        play: "14 h 20 m", session: "48 min", mods: ["Sodium"],
+        servers: [
+          { name: "Hypixel", addr: "mc.hypixel.net", players: "31,402", c: "#e0a526", l: "H" },
+          { name: "MCC Island", addr: "play.mccisland.net", players: "4,118", c: "#d94fa0", l: "M" },
+          { name: "Wynncraft", addr: "play.wynncraft.com", players: "1,902", c: "#3f9b4a", l: "W" }
+        ] },
+      { name: "1.8.9", kind: "ash client", version: "1.8.9", ago: "yesterday", badge: "1.8", mem: 3, ash: true,
+        play: "62 h 05 m", session: "1 h 12 min", mods: [],
+        servers: [
+          { name: "Hypixel", addr: "mc.hypixel.net", players: "31,402", c: "#e0a526", l: "H" },
+          { name: "Minemen Club", addr: "play.minemen.club", players: "2,315", c: "#d2443a", l: "M" },
+          { name: "PvP Land", addr: "pvp.land", players: "812", c: "#3a78d2", l: "P" }
+        ] },
+      { name: "1.21.11 vanilla", kind: "vanilla", version: "1.21.11", ago: "5 days ago", badge: "1.21", mem: 4, ash: false,
+        play: "3 h 40 m", session: "25 min", mods: [],
+        servers: [ { name: "Our SMP", addr: "smp.example.net", players: null, c: "#6b8f3a", l: "S" } ] }
+    ]
   };
   const lroot = $("#launcher");
   function launcherShell() {
@@ -862,8 +921,8 @@ button { cursor: pointer; }
         <div class="winctl"><button aria-label="Minimise">${icon("min")}</button><button aria-label="Maximise">${icon("max")}</button><button class="x" aria-label="Close">${icon("x")}</button></div>
       </header>
       <nav class="lside">
-        ${[["play", "Play", "play"], ["mods", "Mods", "blocks"], ["news", "News", "news"], ["settings", "Settings", "gear"]].map(([id, label, ic]) => `<button class="nav" data-nav="${id}">${icon(ic)}${label}</button>`).join("")}
-        <span class="ver">ash 0.1.0</span>
+        ${[["play", "Play", "play"], ["mods", "Mods", "blocks"], ["news", "News", "news"]].map(([id, label, ic]) => `<button class="nav" data-nav="${id}" data-label="${label}" aria-label="${label}">${icon(ic)}</button>`).join("")}
+        <button class="nav bottom" data-nav="settings" data-label="Settings" aria-label="Settings">${icon("gear")}</button>
       </nav>
       <main class="lmain" id="lmain"></main>
     </div>`;
@@ -876,17 +935,42 @@ button { cursor: pointer; }
     lrender();
   }
   function lgo(page) { L.page = page; L.confirmDelete = false; lrender(); }
+
+  function serversCard(i) {
+    return `<div class="card glass" id="servers-card"><h3>Recent servers <small>${i.name}</small></h3><div class="scroll">${i.servers.map((s, n) => `<div class="srow">
+        <div class="sicon" style="background:${s.c}">${s.l}</div>
+        <div class="t"><b>${s.name}</b><small><i class="dot${s.players ? "" : " off"}"></i>${s.players ? s.players + " online" : "Offline"} · ${s.addr}</small></div>
+        <button class="join" data-join="${n}" ${s.players ? "" : "disabled"}>Join</button></div>`).join("")}</div>
+      <span class="hint">Join starts ${i.name} straight into the server.</span></div>`;
+  }
+  function glanceCard(i) {
+    const features = i.ash
+      ? `<div class="fchips">${ASH_ON.map((f) => `<span class="fchip">${f}</span>`).join("")}</div>`
+      : `<b style="color:var(--ink-2);font-weight:500">Vanilla, no ash client</b>`;
+    return `<div class="card glass" id="glance-card"><h3>This instance <small>${i.name}</small></h3>
+      <div class="kv"><span>ash features on</span>${features}</div>
+      <div class="kv"><span>Play time</span><b>${i.play}</b></div>
+      <div class="kv"><span>Last session</span><b>${i.ago} · ${i.session}</b></div>
+      <div class="kv"><span>Mods</span><b>${i.mods.length ? i.mods.join(", ") : "None"}</b></div>
+      ${i.ash ? `<span class="hint">Change ash features in game with Right Shift.</span>` : ""}
+      <button class="pill" data-icog="${L.sel}">${icon("gear")}Instance settings</button></div>`;
+  }
+  function instancesCard() {
+    return `<div class="card glass"><h3>Instances <button class="mini" data-new>${icon("plus")}New</button></h3>
+      <div class="ilist" role="listbox" aria-label="Instances">${L.instances.map((i, n) => `<div class="irow" role="option" aria-selected="${n === L.sel}" data-inst="${n}">
+        <div class="vbadge">${i.badge}</div><div class="t"><b>${i.name}</b><small>${i.kind} · ${i.ago}</small></div>
+        <button class="gear" data-icog="${n}" aria-label="${i.name} settings">${icon("gear")}</button></div>`).join("")}</div></div>`;
+  }
   function playPage() {
     const sel = L.instances[L.sel];
+    const welcome = `<h2 class="welcome">Welcome back, <img class="face" src="${steve}" alt=""> Steve!</h2>`;
     if (!sel) {
-      return `<div class="lhead"><h2>Play</h2><button class="pill">${icon("plus")}New instance</button></div>
-        <div class="emptystate">${icon("blocks")}<b>No instances yet</b><span>Create one to choose a version and play.</span></div>`;
+      return `${welcome}<div class="emptystate">${icon("blocks")}<b>No instances yet</b><span>Create one to choose a version and play.</span><button class="pill" data-new>${icon("plus")}New instance</button></div>`;
     }
-    return `<div class="lhead"><h2>Play</h2><button class="pill">${icon("plus")}New instance</button></div>
-      <div class="glass ilist" role="listbox" aria-label="Instances">${L.instances.map((i, n) => `<div class="irow" role="option" aria-selected="${n === L.sel}" data-inst="${n}">
-        <div class="vbadge">${i.badge}</div><div class="t"><b>${i.name}</b><small>${i.sub}</small></div>
-        <button class="gear" data-icog="${n}" aria-label="${i.name} settings">${icon("gear")}</button></div>`).join("")}</div>
-      <button class="launch" id="launch"><div class="bar" id="lbar"></div><span id="ltext">LAUNCH</span><small id="lsub">${sel.name}</small></button>`;
+    return `${welcome}
+      <div class="hero"><canvas id="heroc" width="324" height="62"></canvas>
+        <button class="launch" id="launch"><div class="bar" id="lbar"></div><span id="ltext">LAUNCH GAME</span><small id="lsub">${sel.name} · ${sel.kind}</small></button></div>
+      <div class="below">${serversCard(sel)}${glanceCard(sel)}${instancesCard()}</div>`;
   }
   function instancePage() {
     const i = L.instances[L.sel];
@@ -904,11 +988,9 @@ button { cursor: pointer; }
       </div>`;
   }
   function modsPage() {
+    const row = (name, what, on) => `<div class="irow"><div class="vbadge">${icon("blocks").replace('class="ico"', 'class="ico" style="width:55%;height:55%"')}</div><div class="t"><b>${name}<span class="tag">EXAMPLE</span></b><small>${what}</small></div>${switchHtml(name, on).replace('class="switch"', 'class="switch" style="margin-left:auto"')}</div>`;
     return `<div class="lhead"><h2>Mods</h2><button class="pill">${icon("plus")}Add mod</button></div>
-      <div class="glass ilist" style="flex:none">
-        <div class="irow"><div class="vbadge">${icon("blocks").replace('class="ico"', 'class="ico" style="width:55%;height:55%"')}</div><div class="t"><b>Sodium<span class="tag">EXAMPLE</span></b><small>Faster rendering · 1.21.11</small></div>${switchHtml("m1", true).replace('class="switch"', 'class="switch" style="margin-left:auto"')}</div>
-        <div class="irow"><div class="vbadge">${icon("blocks").replace('class="ico"', 'class="ico" style="width:55%;height:55%"')}</div><div class="t"><b>Iris Shaders<span class="tag">EXAMPLE</span></b><small>Shader packs · 1.21.11</small></div>${switchHtml("m2", false).replace('class="switch"', 'class="switch" style="margin-left:auto"')}</div>
-      </div>
+      <div class="glass modlist">${row("Sodium", "Faster rendering · 1.21.11", true)}${row("Iris Shaders", "Shader packs · 1.21.11", false)}</div>
       <div style="color:var(--ink-3)">Mods you add here load only in the selected instance, and only when switched on.</div>`;
   }
   function newsPage() {
@@ -924,25 +1006,64 @@ button { cursor: pointer; }
       </div>`;
   }
   function lrender() {
+    cancelAnimationFrame(heroLoop);
     lroot.querySelectorAll("[data-nav]").forEach((n) => n.setAttribute("aria-current", (L.page === n.dataset.nav || (L.page === "instance" && n.dataset.nav === "play")) ? "page" : "false"));
     const host = $("#lmain");
     const page = document.createElement("div");
     page.className = "lpage entering";
     page.innerHTML = { play: playPage, instance: instancePage, mods: modsPage, news: newsPage, settings: settingsPage }[L.page]();
     const old = host.querySelector(".lpage");
-    const swap = () => { host.innerHTML = ""; host.appendChild(page); bindSliders(page); nextFrame(() => page.classList.remove("entering")); };
+    const swap = () => {
+      host.innerHTML = ""; host.appendChild(page); bindSliders(page);
+      if ($("#heroc")) startHero();
+      nextFrame(() => page.classList.remove("entering"));
+    };
     if (old) { old.classList.add("leaving"); setTimeout(swap, 110); } else swap();
+  }
+  function selectInstance(n) {
+    L.sel = n;
+    lroot.querySelectorAll("[data-inst]").forEach((r) => r.setAttribute("aria-selected", +r.dataset.inst === n));
+    const i = L.instances[n];
+    $("#lsub").textContent = `${i.name} · ${i.kind}`;
+    const swapCard = (id, html) => {
+      const el = $(id);
+      el.style.transition = "opacity 120ms ease-out"; el.style.opacity = "0";
+      setTimeout(() => { const t = document.createElement("div"); t.innerHTML = html; const fresh = t.firstElementChild; fresh.style.opacity = "0"; fresh.style.transition = "opacity 180ms ease-out"; el.replaceWith(fresh); nextFrame(() => (fresh.style.opacity = "1")); }, 120);
+    };
+    swapCard("#servers-card", serversCard(i));
+    swapCard("#glance-card", glanceCard(i));
+  }
+  function launch(subtitle) {
+    if (L.launching) return;
+    L.launching = true;
+    let p = 0;
+    $("#ltext").textContent = "PREPARING";
+    const step = () => {
+      if (!$("#lbar")) { L.launching = false; return; }
+      p = Math.min(100, p + 4 + Math.random() * 9);
+      $("#lbar").style.width = p + "%";
+      $("#lsub").textContent = p < 100 ? `Checking game files · ${Math.round(p)}%` : subtitle || "Starting Minecraft";
+      if (p < 100) setTimeout(step, 140);
+      else setTimeout(() => {
+        if (!$("#ltext")) { L.launching = false; return; }
+        $("#ltext").textContent = "PLAYING";
+        setTimeout(() => {
+          L.launching = false;
+          if (!$("#ltext")) return;
+          const i = L.instances[L.sel];
+          $("#ltext").textContent = "LAUNCH GAME"; $("#lsub").textContent = `${i.name} · ${i.kind}`; $("#lbar").style.width = "0";
+        }, 1800);
+      }, 500);
+    };
+    step();
   }
   lroot.addEventListener("click", (e) => {
     const cog = e.target.closest("[data-icog]");
-    if (cog) { L.sel = +cog.dataset.icog; lgo("instance"); return; }
+    if (cog) { e.stopPropagation(); L.sel = +cog.dataset.icog; lgo("instance"); return; }
     const row = e.target.closest("[data-inst]");
-    if (row && !L.launching) {
-      L.sel = +row.dataset.inst;
-      lroot.querySelectorAll("[data-inst]").forEach((r) => r.setAttribute("aria-selected", r === row));
-      $("#lsub").textContent = L.instances[L.sel].name;
-      return;
-    }
+    if (row && !L.launching) { if (+row.dataset.inst !== L.sel) selectInstance(+row.dataset.inst); return; }
+    const join = e.target.closest("[data-join]");
+    if (join) { const s = L.instances[L.sel].servers[+join.dataset.join]; launch(`Joining ${s.addr}`); return; }
     if (e.target.closest("[data-lback]")) { lgo("play"); return; }
     const del = e.target.closest("[data-del]");
     if (del) {
@@ -955,19 +1076,83 @@ button { cursor: pointer; }
     if (after) { L.after = after.dataset.after; lroot.querySelectorAll("[data-after]").forEach((b) => b.setAttribute("aria-pressed", b === after)); return; }
     const sw = e.target.closest("[data-switch]");
     if (sw) { sw.setAttribute("aria-checked", sw.getAttribute("aria-checked") !== "true"); return; }
-    if (e.target.closest("#launch") && !L.launching) {
-      L.launching = true;
-      let p = 0;
-      $("#ltext").textContent = "PREPARING";
-      const step = () => {
-        p = Math.min(100, p + 4 + Math.random() * 9);
-        $("#lbar").style.width = p + "%";
-        $("#lsub").textContent = p < 100 ? `Checking game files · ${Math.round(p)}%` : "Starting Minecraft";
-        if (p < 100) setTimeout(step, 140);
-        else setTimeout(() => { $("#ltext").textContent = "PLAYING"; $("#lsub").textContent = L.instances[L.sel].name; setTimeout(() => { L.launching = false; $("#ltext").textContent = "LAUNCH"; $("#lbar").style.width = "0"; }, 1800); }, 500);
-      };
-      step();
+    if (e.target.closest("#launch")) launch();
+  });
+
+  // ---------- the LAUNCH area's pixel scene ----------
+  let heroLoop = 0;
+  const TOD = {
+    day: { sky: ["#5f93ee", "#b7d0fb"], far: "#8eadcf", tint: null, cloud: "rgba(255,255,255,.92)" },
+    sunset: { sky: ["#2f3470", "#d9715a", "#f6c27a"], far: "#7a5f86", tint: ["rgba(255,120,60,.22)", "rgba(40,10,40,.18)"], cloud: "rgba(255,190,170,.85)" },
+    night: { sky: ["#03061a", "#141d48"], far: "#1c2440", tint: ["rgba(8,12,40,.66)"], cloud: "rgba(150,160,200,.22)" }
+  };
+  function todNow() {
+    if (L.tod !== "auto") return L.tod;
+    const h = new Date().getHours();
+    return h >= 7 && h < 17 ? "day" : (h >= 17 && h < 20) || (h >= 5 && h < 7) ? "sunset" : "night";
+  }
+  function buildLayers(tod) {
+    const P = 648, H = 62, conf = TOD[tod];
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const layer = () => { const c = document.createElement("canvas"); c.width = P; c.height = H; return c; };
+    const wave = (x, parts) => parts.reduce((s, [k, a]) => s + a * Math.sin((2 * Math.PI * k * x) / P), 0);
+    const clouds = layer(), cg = clouds.getContext("2d");
+    cg.fillStyle = conf.cloud;
+    for (let n = 0; n < 9; n++) { const x = Math.floor(rnd() * P), y = 4 + Math.floor(rnd() * 14), w = 18 + Math.floor(rnd() * 26); cg.fillRect(x, y, w, 4); cg.fillRect(x + 5, y - 2, w - 12, 2); if (x + w > P) cg.fillRect(x - P, y, w, 4); }
+    const far = layer(), fg = far.getContext("2d");
+    fg.fillStyle = conf.far;
+    for (let x = 0; x < P; x++) { const y = Math.round(30 + wave(x, [[2, 4], [7, 2]])); fg.fillRect(x, y, 1, H - y); }
+    const near = layer(), ng = near.getContext("2d");
+    const heights = [];
+    for (let x = 0; x < P; x++) heights.push(Math.round((42 + wave(x, [[3, 4], [9, 2]])) / 2) * 2);
+    for (let x = 0; x < P; x++) {
+      for (let y = heights[x]; y < H; y++) {
+        const d = y - heights[x], base = d < 2 ? [92, 156, 58] : d < 14 ? [134, 96, 67] : [118, 118, 118], n = (rnd() - 0.5) * 22;
+        ng.fillStyle = `rgb(${base[0] + n | 0},${base[1] + n | 0},${base[2] + n | 0})`; ng.fillRect(x, y, 1, 1);
+      }
     }
+    [40, 150, 230, 380, 470, 590].forEach((tx) => {
+      const base = heights[tx], th = 10 + Math.floor(rnd() * 6);
+      ng.fillStyle = "#6b4f2c"; ng.fillRect(tx, base - th, 3, th);
+      for (let i = 0; i < 60; i++) { ng.fillStyle = rnd() > 0.5 ? "#3e7a2c" : "#356a25"; ng.fillRect(tx - 7 + Math.floor(rnd() * 17), base - th - 7 + Math.floor(rnd() * 10), 2, 2); }
+    });
+    if (conf.tint) [far, near].forEach((c) => { const g = c.getContext("2d"); g.globalCompositeOperation = "source-atop"; conf.tint.forEach((t) => { g.fillStyle = t; g.fillRect(0, 0, P, H); }); });
+    const stars = [];
+    for (let n = 0; n < 70; n++) stars.push([Math.floor(rnd() * 324), Math.floor(rnd() * 34), rnd() * 6.28]);
+    return { P, clouds, far, near, stars };
+  }
+  function startHero() {
+    const c = $("#heroc"), g = c.getContext("2d"), W = c.width, H = c.height;
+    let tod = todNow(), layers = buildLayers(tod);
+    const t0 = performance.now();
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frame = (now) => {
+      if (todNow() !== tod) { tod = todNow(); layers = buildLayers(tod); }
+      const t = still ? 0 : (now - t0) / 1000, conf = TOD[tod];
+      const sky = g.createLinearGradient(0, 0, 0, H * 0.7);
+      conf.sky.forEach((col, k) => sky.addColorStop(k / (conf.sky.length - 1), col));
+      g.fillStyle = sky; g.fillRect(0, 0, W, H);
+      if (tod === "night") {
+        layers.stars.forEach(([x, y, ph]) => { g.fillStyle = `rgba(255,255,255,${0.35 + 0.35 * Math.sin(t * 1.3 + ph)})`; g.fillRect(x, y, 1, 1); });
+        g.fillStyle = "#e8ecf5"; g.fillRect(64, 8, 8, 8); g.fillStyle = "#c6ccd9"; g.fillRect(66, 10, 2, 2); g.fillRect(69, 13, 1, 1);
+      } else if (tod === "sunset") {
+        g.fillStyle = "#ffb36b"; g.fillRect(232, 24, 14, 14); g.fillStyle = "rgba(255,170,100,.35)"; g.fillRect(228, 20, 22, 22);
+      } else {
+        g.fillStyle = "#fff6c8"; g.fillRect(262, 7, 10, 10);
+      }
+      const draw = (img, speed) => { const ox = Math.floor((t * speed) % layers.P); g.drawImage(img, -ox, 0); g.drawImage(img, layers.P - ox, 0); };
+      draw(layers.clouds, 3); draw(layers.far, 1.2); draw(layers.near, 4);
+      heroLoop = requestAnimationFrame(frame);
+    };
+    cancelAnimationFrame(heroLoop);
+    heroLoop = requestAnimationFrame(frame);
+  }
+  document.querySelector("#tod").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tod]");
+    if (!b) return;
+    L.tod = b.dataset.tod;
+    document.querySelectorAll("#tod [data-tod]").forEach((x) => x.setAttribute("aria-pressed", x === b));
   });
 
   // ---------- view switch ----------
@@ -979,6 +1164,9 @@ button { cursor: pointer; }
     lroot.hidden = v !== "launcher";
     $("#toggle-panel").hidden = v !== "game";
     $(".mock-range").hidden = v !== "game";
+    $("#tod").hidden = v !== "launcher";
+    if (v === "game") cancelAnimationFrame(heroLoop);
+    else if (lroot.firstChild && $("#heroc")) startHero();
     if (v === "launcher" && !lroot.firstChild) launcherShell();
     if (v === "game" && S.open && S.page === "crosshair") startPreview("cross");
   }
