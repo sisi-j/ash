@@ -1,0 +1,645 @@
+<title>ash UI prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&family=Pixelify+Sans:wght@400;500&family=Sora:wght@500;600&display=swap">
+<style>
+/* PROTOTYPE - throwaway. Three in-game menu designs and three launcher layouts for ash,
+   switchable from the floating bar (or the arrow keys). Layout concept: a 16:9 "screen"
+   that scales with its container, holding either a simulated game view or the launcher
+   window, with the page's notes and the live ash.properties beneath it.
+   One deliberate look: ash's grayscale, dark. */
+:root {
+  color-scheme: dark;
+  --bg: #0E0E0F;
+  --panel: #141416;
+  --raise: #1C1C1F;
+  --line: #2A2A2E;
+  --emph: #3A3A3C;
+  --fg: #FAFAFA;
+  --muted: #8B8C90;
+  --scrim: rgba(14, 14, 15, 0.78);
+  --scrim-light: rgba(14, 14, 15, 0.38);
+  --display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  --pixel: "Pixelify Sans", "Courier New", monospace;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--body); font-size: 15px; line-height: 1.5; padding: 20px 16px 96px; }
+.page { max-width: 1280px; margin: 0 auto; display: grid; gap: 18px; }
+.intro { display: grid; gap: 6px; max-width: 70ch; }
+.intro h1 { font-family: var(--display); font-weight: 600; font-size: 1.5rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.intro p { margin: 0; color: var(--muted); }
+.eyebrow { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+/* ---- the screen ---- */
+.stage { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; container-type: inline-size; border: 1px solid var(--line); background: #000; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ui { position: absolute; inset: 0; font-size: clamp(6.5px, 1.18cqw, 15px); font-family: var(--ui-font, var(--body)); color: var(--fg); line-height: 1.35; }
+.ui.font-game { --ui-font: var(--pixel); --ui-head: var(--pixel); }
+.ui .head { font-family: var(--ui-head, var(--display)); font-weight: 600; letter-spacing: -0.01em; }
+.ui .num { font-family: var(--ui-mono, var(--mono)); font-variant-numeric: tabular-nums; }
+.ui.font-game .num { --ui-mono: var(--pixel); }
+.ui button, .ui input { font: inherit; color: inherit; }
+.ui button { cursor: pointer; }
+.ui :focus-visible { outline: 0.12em solid var(--fg); outline-offset: 0.12em; }
+.muted { color: var(--muted); }
+
+/* shared controls */
+.toggle { width: 2.6em; height: 1.4em; border-radius: 0.7em; background: var(--emph); border: 0; position: relative; flex: none; padding: 0; }
+.toggle::after { content: ""; position: absolute; top: 0.2em; left: 0.2em; width: 1em; height: 1em; border-radius: 50%; background: var(--muted); transition: transform .14s, background .14s; }
+.toggle[aria-pressed="true"] { background: var(--fg); }
+.toggle[aria-pressed="true"]::after { transform: translateX(1.2em); background: var(--bg); }
+.toggle:disabled { opacity: .35; cursor: not-allowed; }
+.btn { background: var(--raise); border: 1px solid var(--line); padding: 0.45em 0.9em; border-radius: 0.35em; }
+.btn:hover { border-color: var(--emph); background: var(--emph); }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; }
+.icon-btn { background: transparent; border: 0; color: var(--muted); padding: 0.3em 0.5em; }
+.icon-btn:hover { color: var(--fg); }
+.search { background: var(--raise); border: 1px solid var(--line); border-radius: 0.35em; padding: 0.45em 0.8em; min-width: 0; }
+.search::placeholder { color: var(--muted); }
+.opts { display: grid; gap: 0.9em; }
+.opt { display: grid; gap: 0.35em; }
+.opt-row { display: flex; align-items: center; justify-content: space-between; gap: 1em; }
+.opt label, .opt .label { color: var(--muted); font-size: 0.86em; }
+.opt input[type=range] { width: 100%; accent-color: var(--fg); }
+.seg { display: flex; flex-wrap: wrap; gap: 0.3em; }
+.seg button { background: var(--raise); border: 1px solid var(--line); border-radius: 0.3em; padding: 0.3em 0.7em; color: var(--muted); }
+.seg button[aria-pressed="true"] { border-color: var(--fg); color: var(--fg); }
+.swatches { display: flex; flex-wrap: wrap; gap: 0.35em; align-items: center; }
+.swatch { width: 1.4em; height: 1.4em; border-radius: 0.25em; border: 1px solid var(--emph); padding: 0; }
+.swatch[aria-pressed="true"] { outline: 0.14em solid var(--fg); outline-offset: 0.12em; }
+.hex { width: 6.5em; background: var(--raise); border: 1px solid var(--line); border-radius: 0.3em; padding: 0.25em 0.5em; }
+.note { font-size: 0.82em; color: var(--muted); }
+.blocked { display: inline-flex; align-items: center; gap: 0.4em; font-size: 0.8em; color: var(--muted); border: 1px dashed var(--emph); border-radius: 0.3em; padding: 0.15em 0.5em; }
+.preview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4em; }
+.preview canvas { width: 100%; aspect-ratio: 1; border-radius: 0.3em; border: 1px solid var(--line); image-rendering: pixelated; }
+.preview span { display: block; text-align: center; font-size: 0.75em; color: var(--muted); margin-top: 0.2em; }
+.hint { font-size: 0.8em; color: var(--muted); }
+.kbd { font-family: var(--ui-mono, var(--mono)); border: 1px solid var(--emph); border-radius: 0.25em; padding: 0 0.35em; font-size: 0.85em; }
+.closed-hint { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); background: var(--scrim); padding: 0.5em 1em; border-radius: 0.4em; border: 1px solid var(--line); font-size: 0.95em; }
+
+/* ---- A: panel ---- */
+.a-wrap { position: absolute; inset: 0; background: var(--scrim-light); display: grid; place-items: center; }
+.a-panel { width: 80%; height: 82%; background: var(--panel); border: 1px solid var(--line); border-radius: 0.6em; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+.a-top { display: flex; align-items: center; gap: 0.8em; padding: 0.8em 1em; border-bottom: 1px solid var(--line); }
+.a-top .wordmark { font-size: 1.35em; margin-right: 0.4em; }
+.a-top .search { flex: 1; }
+.a-body { display: grid; grid-template-columns: 11em 1fr; min-height: 0; }
+.a-cats { border-right: 1px solid var(--line); padding: 0.7em 0.5em; display: grid; align-content: start; gap: 0.15em; }
+.a-cats button { display: flex; justify-content: space-between; background: transparent; border: 0; color: var(--muted); padding: 0.45em 0.7em; border-radius: 0.35em; text-align: left; }
+.a-cats button[aria-pressed="true"] { background: var(--raise); color: var(--fg); }
+.a-main { padding: 0.9em; overflow: auto; min-height: 0; }
+.a-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7em; }
+.card { background: var(--raise); border: 1px solid var(--line); border-radius: 0.5em; padding: 0.8em; display: grid; gap: 0.5em; align-content: start; text-align: left; }
+.card:hover { border-color: var(--emph); }
+.card .card-top { display: flex; justify-content: space-between; align-items: center; gap: 0.6em; }
+.card .name { font-weight: 600; }
+.card .desc { color: var(--muted); font-size: 0.85em; min-height: 2.6em; }
+.card .more { background: transparent; border: 0; color: var(--muted); padding: 0; text-align: left; font-size: 0.85em; }
+.card .more:hover { color: var(--fg); }
+.a-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 1.2em; }
+.a-detail h2 { margin: 0; font-size: 1.3em; }
+.a-foot { display: flex; justify-content: space-between; gap: 1em; padding: 0.55em 1em; border-top: 1px solid var(--line); font-size: 0.8em; color: var(--muted); }
+
+/* ---- B: dock ---- */
+.b-dock { position: absolute; left: 0; top: 0; bottom: 0; width: 31%; background: var(--scrim); backdrop-filter: blur(2px); border-right: 1px solid var(--line); display: grid; grid-template-rows: auto auto 1fr auto; }
+.b-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9em 1em 0.5em; }
+.b-head .wordmark { font-size: 1.3em; }
+.b-search { padding: 0 1em 0.6em; display: grid; }
+.b-list { overflow: auto; padding: 0 0.6em 0.6em; min-height: 0; }
+.b-group { font-size: 0.72em; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 0.9em 0.4em 0.3em; }
+.b-row { border-radius: 0.4em; }
+.b-row[data-open="true"] { background: var(--raise); }
+.b-line { display: flex; align-items: center; gap: 0.6em; padding: 0.5em 0.4em; }
+.b-line .name { flex: 1; text-align: left; background: transparent; border: 0; padding: 0; }
+.b-line .chev { color: var(--muted); background: transparent; border: 0; padding: 0 0.2em; }
+.b-opts { padding: 0.2em 0.6em 0.9em; }
+.b-foot { padding: 0.7em 1em; border-top: 1px solid var(--line); display: flex; gap: 0.5em; align-items: center; justify-content: space-between; }
+
+/* ---- C: HUD-first ---- */
+.c-wrap { position: absolute; inset: 0; background: var(--scrim-light); }
+.c-hint { position: absolute; left: 1.2em; top: 1em; font-size: 0.85em; background: var(--scrim); padding: 0.4em 0.8em; border-radius: 0.35em; border: 1px solid var(--line); }
+.c-bar { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); width: 46%; background: var(--panel); border: 1px solid var(--line); border-radius: 0.6em; padding: 0.6em; display: grid; gap: 0.5em; }
+.c-bar .row { display: flex; gap: 0.5em; align-items: center; }
+.c-bar .search { flex: 1; }
+.c-results { display: flex; flex-wrap: wrap; gap: 0.35em; }
+.chip { display: inline-flex; align-items: center; gap: 0.45em; background: var(--raise); border: 1px solid var(--line); border-radius: 1em; padding: 0.25em 0.7em; }
+.chip .dot { width: 0.5em; height: 0.5em; border-radius: 50%; background: var(--emph); }
+.chip[data-on="true"] .dot { background: var(--fg); }
+.inspector { position: absolute; width: 30%; max-height: 64%; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 0.6em; padding: 0.9em; display: grid; gap: 0.8em; }
+.inspector .opt-row h3 { margin: 0; font-size: 1.05em; }
+
+/* HUD editing boxes, shared by every variant */
+.hud-box { position: absolute; border: 0.12em dashed var(--fg); border-radius: 0.15em; cursor: grab; touch-action: none; background: rgba(250,250,250,0.06); }
+.hud-box:hover, .hud-box.dragging { background: rgba(250,250,250,0.16); }
+.hud-box .tag { position: absolute; left: 0; top: 100%; margin-top: 0.3em; font-size: 0.72em; white-space: nowrap; background: var(--scrim); padding: 0.1em 0.45em; border-radius: 0.2em; color: var(--muted); pointer-events: none; }
+.hud-box.static { cursor: pointer; border-style: dotted; }
+.hud-done { position: absolute; right: 1.2em; top: 1em; }
+
+/* ---- launcher ---- */
+.l { position: absolute; inset: 0; background: var(--bg); font-family: var(--body); display: grid; grid-template-rows: auto 1fr; }
+.l-top { display: flex; align-items: center; gap: 1em; padding: 0.7em 1.2em; border-bottom: 1px solid var(--line); }
+.l-top .wordmark { font-family: var(--display); font-weight: 600; font-size: 1.3em; }
+.l-top .spacer { flex: 1; }
+.account { display: inline-flex; align-items: center; gap: 0.5em; background: var(--raise); border: 1px solid var(--line); border-radius: 1em; padding: 0.25em 0.8em 0.25em 0.3em; }
+.avatar { width: 1.5em; height: 1.5em; border-radius: 0.25em; background: linear-gradient(135deg, #3A3A3C, #8B8C90); }
+.la { display: grid; grid-template-columns: 15em 1fr; min-height: 0; }
+.la-rail { border-right: 1px solid var(--line); padding: 0.8em 0.6em; display: grid; align-content: start; gap: 0.3em; }
+.la-rail .label { font-size: 0.72em; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 0 0.5em 0.3em; }
+.inst { display: grid; gap: 0.1em; background: transparent; border: 1px solid transparent; border-radius: 0.4em; padding: 0.55em 0.7em; text-align: left; color: var(--fg); }
+.inst[aria-pressed="true"] { background: var(--raise); border-color: var(--line); }
+.inst .meta { font-size: 0.8em; color: var(--muted); }
+.la-main { padding: 2em 2.4em; display: grid; align-content: start; gap: 1.2em; overflow: auto; }
+.la-main h2, .lb h2, .lc h2 { font-family: var(--display); font-weight: 600; margin: 0; font-size: 2.2em; letter-spacing: -0.02em; }
+.facts { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 0.3em 2em; }
+.facts dt { font-size: 0.72em; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 0; }
+.play { background: var(--fg); color: var(--bg); border: 0; border-radius: 0.45em; padding: 0.75em 2.6em; font-weight: 600; font-size: 1.15em; justify-self: start; }
+.play.playing { background: var(--raise); color: var(--fg); border: 1px solid var(--line); }
+.lb { display: grid; grid-template-rows: auto 1fr; gap: 1.2em; padding: 1.4em 1.6em; min-height: 0; overflow: auto; }
+.lb-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.9em; }
+.lb-card { background: var(--panel); border: 1px solid var(--line); border-radius: 0.6em; padding: 1em; display: grid; gap: 0.6em; text-align: left; color: var(--fg); }
+.lb-card[aria-pressed="true"] { border-color: var(--fg); }
+.lb-card .big { font-family: var(--mono); font-size: 2em; letter-spacing: -0.03em; }
+.lb-low { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.2em; }
+.lb-box { background: var(--panel); border: 1px solid var(--line); border-radius: 0.6em; padding: 1em; display: grid; gap: 0.6em; align-content: start; }
+.lb-box h3 { margin: 0; font-family: var(--display); font-weight: 500; font-size: 1em; }
+.changes { display: grid; gap: 0.5em; margin: 0; padding: 0; list-style: none; }
+.changes li { display: grid; grid-template-columns: 4.5em 1fr; gap: 0.6em; font-size: 0.9em; }
+.lc { display: grid; place-items: center; position: relative; }
+.lc-center { display: grid; gap: 1em; justify-items: center; text-align: center; }
+.lc-select { background: var(--panel); border: 1px solid var(--line); border-radius: 0.6em; padding: 0.8em 1.2em; display: grid; gap: 0.1em; min-width: 20em; text-align: left; color: var(--fg); }
+.lc-select .row { display: flex; justify-content: space-between; gap: 1em; align-items: baseline; }
+.lc-list { position: absolute; top: 58%; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 0.6em; padding: 0.4em; display: grid; gap: 0.2em; min-width: 20em; z-index: 2; }
+.lc .play { justify-self: center; font-size: 1.5em; padding: 0.8em 4em; }
+.lc-corner { position: absolute; display: flex; gap: 0.6em; align-items: center; }
+
+/* ---- floating switcher (prototype chrome, not part of the design) ---- */
+.switcher { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; background: #FAFAFA; color: #0E0E0F; padding: 6px 8px; border-radius: 999px; box-shadow: 0 6px 24px rgba(0,0,0,.45); font-family: var(--body); font-size: 13px; z-index: 10; max-width: calc(100% - 32px); }
+.switcher button { font: inherit; border: 0; background: transparent; color: inherit; padding: 6px 10px; border-radius: 999px; cursor: pointer; }
+.switcher button[aria-pressed="true"] { background: #0E0E0F; color: #FAFAFA; }
+.switcher .arrow { font-size: 15px; padding: 4px 10px; }
+.switcher .label { font-weight: 600; min-width: 11em; text-align: center; }
+.switcher .sep { width: 1px; height: 20px; background: #c9c9cc; }
+.switcher :focus-visible { outline: 2px solid #0E0E0F; outline-offset: 2px; }
+
+/* ---- below the screen ---- */
+.below { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; }
+.notes { display: grid; gap: 10px; align-content: start; }
+.notes h2, .props h2 { font-family: var(--display); font-weight: 500; font-size: 1.05rem; margin: 0; }
+.notes ul { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; color: var(--muted); }
+.notes strong { color: var(--fg); font-weight: 500; }
+.props { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.props pre { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; overflow-x: auto; color: var(--muted); }
+.props pre b { color: var(--fg); font-weight: 500; }
+@media (max-width: 760px) { .below { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .toggle::after { transition: none; } }
+</style>
+
+<div class="page">
+  <div class="intro">
+    <span class="eyebrow">Prototype · throwaway · nothing here is saved</span>
+    <h1>ash's in-game menu and launcher, three ways each</h1>
+    <p>Flip between designs with the bar at the bottom or the arrow keys. Everything is clickable: switch features, open their options, change the crosshair, and drag the readouts. Right Shift opens and closes the in-game menu, as it will in game.</p>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="game" aria-label="A simulated Minecraft view with ash's HUD"></canvas>
+    <div class="ui" id="ui"></div>
+  </div>
+
+  <div class="below">
+    <div class="notes" id="notes"></div>
+    <div class="props">
+      <h2>ash.properties, as it would be saved</h2>
+      <pre id="props"></pre>
+    </div>
+  </div>
+</div>
+
+<div class="switcher" role="toolbar" aria-label="Prototype controls">
+  <button type="button" id="sw-game" aria-pressed="true">In game</button>
+  <button type="button" id="sw-launcher" aria-pressed="false">Launcher</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" class="arrow" id="sw-prev" aria-label="Previous design">&larr;</button>
+  <span class="label" id="sw-label" aria-live="polite"></span>
+  <button type="button" class="arrow" id="sw-next" aria-label="Next design">&rarr;</button>
+  <span class="sep" aria-hidden="true" id="sw-font-sep"></span>
+  <button type="button" id="sw-font" aria-pressed="false" title="Show the in-game menu in Minecraft's pixel font">Game font</button>
+</div>
+
+<script>
+(function () {
+  // ---------- data ----------
+  const VARIANTS = {
+    game: [["A", "Panel"], ["B", "Side dock"], ["C", "HUD first"]],
+    launcher: [["A", "Rail"], ["B", "Cards"], ["C", "Focus"]],
+  };
+  const NOTES = {
+    "game-A": ["<strong>Panel.</strong> The closest to Lunar: a centred window with categories down the side, search, and a card per feature. Options open in the panel, with the crosshair previewed over sky, snow and night.", "Good for finding things in a long list. Covers most of the game while it is open.", "<strong>Edit HUD</strong> in the top bar switches to dragging the readouts."],
+    "game-B": ["<strong>Side dock.</strong> A slim column on the left; the game stays visible on the right, so every change is judged in the real view, not a preview.", "Options open inline under each feature. Quicker for small tweaks mid-session.", "Less room for big editors like a colour picker."],
+    "game-C": ["<strong>HUD first.</strong> Opening ash goes straight to your screen: every HUD element is outlined, drag to move, click to edit in place. Features without a place on screen are a search away in the bar at the bottom.", "Fastest for layout and crosshair work. Least like a settings list.", "Click the crosshair or a readout to edit it."],
+    "launcher-A": ["<strong>Rail.</strong> The brief's layout: instances down the left, the selected one's details and Play in the middle, account on top.", "Scales to many instances. Familiar from Lunar."],
+    "launcher-B": ["<strong>Cards.</strong> Instances as cards across the top, with the version as the headline. Room underneath for what changed in ash and this machine's settings.", "Works best with a handful of instances."],
+    "launcher-C": ["<strong>Focus.</strong> One instance and one Play button; everything else is a click away. The calmest of the three.", "Switching instances takes an extra click."],
+  };
+  const CATS = ["All", "PvP", "HUD", "Movement", "Camera", "Performance"];
+  const FEATURES = [
+    { id: "crosshair", name: "Crosshair", cat: "PvP", desc: "Your own crosshair in place of the game's." },
+    { id: "hit", name: "Hit indicator", cat: "PvP", desc: "A mark at the crosshair when the server confirms your hit." },
+    { id: "hitcolour", name: "Hit colour", cat: "PvP", desc: "The colour an entity flashes when it is hurt." },
+    { id: "fps", name: "FPS readout", cat: "HUD", desc: "Your frame rate on screen.", hud: true },
+    { id: "ping", name: "Ping readout", cat: "HUD", desc: "Your latency as the server reports it.", hud: true },
+    { id: "sprint", name: "Toggle sprint", cat: "Movement", desc: "Sprint on a key press instead of a held key." },
+    { id: "freelook", name: "Freelook", cat: "Camera", desc: "Hold a key to look around without turning.", blocked: "Off on this server: Hypixel's rules ban it." },
+    { id: "snaplook", name: "Snaplook", cat: "Camera", desc: "Hold a key for the front view." },
+    { id: "render", name: "Faster rendering", cat: "Performance", desc: "ash's own optimisations for 1.8.9, each measured." },
+  ];
+  const SHAPES = [["cross", "Cross"], ["t", "T"], ["dot", "Dot"], ["box", "Box"]];
+  const SWATCHES = ["#FAFAFA", "#0E0E0F", "#8B8C90", "#FF4D4D", "#4DFF88", "#4DC3FF", "#FFE14D", "#FF4DE1"];
+  const S = {
+    crosshair: { on: true, shape: "cross", arm: 4, gap: 0, thickness: 1, colour: "#FAFAFA", opacity: 100, outline: true },
+    hit: { on: true, colour: "#FAFAFA", duration: 6 },
+    hitcolour: { on: false, colour: "#FF4D4D", strength: 40 },
+    fps: { on: true, colour: "#FAFAFA", background: false, x: 4, y: 4 },
+    ping: { on: true, colour: "#FAFAFA", background: false, x: 4, y: 15 },
+    sprint: { on: true, hud: true },
+    freelook: { on: true, invert: false },
+    snaplook: { on: false },
+    render: { on: true },
+  };
+  const INSTANCES = [
+    { id: "pvp", name: "PvP", version: "1.8.9", loader: "Legacy Fabric", played: "2 hours ago", memory: "4 GB" },
+    { id: "survival", name: "Survival", version: "1.21.11", loader: "Fabric", played: "yesterday", memory: "6 GB" },
+    { id: "vanilla", name: "Vanilla", version: "1.21.11", loader: "Vanilla", played: "3 weeks ago", memory: "4 GB" },
+  ];
+
+  const state = { surface: "game", variant: "A", gameFont: false, open: true, hudEdit: false, cat: "All", query: "", detail: null, expanded: "crosshair", inspect: null, instance: "pvp", playing: false, listOpen: false, hitFlash: 0 };
+
+  // reload-stable choice of design, as a bare #token
+  const tok = (location.hash || "").replace("#", "");
+  const m = tok.match(/^(game|launcher)-([ABC])$/);
+  if (m) { state.surface = m[1]; state.variant = m[2]; }
+
+  const $ = (id) => document.getElementById(id);
+  const ui = $("ui"), canvas = $("game"), stage = $("stage");
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const feature = (id) => FEATURES.find((f) => f.id === id);
+
+  // ---------- the crosshair, as ash draws it: rectangles only ----------
+  function crossPieces(c) {
+    const t = c.thickness, low = -Math.floor(t / 2), near = low + t + c.gap, far = low - c.gap - c.arm;
+    let bars = [];
+    if (c.shape === "dot") bars = [[low, low, t + 1, t + 1]];
+    else if (c.shape === "box") { const r = c.gap + c.arm; bars = [[-r, -r, 2 * r + t, t], [-r, r, 2 * r + t, t], [-r, -r, t, 2 * r + t], [r, -r, t, 2 * r + t]]; }
+    else {
+      bars = [[near, low, c.arm, t], [far, low, c.arm, t], [low, near, t, c.arm]];
+      if (c.shape === "cross") bars.push([low, far, t, c.arm]);
+      if (c.gap === 0) bars.push([low, low, t, t]);
+    }
+    const out = [];
+    if (c.outline) bars.forEach((b) => out.push([b[0] - 1, b[1] - 1, b[2] + 2, b[3] + 2, "#0E0E0F"]));
+    bars.forEach((b) => out.push([...b, c.colour]));
+    return out;
+  }
+  function drawCrosshair(ctx, cx, cy, unit, c) {
+    ctx.globalAlpha = c.opacity / 100;
+    crossPieces(c).forEach(([x, y, w, h, col]) => { ctx.fillStyle = col; ctx.fillRect((cx + x) * unit, (cy + y) * unit, w * unit, h * unit); });
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- the simulated game ----------
+  const GUI_W = 427, GUI_H = 240;
+  function rand(i) { const x = Math.sin(i * 127.1) * 43758.5453; return x - Math.floor(x); }
+  function drawGame() {
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.round(stage.clientWidth * dpr), H = Math.round(stage.clientHeight * dpr);
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    const u = W / GUI_W;
+    if (state.surface !== "game") { ctx.fillStyle = "#0E0E0F"; ctx.fillRect(0, 0, W, H); return; }
+    // world
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.62);
+    sky.addColorStop(0, "#6F9CF2"); sky.addColorStop(1, "#BCD3FB");
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#FFF4C2"; ctx.fillRect(330 * u, 22 * u, 18 * u, 18 * u);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    [[40, 34, 60], [150, 18, 44], [250, 44, 70]].forEach(([x, y, w]) => ctx.fillRect(x * u, y * u, w * u, 7 * u));
+    const B = 8;
+    for (let i = 0; i < GUI_W / B + 1; i++) {
+      const h = 2 + Math.floor(rand(i) * 3) + (i > 30 && i < 44 ? 2 : 0);
+      ctx.fillStyle = "#5E8C46"; ctx.fillRect(i * B * u, (140 - h * B) * u, B * u, h * B * u);
+      ctx.fillStyle = "#4F7A3B"; ctx.fillRect(i * B * u, (140 - h * B) * u, B * u, 2 * u);
+    }
+    ctx.fillStyle = "#6BA84E"; ctx.fillRect(0, 140 * u, W, 12 * u);
+    ctx.fillStyle = "#86673F"; ctx.fillRect(0, 152 * u, W, H - 152 * u);
+    for (let i = 0; i < 120; i++) { ctx.fillStyle = "rgba(60,40,20,0.35)"; ctx.fillRect(rand(i + 3) * W, (156 + rand(i + 9) * 84) * u, 3 * u, 3 * u); }
+    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    for (let x = 0; x < GUI_W; x += 16) ctx.fillRect(x * u, 152 * u, 0.6 * u, H);
+    ctx.fillStyle = "#6B4F2E"; ctx.fillRect(84 * u, 100 * u, 8 * u, 40 * u);
+    ctx.fillStyle = "#3E7A2E"; ctx.fillRect(64 * u, 72 * u, 48 * u, 32 * u); ctx.fillRect(72 * u, 60 * u, 32 * u, 14 * u);
+    // vanilla HUD: hotbar, experience, health and hunger
+    const hx = (GUI_W - 182) / 2, hy = GUI_H - 22;
+    ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(hx * u, hy * u, 182 * u, 22 * u);
+    for (let i = 0; i < 9; i++) { ctx.strokeStyle = "rgba(200,200,200,0.55)"; ctx.lineWidth = u; ctx.strokeRect((hx + 1 + i * 20) * u, (hy + 1) * u, 20 * u, 20 * u); }
+    ctx.strokeStyle = "#FFFFFF"; ctx.lineWidth = 1.5 * u; ctx.strokeRect((hx + 1) * u, (hy + 1) * u, 20 * u, 20 * u);
+    ctx.fillStyle = "#2A3E12"; ctx.fillRect(hx * u, (hy - 7) * u, 182 * u, 5 * u);
+    ctx.fillStyle = "#80F020"; ctx.fillRect(hx * u, (hy - 7) * u, 118 * u, 5 * u);
+    for (let i = 0; i < 10; i++) {
+      ctx.fillStyle = "#D63A3A"; ctx.fillRect((hx + i * 8) * u, (hy - 17) * u, 7 * u, 7 * u);
+      ctx.fillStyle = "#B8793A"; ctx.fillRect((hx + 182 - 7 - i * 8) * u, (hy - 17) * u, 7 * u, 7 * u);
+    }
+    // ash's HUD
+    const font = state.gameFont ? "Pixelify Sans" : "Inter";
+    ctx.textBaseline = "top";
+    ctx.font = `${state.gameFont ? 500 : 600} ${8 * u}px "${font}", monospace`;
+    const readout = (f, text) => {
+      if (!S[f].on) return;
+      const w = ctx.measureText(text).width;
+      if (S[f].background) { ctx.fillStyle = "rgba(14,14,15,0.6)"; ctx.fillRect((S[f].x - 2) * u, (S[f].y - 1) * u, w + 4 * u, 10 * u); }
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillText(text, (S[f].x + 1) * u, (S[f].y + 1) * u);
+      ctx.fillStyle = S[f].colour; ctx.fillText(text, S[f].x * u, S[f].y * u);
+    };
+    readout("fps", "144 FPS");
+    readout("ping", "23 ms");
+    if (S.sprint.on && S.sprint.hud) { ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillText("Sprinting", (GUI_W - 46 + 1) * u, (GUI_H - 12 + 1) * u); ctx.fillStyle = "#FAFAFA"; ctx.fillText("Sprinting", (GUI_W - 46) * u, (GUI_H - 12) * u); }
+    const cx = Math.floor((GUI_W - 15) / 2) + 7, cy = Math.floor((GUI_H - 15) / 2) + 7;
+    if (S.crosshair.on) drawCrosshair(ctx, cx, cy, u, S.crosshair);
+    else { ctx.globalCompositeOperation = "difference"; ctx.fillStyle = "#FFFFFF"; ctx.fillRect((cx - 4) * u, cy * u, 9 * u, u); ctx.fillRect(cx * u, (cy - 4) * u, u, 9 * u); ctx.globalCompositeOperation = "source-over"; }
+    if (state.hitFlash > 0 && S.hit.on) {
+      ctx.fillStyle = S.hit.colour;
+      [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([dx, dy]) => { for (let k = 4; k < 8; k++) ctx.fillRect((cx + dx * k) * u, (cy + dy * k) * u, u, u); });
+    }
+  }
+
+  // ---------- shared controls ----------
+  function toggle(id, label) {
+    const f = feature(id), blocked = f && f.blocked;
+    return `<button type="button" class="toggle" data-act="toggle" data-id="${id}" aria-pressed="${S[id].on}" aria-label="${esc(label || (f ? f.name : id))}"></button>`;
+  }
+  function slider(id, key, label, min, max, unit) {
+    return `<div class="opt"><div class="opt-row"><label for="r-${id}-${key}">${label}</label><span class="num">${S[id][key]}${unit || ""}</span></div><input id="r-${id}-${key}" type="range" min="${min}" max="${max}" value="${S[id][key]}" data-opt="${id}.${key}"></div>`;
+  }
+  function choice(id, key, label, items) {
+    return `<div class="opt"><span class="label">${label}</span><div class="seg">${items.map(([v, n]) => `<button type="button" data-act="choice" data-opt="${id}.${key}" data-val="${v}" aria-pressed="${S[id][key] === v}">${n}</button>`).join("")}</div></div>`;
+  }
+  function onOff(id, key, label) {
+    return `<div class="opt opt-row"><span class="label">${label}</span><button type="button" class="toggle" data-act="flag" data-opt="${id}.${key}" aria-pressed="${S[id][key]}" aria-label="${esc(label)}"></button></div>`;
+  }
+  function colour(id, key, label) {
+    return `<div class="opt"><span class="label">${label}</span><div class="swatches">${SWATCHES.map((c) => `<button type="button" class="swatch" style="background:${c}" data-act="swatch" data-opt="${id}.${key}" data-val="${c}" aria-label="${c}" aria-pressed="${S[id][key].toUpperCase() === c}"></button>`).join("")}<input class="hex num" id="hex-${id}-${key}" value="${S[id][key]}" data-hex="${id}.${key}" aria-label="${label}, as hex" maxlength="7"></div></div>`;
+  }
+  function info(text) { return `<p class="note">${text}</p>`; }
+  function optionsFor(id, wide) {
+    const f = feature(id);
+    let h = "";
+    if (f.blocked) h += `<span class="blocked">${esc(f.blocked)}</span>`;
+    switch (id) {
+      case "crosshair":
+        h += choice(id, "shape", "Shape", SHAPES) + slider(id, "arm", "Size", 1, 10) + slider(id, "gap", "Gap", 0, 5) + slider(id, "thickness", "Thickness", 1, 4) + colour(id, "colour", "Colour") + slider(id, "opacity", "Opacity", 10, 100, "%") + onOff(id, "outline", "Outline");
+        if (!wide) h += previewHtml();
+        break;
+      case "hit": h += colour(id, "colour", "Mark colour") + slider(id, "duration", "Shown for", 2, 20, " ticks") + `<div><button type="button" class="btn" data-act="flash">Preview a hit</button></div>` + info("Never shows damage or health. On 1.8.9 the mark means an entity you just attacked was hurt."); break;
+      case "hitcolour": h += colour(id, "colour", "Flash colour") + slider(id, "strength", "Strength", 10, 100, "%"); break;
+      case "fps": case "ping": h += colour(id, "colour", "Text colour") + onOff(id, "background", "Background") + `<div><button type="button" class="btn" data-act="edit-hud">Move on screen</button></div>` + (id === "ping" ? info("Updated about every 30 seconds by the server. Hidden in singleplayer.") : ""); break;
+      case "sprint": h += onOff(id, "hud", "Show \"Sprinting\" on screen") + info(`Key: <span class="kbd">R</span>. Change it in Options, Controls.`); break;
+      case "freelook": h += onOff(id, "invert", "Invert vertical look") + info(`Key: <span class="kbd">Left Alt</span>. Switched off automatically on Hypixel, MCC Island and Hoplite.`); break;
+      case "snaplook": h += info(`Key: <span class="kbd">V</span>. Shows only what the game's own front view shows.`); break;
+      case "render": h += info("Measured on real hardware before it shipped. Switch it off if anything looks wrong on your machine."); break;
+    }
+    return `<div class="opts">${h}</div>`;
+  }
+  function previewHtml() {
+    return `<div class="opt"><span class="label">Preview</span><div class="preview">${[["sky", "#8DB3F6"], ["snow", "#F1F3F6"], ["night", "#16192A"]].map(([n, c]) => `<div><canvas data-preview="${c}" width="64" height="64"></canvas><span>${n}</span></div>`).join("")}</div></div>`;
+  }
+  function drawPreviews() {
+    ui.querySelectorAll("canvas[data-preview]").forEach((cv) => {
+      const ctx = cv.getContext("2d"); ctx.fillStyle = cv.dataset.preview; ctx.fillRect(0, 0, 64, 64);
+      drawCrosshair(ctx, 10.5, 10.5, 3, S.crosshair);
+    });
+  }
+  function visibleFeatures() {
+    const q = state.query.trim().toLowerCase();
+    return FEATURES.filter((f) => (state.cat === "All" || f.cat === state.cat) && (!q || (f.name + " " + f.desc + " " + f.cat).toLowerCase().includes(q)));
+  }
+  function search(id, placeholder) {
+    return `<input class="search" id="${id}" type="search" placeholder="${placeholder}" value="${esc(state.query)}" autocomplete="off" aria-label="Search features">`;
+  }
+
+  // ---------- HUD editing, shared ----------
+  function hudBoxes(clickable) {
+    const box = (id, w) => `<div class="hud-box" data-drag="${id}" style="left:${S[id].x / GUI_W * 100}%;top:${(S[id].y - 1) / GUI_H * 100}%;width:${w / GUI_W * 100}%;height:${10 / GUI_H * 100}%"><span class="tag">${feature(id).name} · ${anchorText(id, w)}</span></div>`;
+    let h = "";
+    if (S.fps.on) h += box("fps", 36);
+    if (S.ping.on) h += box("ping", 26);
+    if (clickable) {
+      const cx = Math.floor((GUI_W - 15) / 2) + 7, cy = Math.floor((GUI_H - 15) / 2) + 7;
+      h += `<div class="hud-box static" data-act="inspect" data-id="crosshair" style="left:${(cx - 9) / GUI_W * 100}%;top:${(cy - 9) / GUI_H * 100}%;width:${19 / GUI_W * 100}%;height:${19 / GUI_H * 100}%" role="button" tabindex="0" aria-label="Edit the crosshair"><span class="tag">Crosshair · click to edit</span></div>`;
+    }
+    return h;
+  }
+  function anchorText(id, w) {
+    const x = S[id].x, y = S[id].y;
+    const hz = x + w / 2 < GUI_W / 3 ? "left" : x + w / 2 > GUI_W * 2 / 3 ? "right" : "centre";
+    const vt = y < GUI_H / 3 ? "top" : y > GUI_H * 2 / 3 ? "bottom" : "middle";
+    return `anchored ${vt} ${hz}`;
+  }
+
+  // ---------- in-game designs ----------
+  function gameA() {
+    if (state.hudEdit) return hudEditOverlay();
+    const list = visibleFeatures();
+    const main = state.detail ? (() => {
+      const f = feature(state.detail);
+      return `<div class="a-detail"><div class="opts"><div><button type="button" class="icon-btn" data-act="back">&larr; All features</button></div><div class="opt-row"><h2 class="head">${f.name}</h2>${toggle(f.id)}</div><p class="muted" style="margin:0">${f.desc}</p>${optionsFor(f.id, true)}</div><div>${f.id === "crosshair" ? previewHtml() : ""}</div></div>`;
+    })() : `<div class="a-grid">${list.map((f) => `<div class="card"><div class="card-top"><span class="name">${f.name}</span>${toggle(f.id)}</div><div class="desc">${f.blocked ? `<span class="blocked">${esc(f.blocked)}</span>` : f.desc}</div><button type="button" class="more" data-act="open" data-id="${f.id}">Options &rarr;</button></div>`).join("") || `<p class="muted">Nothing matches "${esc(state.query)}".</p>`}</div>`;
+    return `<div class="a-wrap"><div class="a-panel" role="dialog" aria-label="ash settings">
+      <div class="a-top"><span class="head wordmark">ash</span>${search("q", "Search features")}<button type="button" class="btn" data-act="edit-hud">Edit HUD</button><button type="button" class="icon-btn" data-act="close" aria-label="Close">&#x2715;</button></div>
+      <div class="a-body"><nav class="a-cats" aria-label="Categories">${CATS.map((c) => `<button type="button" data-act="cat" data-cat="${c}" aria-pressed="${state.cat === c}"><span>${c}</span><span class="num muted">${c === "All" ? FEATURES.length : FEATURES.filter((f) => f.cat === c).length}</span></button>`).join("")}</nav><div class="a-main">${main}</div></div>
+      <div class="a-foot"><span>Changes save as you make them</span><span><span class="kbd">Right Shift</span> closes</span></div>
+    </div></div>`;
+  }
+  function gameB() {
+    if (state.hudEdit) return hudEditOverlay();
+    const list = visibleFeatures();
+    const groups = CATS.slice(1).map((c) => [c, list.filter((f) => f.cat === c)]).filter(([, fs]) => fs.length);
+    return `<aside class="b-dock" role="dialog" aria-label="ash settings">
+      <div class="b-head"><span class="head wordmark">ash</span><button type="button" class="icon-btn" data-act="close" aria-label="Close">&#x2715;</button></div>
+      <div class="b-search">${search("q", "Search")}</div>
+      <div class="b-list">${groups.map(([c, fs]) => `<div class="b-group">${c}</div>${fs.map((f) => `<div class="b-row" data-open="${state.expanded === f.id}"><div class="b-line"><button type="button" class="name" data-act="expand" data-id="${f.id}">${f.name}</button>${f.blocked ? `<span class="blocked" title="${esc(f.blocked)}">off here</span>` : ""}${toggle(f.id)}<button type="button" class="chev" data-act="expand" data-id="${f.id}" aria-label="Options for ${f.name}">${state.expanded === f.id ? "&#x25BE;" : "&#x25B8;"}</button></div>${state.expanded === f.id ? `<div class="b-opts">${optionsFor(f.id, true)}</div>` : ""}</div>`).join("")}`).join("") || `<p class="muted" style="padding:0 .4em">Nothing matches.</p>`}</div>
+      <div class="b-foot"><button type="button" class="btn" data-act="edit-hud">Edit HUD layout</button><span class="hint"><span class="kbd">Right Shift</span> closes</span></div>
+    </aside>`;
+  }
+  function gameC() {
+    const q = state.query.trim().toLowerCase();
+    const results = FEATURES.filter((f) => !q || (f.name + " " + f.cat).toLowerCase().includes(q));
+    let inspector = "";
+    if (state.inspect) {
+      const f = feature(state.inspect);
+      const pos = state.inspect === "crosshair" ? "left:58%;top:12%" : state.inspect === "fps" || state.inspect === "ping" ? "left:14%;top:10%" : "left:35%;top:12%";
+      inspector = `<div class="inspector" style="${pos}" role="dialog" aria-label="${f.name}"><div class="opt-row"><h3 class="head">${f.name}</h3><span style="display:flex;gap:.5em;align-items:center">${toggle(f.id)}<button type="button" class="icon-btn" data-act="uninspect" aria-label="Close ${f.name}">&#x2715;</button></span></div>${optionsFor(f.id, false)}</div>`;
+    }
+    return `<div class="c-wrap">
+      <div class="c-hint"><span class="kbd">Drag</span> to move · <span class="kbd">Click</span> to edit · <span class="kbd">Right Shift</span> to close</div>
+      ${hudBoxes(true)}
+      ${inspector}
+      <div class="c-bar"><div class="row"><span class="head" style="font-size:1.15em;padding:0 .3em">ash</span>${search("q", "Search features, or click anything on screen")}</div>
+      <div class="c-results">${results.map((f) => `<button type="button" class="chip" data-act="inspect" data-id="${f.id}" data-on="${S[f.id].on}"><span class="dot"></span>${f.name}</button>`).join("")}</div></div>
+    </div>`;
+  }
+  function hudEditOverlay() {
+    return `<div class="c-wrap"><div class="c-hint"><span class="kbd">Drag</span> the readouts anywhere. They keep their place when the window changes size.</div>${hudBoxes(false)}<button type="button" class="btn primary hud-done" data-act="done-hud">Done</button></div>`;
+  }
+
+  // ---------- launcher designs ----------
+  function inst() { return INSTANCES.find((i) => i.id === state.instance); }
+  function playButton() { return `<button type="button" class="play${state.playing ? " playing" : ""}" data-act="play">${state.playing ? "Playing" : "Play"}</button>`; }
+  function top(extra) { return `<div class="l-top"><span class="wordmark">ash</span>${extra || ""}<span class="spacer"></span><span class="account"><span class="avatar"></span>Player</span><button type="button" class="icon-btn" aria-label="Settings">Settings</button></div>`; }
+  function facts(i) {
+    return `<dl class="facts"><dt>Version</dt><dt>Loader</dt><dt>Last played</dt><dt>Memory</dt><dd class="num">${i.version}</dd><dd>${i.loader}</dd><dd>${i.played}</dd><dd class="num">${i.memory}</dd></dl>`;
+  }
+  function settingsLine(i) { return i.loader === "Vanilla" ? `<p class="muted" style="margin:0">Vanilla: no ash client in this instance.</p>` : `<p class="muted" style="margin:0">ash settings: <span class="kbd">Right Shift</span> in game</p>`; }
+  function launcherA() {
+    const i = inst();
+    return `<div class="l">${top()}<div class="la"><nav class="la-rail" aria-label="Instances"><span class="label">Instances</span>${INSTANCES.map((x) => `<button type="button" class="inst" data-act="inst" data-id="${x.id}" aria-pressed="${x.id === i.id}"><span>${x.name}</span><span class="meta"><span class="num">${x.version}</span> · ${x.loader}</span></button>`).join("")}<button type="button" class="inst" style="color:var(--muted)">+ New instance</button></nav>
+      <div class="la-main"><h2>${i.name}</h2>${facts(i)}${playButton()}${settingsLine(i)}</div></div></div>`;
+  }
+  function launcherB() {
+    const i = inst();
+    return `<div class="l">${top()}<div class="lb"><div class="lb-cards">${INSTANCES.map((x) => `<button type="button" class="lb-card" data-act="inst" data-id="${x.id}" aria-pressed="${x.id === i.id}"><span class="big">${x.version}</span><span>${x.name}</span><span class="muted" style="font-size:.85em">${x.loader} · ${x.played}</span></button>`).join("")}</div>
+      <div class="lb-low"><div class="lb-box"><h3>${i.name}</h3>${facts(i)}${playButton()}${settingsLine(i)}</div>
+      <div class="lb-box"><h3>New in ash</h3><ul class="changes"><li><span class="num muted">0.3.0</span><span>Your own crosshair, drawn in place of the game's.</span></li><li><span class="num muted">0.2.0</span><span>Settings in game, on Right Shift.</span></li><li><span class="num muted">0.1.0</span><span>FPS readout and toggle sprint.</span></li></ul></div></div></div></div>`;
+  }
+  function launcherC() {
+    const i = inst();
+    return `<div class="l">${top()}<div class="lc">
+      <div class="lc-center"><button type="button" class="lc-select" data-act="list" aria-expanded="${state.listOpen}"><span class="muted" style="font-size:.8em">Instance</span><span class="row"><span style="font-family:var(--display);font-weight:600;font-size:1.6em">${i.name}</span><span class="num muted">${i.version} · ${i.loader} &#x25BE;</span></span></button>${playButton()}<span class="muted" style="font-size:.9em">Ready. Everything this instance needs is downloaded.</span>${settingsLine(i)}</div>
+      ${state.listOpen ? `<div class="lc-list">${INSTANCES.map((x) => `<button type="button" class="inst" data-act="inst" data-id="${x.id}" aria-pressed="${x.id === i.id}"><span>${x.name}</span><span class="meta"><span class="num">${x.version}</span> · ${x.loader}</span></button>`).join("")}</div>` : ""}
+    </div></div>`;
+  }
+
+  // ---------- render ----------
+  function render() {
+    const keep = document.activeElement && document.activeElement.id === "q" ? document.activeElement.selectionStart : null;
+    ui.className = "ui" + (state.gameFont && state.surface === "game" ? " font-game" : "");
+    if (state.surface === "game") {
+      ui.innerHTML = !state.open ? `<button type="button" class="closed-hint" data-act="reopen">ash is closed. Press <span class="kbd">Right Shift</span> to open it.</button>` : ({ A: gameA, B: gameB, C: gameC })[state.variant]();
+    } else {
+      ui.innerHTML = ({ A: launcherA, B: launcherB, C: launcherC })[state.variant]();
+    }
+    drawGame();
+    drawPreviews();
+    if (keep !== null) { const q = $("q"); if (q) { q.focus(); q.setSelectionRange(keep, keep); } }
+    const names = VARIANTS[state.surface];
+    const name = names.find(([k]) => k === state.variant)[1];
+    $("sw-label").textContent = `${state.variant} · ${name}`;
+    $("sw-game").setAttribute("aria-pressed", state.surface === "game");
+    $("sw-launcher").setAttribute("aria-pressed", state.surface === "launcher");
+    $("sw-font").hidden = state.surface !== "game"; $("sw-font-sep").hidden = state.surface !== "game";
+    $("sw-font").setAttribute("aria-pressed", state.gameFont);
+    $("notes").innerHTML = `<h2>${state.surface === "game" ? "In game" : "Launcher"}: ${state.variant} · ${name}</h2><ul>${NOTES[state.surface + "-" + state.variant].map((n) => `<li>${n}</li>`).join("")}</ul>${state.surface === "game" ? `<ul><li><strong>Fonts:</strong> "Game font" shows the menu in a Minecraft-style pixel face. Using ash's own typeface in game means ash renders its own text, which is extra work on both versions.</li><li><strong>Everything here is drawn with rectangles and text</strong>, which both game versions can do. Rounded corners are stepped pixels in game.</li></ul>` : ""}`;
+    renderProps();
+    try { history.replaceState(null, "", "#" + state.surface + "-" + state.variant); } catch (e) { /* ignore */ }
+  }
+  function renderProps() {
+    const lines = [];
+    const push = (k, v) => lines.push(`${k}=<b>${esc(v)}</b>`);
+    push("fps-readout.enabled", S.fps.on); push("toggle-sprint.enabled", S.sprint.on); push("crosshair.enabled", S.crosshair.on);
+    push("crosshair.shape", S.crosshair.shape); push("crosshair.size", S.crosshair.arm); push("crosshair.gap", S.crosshair.gap); push("crosshair.thickness", S.crosshair.thickness);
+    push("crosshair.colour", S.crosshair.colour + Math.round(S.crosshair.opacity * 2.55).toString(16).padStart(2, "0").toUpperCase()); push("crosshair.outline", S.crosshair.outline);
+    push("hit-indicator.enabled", S.hit.on); push("hit-indicator.duration", S.hit.duration);
+    push("hit-colour.enabled", S.hitcolour.on); push("hit-colour.colour", S.hitcolour.colour);
+    push("ping-readout.enabled", S.ping.on);
+    push("fps-readout.position", `${anchorText("fps", 36).replace("anchored ", "")} ${S.fps.x},${S.fps.y}`);
+    push("ping-readout.position", `${anchorText("ping", 26).replace("anchored ", "")} ${S.ping.x},${S.ping.y}`);
+    push("freelook.enabled", S.freelook.on); push("snaplook.enabled", S.snaplook.on);
+    $("props").innerHTML = lines.join("\n");
+  }
+
+  // ---------- events ----------
+  function setOpt(path, value) { const [id, key] = path.split("."); S[id][key] = value; }
+  ui.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-act]");
+    if (!t) return;
+    const a = t.dataset.act, id = t.dataset.id;
+    if (a === "toggle") { S[id].on = !S[id].on; }
+    else if (a === "flag") { const [f, k] = t.dataset.opt.split("."); S[f][k] = !S[f][k]; }
+    else if (a === "choice") { setOpt(t.dataset.opt, t.dataset.val); }
+    else if (a === "swatch") { setOpt(t.dataset.opt, t.dataset.val); }
+    else if (a === "open") { state.detail = id; }
+    else if (a === "back") { state.detail = null; }
+    else if (a === "cat") { state.cat = t.dataset.cat; state.detail = null; }
+    else if (a === "close") { state.open = false; }
+    else if (a === "reopen") { state.open = true; }
+    else if (a === "edit-hud") { state.hudEdit = true; if (state.variant === "C") state.inspect = null; }
+    else if (a === "done-hud") { state.hudEdit = false; }
+    else if (a === "expand") { state.expanded = state.expanded === id ? null : id; }
+    else if (a === "inspect") { state.inspect = id; }
+    else if (a === "uninspect") { state.inspect = null; }
+    else if (a === "flash") { state.hitFlash = S.hit.duration; tickFlash(); return; }
+    else if (a === "inst") { state.instance = id; state.playing = false; state.listOpen = false; }
+    else if (a === "play") { state.playing = !state.playing; }
+    else if (a === "list") { state.listOpen = !state.listOpen; }
+    render();
+  });
+  ui.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t.id === "q") { state.query = t.value; render(); return; }
+    if (t.dataset.opt && t.type === "range") { setOpt(t.dataset.opt, Number(t.value)); const out = t.parentElement.querySelector(".num"); if (out) out.textContent = t.value + (t.dataset.opt.endsWith("opacity") || t.dataset.opt.endsWith("strength") ? "%" : t.dataset.opt.endsWith("duration") ? " ticks" : ""); drawGame(); drawPreviews(); renderProps(); }
+  });
+  ui.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset.hex) { const v = t.value.trim().toUpperCase(); if (/^#[0-9A-F]{6}$/.test(v)) { setOpt(t.dataset.hex, v); render(); } else { t.value = S[t.dataset.hex.split(".")[0]][t.dataset.hex.split(".")[1]]; } }
+    if (t.dataset.opt && t.type === "range") render();
+  });
+  // dragging readouts
+  let drag = null;
+  ui.addEventListener("pointerdown", (e) => {
+    const box = e.target.closest("[data-drag]");
+    if (!box) return;
+    const id = box.dataset.drag, r = stage.getBoundingClientRect();
+    drag = { id, box, startX: e.clientX, startY: e.clientY, x0: S[id].x, y0: S[id].y, scale: GUI_W / r.width, w: id === "fps" ? 36 : 26, moved: false };
+    box.setPointerCapture(e.pointerId); box.classList.add("dragging");
+  });
+  ui.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = (e.clientX - drag.startX) * drag.scale, dy = (e.clientY - drag.startY) * drag.scale;
+    if (Math.abs(dx) + Math.abs(dy) > 1) drag.moved = true;
+    S[drag.id].x = Math.max(0, Math.min(GUI_W - drag.w, Math.round(drag.x0 + dx)));
+    S[drag.id].y = Math.max(1, Math.min(GUI_H - 10, Math.round(drag.y0 + dy)));
+    drag.box.style.left = S[drag.id].x / GUI_W * 100 + "%"; drag.box.style.top = (S[drag.id].y - 1) / GUI_H * 100 + "%";
+    drag.box.querySelector(".tag").textContent = feature(drag.id).name + " · " + anchorText(drag.id, drag.w);
+    drawGame(); renderProps();
+  });
+  ui.addEventListener("pointerup", () => {
+    if (!drag) return;
+    const d = drag; drag = null; d.box.classList.remove("dragging");
+    if (!d.moved && state.variant === "C" && !state.hudEdit) { state.inspect = d.id; render(); }
+  });
+  function tickFlash() { drawGame(); if (state.hitFlash > 0) { state.hitFlash--; setTimeout(tickFlash, 50); } else drawGame(); }
+
+  // switcher
+  function cycle(step) {
+    const keys = VARIANTS[state.surface].map(([k]) => k);
+    state.variant = keys[(keys.indexOf(state.variant) + step + keys.length) % keys.length];
+    state.detail = null; state.inspect = null; state.hudEdit = false; state.open = true; state.listOpen = false;
+    render();
+  }
+  $("sw-prev").addEventListener("click", () => cycle(-1));
+  $("sw-next").addEventListener("click", () => cycle(1));
+  $("sw-game").addEventListener("click", () => { state.surface = "game"; render(); });
+  $("sw-launcher").addEventListener("click", () => { state.surface = "launcher"; render(); });
+  $("sw-font").addEventListener("click", () => { state.gameFont = !state.gameFont; render(); });
+  document.addEventListener("keydown", (e) => {
+    const typing = e.target.closest && e.target.closest("input, textarea, [contenteditable]");
+    if (typing) return;
+    if (e.code === "ShiftRight" && state.surface === "game") { state.open = !state.open; state.hudEdit = false; render(); return; }
+    if (e.key === "ArrowLeft") cycle(-1);
+    if (e.key === "ArrowRight") cycle(1);
+  });
+  new ResizeObserver(() => drawGame()).observe(stage);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => drawGame());
+  render();
+})();
+</script>
