@@ -8,7 +8,7 @@
     "ClientPlayNetworkHandlerMixin",
     "ClientPlayerEntityMixin",
     "ClientPlayerInteractionManagerMixin",
-    "GameRendererInvoker",
+    "GameRendererAccess",
     "InGameHudMixin",
     "InGameHudPanelMixin",
     "MinecraftClientMixin"

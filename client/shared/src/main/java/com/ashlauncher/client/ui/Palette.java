@@ -3,14 +3,18 @@ package com.ashlauncher.client.ui;
 /**
  * The final design's colours, as packed ARGB (`docs/specs/0003`, *The final
  * design*). Text and highlights are white; surfaces are translucent black and
- * white over the blurred game; green, red and grey each mean one thing.
+ * white over the blurred game; green and red each mean one thing.
  */
 final class Palette {
 
     /** Over the whole screen, under the panel: the blurred game, a touch darker. */
     static final int OVERLAY = 0x29000000;
+    /** The same where the game cannot blur, darker to make up for it. */
+    static final int OVERLAY_UNBLURRED = 0x52000000;
     /** The panel: 55% black. */
     static final int PANEL = 0x8C000000;
+    /** The faint edge round the panel, as the mockup's one-pixel ring. */
+    static final int PANEL_EDGE = 0x0FFFFFFF;
     /** The strip down the panel's left: darker than the panel, about 79% black. */
     static final int STRIP = 0xC9000000;
     /** Things raised off the panel - tiles, buttons, an options row: a faint white. */
@@ -29,11 +33,13 @@ final class Palette {
     static final int GREEN = 0xFF22C55E;
     /** Off, or slower. */
     static final int RED = 0xFFF0433A;
-    /** No change; and, faded, a feature that did not load. */
-    static final int GREY = 0xFFA7ADA6;
+    /** A feature that did not load: the design's grey, faded. */
     static final int UNAVAILABLE = 0x59A7ADA6;
-    /** The panel's soft shadow, at its darkest. */
-    static final int SHADOW_ALPHA = 0x59;
+    /** A message over the panel. */
+    static final int TOAST = 0xEB141416;
+    /** The panel's soft shadow, and a tile's, at their darkest. */
+    static final int PANEL_SHADOW_ALPHA = 0x59;
+    static final int TILE_SHADOW_ALPHA = 0x1F;
 
     private Palette() {
     }

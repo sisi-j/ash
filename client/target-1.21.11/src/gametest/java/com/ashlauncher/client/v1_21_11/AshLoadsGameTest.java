@@ -120,6 +120,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             crosshairOptionsWork(context);
             crosshairWorks(context);
             hitIndicatorWorks(context, server);
+            panelIsCrispAtEveryGuiScale(context);
         }
     }
 
@@ -270,6 +271,76 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // By eye: four short green diagonals around the crosshair, on the pig.
         context.takeScreenshot("ash-hit-indicator");
         server.runCommand("kill @e[tag=ash_target]");
+    }
+
+    /**
+     * ash's panel draws in the screen's real pixels, so it looks exactly the
+     * same at every GUI scale: the white pixels of its SETTINGS letters are
+     * the same pixels at scales 1, 2, 3 and Auto. The window is made 1280 by
+     * 720 first, the smallest at which the game offers scale 3.
+     */
+    private static void panelIsCrispAtEveryGuiScale(ClientGameTestContext context) {
+        int[] before = context.computeOnClient(client -> new int[] {
+            client.getWindow().getScreenWidth(), client.getWindow().getScreenHeight()});
+        context.getInput().resizeWindow(1280, 720);
+        context.waitTicks(5);
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+        java.util.Set<Long> first = null;
+        for (int scale : new int[] {1, 2, 3, 0}) {
+            context.runOnClient(client -> {
+                client.options.guiScale().set(scale);
+                client.resizeDisplay();
+            });
+            context.waitTicks(3);
+            context.getInput().pressKey(settingsKey);
+            context.waitTicks(5);
+            Rect letters = context.computeOnClient(client -> {
+                if (!(client.screen instanceof AshSettingsScreen screen)) {
+                    throw new AssertionError("ash's settings did not open at GUI scale " + scale);
+                }
+                return screen.panel().lettersArea();
+            });
+            Path shot = context.takeScreenshot("ash-panel-gui-scale-" + (scale == 0 ? "auto" : scale));
+            context.getInput().pressKey(settingsKey);
+            context.waitTicks(5);
+            java.util.Set<Long> white = whitePixels(shot, letters);
+            if (white.size() < 50) {
+                throw new AssertionError("SETTINGS is not on the panel at GUI scale " + scale + ": " + white.size()
+                        + " white pixels in " + letters);
+            }
+            if (first == null) {
+                first = white;
+            } else if (!first.equals(white)) {
+                throw new AssertionError("at GUI scale " + (scale == 0 ? "Auto" : scale)
+                        + " SETTINGS is not the same pixels as at GUI scale 1: the panel is not drawn at real resolution");
+            }
+        }
+        context.runOnClient(client -> {
+            client.options.guiScale().set(0);
+            client.resizeDisplay();
+        });
+        context.getInput().resizeWindow(before[0], before[1]);
+        context.waitTicks(5);
+    }
+
+    /** Where a screenshot is white, inside a rectangle of real pixels, as points relative to it. */
+    private static java.util.Set<Long> whitePixels(Path shot, Rect area) {
+        BufferedImage image;
+        try {
+            image = ImageIO.read(shot.toFile());
+        } catch (IOException unreadable) {
+            throw new AssertionError("could not read the screenshot " + shot, unreadable);
+        }
+        java.util.Set<Long> white = new java.util.HashSet<>();
+        for (int y = area.y; y < area.y + area.height; y++) {
+            for (int x = area.x; x < area.x + area.width; x++) {
+                int rgb = image.getRGB(x, y);
+                if (((rgb >> 16) & 0xFF) >= 240 && ((rgb >> 8) & 0xFF) >= 240 && (rgb & 0xFF) >= 240) {
+                    white.add(((long) (x - area.x) << 32) | (y - area.y));
+                }
+            }
+        }
+        return white;
     }
 
     /** Whether the hit indicator draws a mark right now, asked of the feature itself. */

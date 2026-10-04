@@ -53,9 +53,11 @@ A throwaway spike tested the approach in both real games, on branch `spike/final
 - **1.8.9.** In `render`, push the matrix, scale by `1/scaleFactor`, enable blending, and draw with `DrawableHelper.drawTexture(x, y, u, v, w, h, texW, texH)` **[PRACTICE]**. Textures are a `NativeImageBackedTexture(BufferedImage)`, registered with `TextureManager.loadTexture` and freed with `close` **[PRACTICE]**.
   - Blur: `loadShader(new Identifier("shaders/post/blur.json"))` on opening, and `disableShader()` on closing **[PRACTICE]**.
   - The game uses the same slot for spectator views and its "super secret settings". **Judgement:** keep the panel's open time short and restore whatever shader was there before.
-  - It needs framebuffer support, which is the game's own `areShadersSupported()`. Without it, the panel falls back to a darker panel with no blur.
+  - It needs framebuffer support, which is the static `GLX.shadersSupported` **[PRACTICE]**. Without it, the panel falls back to a darker panel with no blur. (*Corrected 2026-10-04 by #63: this first named `GameRenderer.areShadersSupported()`, which despite its name is true only while a shader is already loaded, so the blur never ran.*)
+  - `loadShader` also switches post shaders on (`shadersEnabled`), so restoring the slot means setting that switch back as well **[PRACTICE]**.
 - **One visible difference.** On 1.21.11 the HUD is blurred with the world. On 1.8.9 the blur runs before the HUD, so the hotbar, hearts and crosshair stay sharp under the panel **[PRACTICE]**, as the spike's screenshots show.
   - **Judgement:** hide the HUD while the panel is open on 1.8.9, so both look the same. ash already wraps HUD drawing there.
+  - *Found 2026-10-04 by #63:* in a world, `InGameHud.render` is what calls `GameRenderer.setupHudMatrixMode()`, the 2D projection every screen then draws with **[PRACTICE]**. Cancelling the HUD at its start draws the panel nowhere at all; it is cancelled straight after that call instead.
 - **Blur strength.** 1.21.11's comes from the player's own setting. 1.8.9's `Radius` uniform can be set per pass. **Judgement:** the open animation fades the blur in through the panel's own overlay. ash does not override the 1.21.11 player's choice.
 
 ## 3. Cost, and what it means for the architecture

@@ -3,7 +3,8 @@ package com.ashlauncher.client.v1_8_9;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.ui.Key;
 import com.ashlauncher.client.ui.Panel;
-import com.ashlauncher.client.v1_8_9.mixin.GameRendererInvoker;
+import com.ashlauncher.client.v1_8_9.mixin.GameRendererAccess;
+import com.mojang.blaze3d.platform.GLX;
 import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.gl.ShaderEffect;
 import net.minecraft.client.gui.screen.Screen;
@@ -23,12 +24,15 @@ import org.lwjgl.input.Mouse;
  * <p>The blur is the game's {@code shaders/post/blur.json}, loaded into the
  * post-shader slot the game runs after the world and before the HUD and any
  * screen (`docs/research/0007`). Whatever was in that slot before - a
- * spectator's view - is put back on closing. Where the machine cannot run
- * post shaders, the panel shows over the unblurred world.
+ * spectator's view - is put back on closing, switched on or off as it was.
+ * Where the machine cannot run post shaders, the panel shows over the
+ * unblurred world, darker to make up for it.
  *
  * <p>{@link #keyPressed} and the {@code ...At} methods are reachable from this
- * package so that the smoke test can deliver a key and a click the way the
- * game's input loop does: 1.8.9 has no input framework to do it.
+ * package so that the smoke test can deliver a key, and a click in real
+ * pixels: 1.8.9 has no input framework to do it. So the one thing the smoke
+ * test does not cover is {@link #mouseClicked}'s reading of the mouse's own
+ * event position, which no test can feed.
  */
 public final class AshSettingsScreen extends Screen {
 
@@ -39,6 +43,8 @@ public final class AshSettingsScreen extends Screen {
     private boolean blurring;
     /** The post shader that was loaded before the panel's blur, or {@code null} for none. */
     private String shaderBefore;
+    /** Whether post shaders were switched on before the panel's blur. */
+    private boolean shadersWereOn;
 
     AshSettingsScreen(SettingsScreen settingsScreen, KeyBinding key) {
         this.key = key;
@@ -54,22 +60,29 @@ public final class AshSettingsScreen extends Screen {
     @Override
     public void init() {
         panel.resize(client.width, client.height);
-        if (!blurring && client.gameRenderer.areShadersSupported()) {
+        // GLX's flag, not GameRenderer.areShadersSupported(): despite its
+        // name, that is only true when a shader is already loaded.
+        if (!blurring && GLX.shadersSupported) {
+            GameRendererAccess renderer = (GameRendererAccess) client.gameRenderer;
             ShaderEffect before = client.gameRenderer.getShader();
             shaderBefore = before == null ? null : before.getName();
-            ((GameRendererInvoker) client.gameRenderer).ash$loadShader(BLUR);
+            shadersWereOn = renderer.ash$shadersEnabled();
+            renderer.ash$loadShader(BLUR);
             blurring = true;
         }
+        panel.setBlurred(blurring);
     }
 
     @Override
     public void removed() {
         if (blurring) {
+            GameRendererAccess renderer = (GameRendererAccess) client.gameRenderer;
             if (shaderBefore == null) {
                 client.gameRenderer.disableShader();
             } else {
-                ((GameRendererInvoker) client.gameRenderer).ash$loadShader(new Identifier(shaderBefore));
+                renderer.ash$loadShader(new Identifier(shaderBefore));
             }
+            renderer.ash$setShadersEnabled(shadersWereOn);
             blurring = false;
         }
     }
@@ -77,7 +90,8 @@ public final class AshSettingsScreen extends Screen {
     /**
      * Drawn in real pixels, with the game's alpha test off for the moment:
      * it would throw away the faint pixels of every anti-aliased edge and of
-     * the panel's shadow.
+     * the panel's shadow. Blending is left off afterwards, as the game's own
+     * fills leave it.
      */
     @Override
     public void render(int mouseX, int mouseY, float tickDelta) {
@@ -86,6 +100,7 @@ public final class AshSettingsScreen extends Screen {
         GlStateManager.scale(1.0F / scale, 1.0F / scale, 1.0F);
         GlStateManager.disableAlphaTest();
         panel.render(new LegacyCanvas(client, client.width, client.height), Mouse.getX(), client.height - Mouse.getY() - 1);
+        GlStateManager.disableBlend();
         GlStateManager.enableAlphaTest();
         GlStateManager.popMatrix();
     }

@@ -35,6 +35,7 @@ public final class Panel {
 
     private static final String LETTERS = "SETTINGS";
     private static final long TOAST_NANOS = 2_200_000_000L;
+    private static final float LABEL_TRACKING = 0.06f;
 
     private final SettingsScreen model;
     private final Runnable close;
@@ -51,6 +52,8 @@ public final class Panel {
     private boolean ashSettings;
     private String toast;
     private long toastAt;
+    /** Whether the game is blurring what is behind the panel; where it cannot, the panel darkens it more. */
+    private boolean blurred = true;
 
     /** @param close closes the screen the panel is on */
     public Panel(SettingsScreen model, Runnable close) {
@@ -69,6 +72,11 @@ public final class Panel {
         this.width = width;
         this.height = height;
         scroll = Math.min(scroll, maxScroll());
+    }
+
+    /** Tells the panel whether the game behind it is blurred: 1.8.9 cannot blur on every machine. */
+    public void setBlurred(boolean blurred) {
+        this.blurred = blurred;
     }
 
     // ---- input, in real pixels ----
@@ -90,13 +98,15 @@ public final class Panel {
         if (ashSettings) {
             return panel().contains(x, y);
         }
-        for (SettingsScreen.Row row : model.rows()) {
-            Rect tile = tileOf(row.feature());
+        List<SettingsScreen.Row> rows = model.rows();
+        for (int i = 0; i < rows.size(); i++) {
+            SettingsScreen.Row row = rows.get(i);
+            Rect tile = tileAt(i);
             if (tile == null || !tile.contains(x, y)) {
                 continue;
             }
             if (!row.available()) {
-                say(row.name() + " did not load. An update to ash will fix it.");
+                say(row.whyUnavailable());
             } else if (toggleIn(tile, hasGear(row)).contains(x, y)) {
                 row.press();
             } else if (row.hasOptions()) {
@@ -167,8 +177,9 @@ public final class Panel {
         return width / 100f;
     }
 
-    private int u(double units) {
-        return Math.round((float) (units * unit()));
+    /** {@code amount} of the panel's unit - a hundredth of the screen's width - in whole pixels. */
+    private int units(double amount) {
+        return Math.round((float) (amount * unit()));
     }
 
     Rect panel() {
@@ -178,33 +189,39 @@ public final class Panel {
     }
 
     private int stripWidth() {
-        return u(5.2);
+        return units(5.2);
     }
 
     /** The gear at the bottom of the strip: ash's own settings. Public so that the real-game tests can press it. */
     public Rect gearButton() {
         Rect panel = panel();
-        int pad = u(0.75);
+        int pad = units(0.75);
         int side = stripWidth() - 2 * pad;
         return new Rect(panel.x + pad, panel.y + panel.height - pad - side, side, side);
+    }
+
+    /** The strip above its buttons, where SETTINGS is drawn: for the real-game tests to compare across GUI scales. */
+    public Rect lettersArea() {
+        Rect panel = panel();
+        return new Rect(panel.x, panel.y, stripWidth(), editHudButton().y - panel.y);
     }
 
     /** Edit HUD, above the gear. */
     public Rect editHudButton() {
         Rect gear = gearButton();
-        return new Rect(gear.x, gear.y - u(0.6) - gear.height, gear.width, gear.height);
+        return new Rect(gear.x, gear.y - units(0.6) - gear.height, gear.width, gear.height);
     }
 
     /** Where the tiles, or a page, go. */
     Rect main() {
         Rect panel = panel();
-        int x = panel.x + stripWidth() + u(1.5);
-        int y = panel.y + u(1.3);
-        return new Rect(x, y, panel.x + panel.width - u(1.5) - x, panel.y + panel.height - u(1.1) - noticeHeight() - y);
+        int x = panel.x + stripWidth() + units(1.5);
+        int y = panel.y + units(1.3);
+        return new Rect(x, y, panel.x + panel.width - units(1.5) - x, panel.y + panel.height - units(1.1) - noticeHeight() - y);
     }
 
     private int gap() {
-        return u(1);
+        return units(1);
     }
 
     private int columns() {
@@ -216,7 +233,7 @@ public final class Panel {
     }
 
     private int tileHeight() {
-        return u(13.5);
+        return units(13.5);
     }
 
     private int rowsOnView() {
@@ -230,40 +247,44 @@ public final class Panel {
 
     /** Where a feature's tile is, or {@code null} when it is scrolled out of view or a page is open. */
     Rect tileOf(Feature feature) {
-        if (page != null || ashSettings) {
-            return null;
-        }
         List<SettingsScreen.Row> rows = model.rows();
         for (int i = 0; i < rows.size(); i++) {
-            if (rows.get(i).feature() != feature) {
-                continue;
+            if (rows.get(i).feature() == feature) {
+                return tileAt(i);
             }
-            int row = i / columns();
-            if (row < scroll || row >= scroll + rowsOnView()) {
-                return null;
-            }
-            Rect main = main();
-            return new Rect(main.x + (i % columns()) * (tileWidth() + gap()),
-                    main.y + (row - scroll) * (tileHeight() + gap()), tileWidth(), tileHeight());
         }
         return null;
     }
 
+    /** Where the tile at this place in the order is, or {@code null} when it is scrolled out of view or a page is open. */
+    private Rect tileAt(int index) {
+        if (page != null || ashSettings) {
+            return null;
+        }
+        int row = index / columns();
+        if (row < scroll || row >= scroll + rowsOnView()) {
+            return null;
+        }
+        Rect main = main();
+        return new Rect(main.x + (index % columns()) * (tileWidth() + gap()),
+                main.y + (row - scroll) * (tileHeight() + gap()), tileWidth(), tileHeight());
+    }
+
     /** The ENABLED / DISABLED button: beside the gear, or the tile's whole width when there is no gear (yet: #67). */
     private Rect toggleIn(Rect tile, boolean besideGear) {
-        int pad = u(0.9);
-        int side = u(2.3);
-        int x = besideGear ? tile.x + pad + side + u(0.45) : tile.x + pad;
-        return new Rect(x, tile.y + tile.height - u(0.85) - side, tile.x + tile.width - pad - x, side);
+        int pad = units(0.9);
+        int side = units(2.3);
+        int x = besideGear ? tile.x + pad + side + units(0.45) : tile.x + pad;
+        return new Rect(x, tile.y + tile.height - units(0.85) - side, tile.x + tile.width - pad - x, side);
     }
 
     private Rect gearIn(Rect tile) {
-        int side = u(2.3);
-        return new Rect(tile.x + u(0.9), tile.y + tile.height - u(0.85) - side, side, side);
+        int side = units(2.3);
+        return new Rect(tile.x + units(0.9), tile.y + tile.height - units(0.85) - side, side, side);
     }
 
     private int noticeHeight() {
-        return model.footer().isEmpty() ? 0 : Ink.lineHeight(Ink.Weight.REGULAR, textSize(0.85f)) + u(0.6);
+        return model.footer().isEmpty() ? 0 : Ink.lineHeight(Ink.Weight.REGULAR, textSize(0.85f)) + units(0.6);
     }
 
     private float textSize(float units) {
@@ -293,7 +314,7 @@ public final class Panel {
     /** The gear on a feature's tile, which opens its options; {@code null} when it has none, did not load, or is not on view. */
     public Rect optionsLinkOf(Feature feature) {
         for (SettingsScreen.Row row : model.rows()) {
-            if (row.feature() == feature && row.hasOptions() && row.available()) {
+            if (row.feature() == feature && hasGear(row)) {
                 Rect tile = tileOf(feature);
                 return tile == null ? null : gearIn(tile);
             }
@@ -363,20 +384,22 @@ public final class Panel {
             resize(canvas.width(), canvas.height());
         }
         scroll = Math.min(scroll, maxScroll());
-        canvas.fill(0, 0, width, height, Palette.OVERLAY);
+        canvas.fill(0, 0, width, height, blurred ? Palette.OVERLAY : Palette.OVERLAY_UNBLURRED);
 
         Rect panel = panel();
-        int radius = u(1.1);
-        Paint.shadow(canvas, panel.x, panel.y, panel.width, panel.height, radius, u(2.4), Palette.SHADOW_ALPHA);
+        int radius = units(1.1);
+        Paint.shadow(canvas, panel.x, panel.y, panel.width, panel.height, radius, units(2.4), units(0.8),
+                Palette.PANEL_SHADOW_ALPHA);
         int strip = stripWidth();
         Paint.roundRect(canvas, panel.x, panel.y, strip, panel.height, radius, Palette.STRIP, 1f, true, false);
         Paint.roundRect(canvas, panel.x + strip, panel.y, panel.width - strip, panel.height, radius, Palette.PANEL, 1f,
                 false, true);
         canvas.fill(panel.x + strip, panel.y, 1, panel.height, Palette.LINE);
+        Paint.outline(canvas, panel.x, panel.y, panel.width, panel.height, radius, Palette.PANEL_EDGE);
 
         drawLetters(canvas, panel);
-        drawToolButton(canvas, editHudButton(), "layout", 0.42f, mouseX, mouseY);
-        drawToolButton(canvas, gearButton(), "gear", 1f, mouseX, mouseY);
+        drawIconButton(canvas, editHudButton(), Ink.Icon.LAYOUT, units(0.65), 0.52f, 0.42f, mouseX, mouseY);
+        drawIconButton(canvas, gearButton(), Ink.Icon.GEAR, units(0.65), 0.52f, 1f, mouseX, mouseY);
 
         if (page != null) {
             drawPage(canvas, mouseX, mouseY);
@@ -391,9 +414,10 @@ public final class Panel {
 
     private void drawLetters(Canvas canvas, Rect panel) {
         float size = textSize(2.2f);
-        int step = Ink.capHeight(Ink.Weight.EXTRABOLD, size) + u(0.75);
+        // As the mockup stacks them: a line one size high, and half a unit between.
+        int step = Math.round(size) + units(0.5);
         int capTop = Ink.lineHeight(Ink.Weight.EXTRABOLD, size) - Ink.capHeight(Ink.Weight.EXTRABOLD, size);
-        int y = panel.y + u(1.3) - capTop / 2;
+        int y = panel.y + units(1.3) - capTop / 2;
         for (int i = 0; i < LETTERS.length(); i++) {
             String letter = LETTERS.substring(i, i + 1);
             int x = panel.x + (stripWidth() - Ink.width(letter, Ink.Weight.EXTRABOLD, size)) / 2;
@@ -402,10 +426,12 @@ public final class Panel {
         }
     }
 
-    private void drawToolButton(Canvas canvas, Rect button, String icon, float opacity, int mouseX, int mouseY) {
+    /** A square button with an icon in its middle, {@code iconShare} of its width; it lights up under the mouse unless faded. */
+    private void drawIconButton(Canvas canvas, Rect button, Ink.Icon icon, int radius, float iconShare, float opacity,
+            int mouseX, int mouseY) {
         int fill = button.contains(mouseX, mouseY) && opacity >= 1f ? Palette.RAISED_HOVER : Palette.RAISED;
-        Paint.roundRect(canvas, button.x, button.y, button.width, button.height, u(0.65), fill, opacity);
-        int size = Math.round(button.width * 0.52f);
+        Paint.roundRect(canvas, button.x, button.y, button.width, button.height, radius, fill, opacity);
+        int size = Math.round(button.width * iconShare);
         canvas.draw(Ink.icon(icon, size, Palette.ICON), button.x + (button.width - size) / 2,
                 button.y + (button.height - size) / 2, opacity);
     }
@@ -413,10 +439,11 @@ public final class Panel {
     private void drawTiles(Canvas canvas, int mouseX, int mouseY) {
         Rect main = main();
         canvas.clip(main.x, main.y, main.width, main.height);
-        for (SettingsScreen.Row row : model.rows()) {
-            Rect tile = tileOf(row.feature());
+        List<SettingsScreen.Row> rows = model.rows();
+        for (int i = 0; i < rows.size(); i++) {
+            Rect tile = tileAt(i);
             if (tile != null) {
-                drawTile(canvas, row, tile, mouseX, mouseY);
+                drawTile(canvas, rows.get(i), tile, mouseX, mouseY);
             }
         }
         canvas.unclip();
@@ -427,30 +454,28 @@ public final class Panel {
         boolean available = row.available();
         float opacity = available ? 1f : 0.45f;
         int fill = available && tile.contains(mouseX, mouseY) ? Palette.RAISED_HOVER : Palette.RAISED;
-        Paint.roundRect(canvas, tile.x, tile.y, tile.width, tile.height, u(0.9), fill, opacity);
+        Paint.shadow(canvas, tile.x, tile.y, tile.width, tile.height, units(0.9), units(0.9), units(0.3),
+                Palette.TILE_SHADOW_ALPHA);
+        Paint.roundRect(canvas, tile.x, tile.y, tile.width, tile.height, units(0.9), fill, opacity);
 
         float nameSize = textSize(0.95f);
-        String name = fit(row.name(), Ink.Weight.SEMIBOLD, nameSize, tile.width - 2 * u(0.9));
+        String name = fit(row.name(), Ink.Weight.SEMIBOLD, nameSize, tile.width - 2 * units(0.9));
         int nameWidth = Ink.width(name, Ink.Weight.SEMIBOLD, nameSize);
         Ink.text(name, Ink.Weight.SEMIBOLD, nameSize, Palette.TEXT)
-                .drawAt(canvas, tile.x + (tile.width - nameWidth) / 2, tile.y + u(0.95), opacity);
+                .drawAt(canvas, tile.x + (tile.width - nameWidth) / 2, tile.y + units(0.95), opacity);
 
         if (hasGear(row)) {
-            Rect gear = gearIn(tile);
-            Paint.roundRect(canvas, gear.x, gear.y, gear.width, gear.height, u(0.55),
-                    gear.contains(mouseX, mouseY) ? Palette.RAISED_HOVER : Palette.RAISED, 1f);
-            int size = Math.round(gear.width * 0.55f);
-            canvas.draw(Ink.icon("gear", size, Palette.ICON), gear.x + (gear.width - size) / 2,
-                    gear.y + (gear.height - size) / 2, 1f);
+            drawIconButton(canvas, gearIn(tile), Ink.Icon.GEAR, units(0.55), 0.55f, 1f, mouseX, mouseY);
         }
 
         Rect toggle = toggleIn(tile, hasGear(row));
         int colour = !available ? Palette.UNAVAILABLE : row.on() ? Palette.GREEN : Palette.RED;
-        Paint.roundRect(canvas, toggle.x, toggle.y, toggle.width, toggle.height, u(0.55), colour, opacity);
+        Paint.roundRect(canvas, toggle.x, toggle.y, toggle.width, toggle.height, units(0.55), colour, opacity);
         String label = !available ? "UNAVAILABLE" : row.on() ? "ENABLED" : "DISABLED";
         float labelSize = textSize(0.74f);
-        Raster text = Ink.text(label, Ink.Weight.BOLD, labelSize, Palette.TEXT);
-        int labelWidth = Ink.width(label, Ink.Weight.BOLD, labelSize);
+        // Spaced out a little, as the mockup's capitals are: 0.06 of the size.
+        Raster text = Ink.text(label, Ink.Weight.BOLD, labelSize, Palette.TEXT, LABEL_TRACKING);
+        int labelWidth = Ink.width(label, Ink.Weight.BOLD, labelSize, LABEL_TRACKING);
         int lineHeight = Ink.lineHeight(Ink.Weight.BOLD, labelSize);
         text.drawAt(canvas, toggle.x + (toggle.width - labelWidth) / 2, toggle.y + (toggle.height - lineHeight) / 2,
                 opacity);
@@ -462,12 +487,12 @@ public final class Panel {
         if (max == 0) {
             return;
         }
-        int x = main.x + main.width + u(0.5);
+        int x = main.x + main.width + units(0.5);
         int rows = max + rowsOnView();
-        int thumb = Math.max(u(2), main.height * rowsOnView() / rows);
+        int thumb = Math.max(units(2), main.height * rowsOnView() / rows);
         int thumbY = main.y + (main.height - thumb) * scroll / max;
-        Paint.roundRect(canvas, x, main.y, u(0.3), main.height, u(0.15), Palette.RAISED, 1f);
-        Paint.roundRect(canvas, x, thumbY, u(0.3), thumb, u(0.15), Palette.MUTED, 1f);
+        Paint.roundRect(canvas, x, main.y, units(0.3), main.height, units(0.15), Palette.RAISED, 1f);
+        Paint.roundRect(canvas, x, thumbY, units(0.3), thumb, units(0.15), Palette.MUTED, 1f);
     }
 
     private void drawPage(Canvas canvas, int mouseX, int mouseY) {
@@ -485,7 +510,7 @@ public final class Panel {
         Ink.text("ash settings", Ink.Weight.BOLD, title, Palette.TEXT).drawAt(canvas, main.x, main.y, 1f);
         float body = textSize(0.92f);
         Ink.text("Coming soon: the open key, interface size, animations and blur.", Ink.Weight.REGULAR, body, Palette.MUTED)
-                .drawAt(canvas, main.x, main.y + Ink.lineHeight(Ink.Weight.BOLD, title) + u(0.8), 1f);
+                .drawAt(canvas, main.x, main.y + Ink.lineHeight(Ink.Weight.BOLD, title) + units(0.8), 1f);
     }
 
     /** Why a change was not saved, or which features did not load: the model's words, under the tiles. */
@@ -497,7 +522,7 @@ public final class Panel {
         Rect main = main();
         float size = textSize(0.85f);
         Ink.text(fit(notice, Ink.Weight.REGULAR, size, main.width), Ink.Weight.REGULAR, size, Palette.MUTED)
-                .drawAt(canvas, main.x, main.y + main.height + u(0.4), 1f);
+                .drawAt(canvas, main.x, main.y + main.height + units(0.4), 1f);
     }
 
     private void drawToast(Canvas canvas, Rect panel) {
@@ -508,12 +533,12 @@ public final class Panel {
         float size = textSize(0.92f);
         int textWidth = Ink.width(toast, Ink.Weight.REGULAR, size);
         int lineHeight = Ink.lineHeight(Ink.Weight.REGULAR, size);
-        int w = textWidth + 2 * u(1.1);
-        int h = lineHeight + 2 * u(0.6);
+        int w = textWidth + 2 * units(1.1);
+        int h = lineHeight + 2 * units(0.6);
         int x = panel.x + (panel.width - w) / 2;
-        int y = panel.y + panel.height - u(1.2) - h;
-        Paint.roundRect(canvas, x, y, w, h, u(0.8), 0xEB141416, 1f);
-        Ink.text(toast, Ink.Weight.REGULAR, size, Palette.TEXT).drawAt(canvas, x + u(1.1), y + u(0.6), 1f);
+        int y = panel.y + panel.height - units(1.2) - h;
+        Paint.roundRect(canvas, x, y, w, h, units(0.8), Palette.TOAST, 1f);
+        Ink.text(toast, Ink.Weight.REGULAR, size, Palette.TEXT).drawAt(canvas, x + units(1.1), y + units(0.6), 1f);
     }
 
     /** {@code text}, cut with an ellipsis if it is wider than {@code room}. */

@@ -35,12 +35,14 @@ class PanelTest {
     Path configDir;
 
     private final List<String> closed = new ArrayList<>();
+    private final List<String> reported = new ArrayList<>();
     private final AtomicLong now = new AtomicLong();
     private Settings settings;
 
     private Panel panel(Predicate<Feature> landed, int width, int height) {
         settings = Settings.load(configDir);
-        Panel panel = new Panel(new SettingsScreen(settings, landed, () -> { }), () -> closed.add("closed"), now::get);
+        Panel panel = new Panel(new SettingsScreen(settings, landed, () -> reported.add("report")),
+                () -> closed.add("closed"), now::get);
         panel.resize(width, height);
         return panel;
     }
@@ -111,13 +113,14 @@ class PanelTest {
     }
 
     @Test
-    void a_tile_s_button_switches_the_feature_now_and_in_the_file() throws Exception {
+    void a_tile_s_button_switches_the_feature_now_in_the_file_and_in_the_load_report() throws Exception {
         Panel panel = panel();
         render(panel);
 
         click(panel, panel.switchOf(Feature.FPS_READOUT));
 
         assertFalse(settings.get(Settings.FPS_READOUT));
+        assertEquals(List.of("report"), reported, "the load report was not rewritten");
         assertTrue(Files.readString(configDir.resolve("ash.properties")).contains("\nfps-readout.enabled=false\n"));
         assertTrue(render(panel).drew("DISABLED"));
     }
@@ -203,18 +206,36 @@ class PanelTest {
             Panel panel = panel(feature -> true, size[0], size[1]);
             FakeCanvas canvas = render(panel, size[0], size[1]);
             Rect inside = panel.panel();
+            int texts = 0;
             for (FakeCanvas.Drawn drawn : canvas.drawn) {
                 if (drawn.text() == null) {
                     continue;
                 }
+                texts++;
                 assertTrue(inside.contains(drawn.x(), drawn.y())
                         && inside.contains(drawn.x() + drawn.width() - 1, drawn.y() + drawn.height() - 1),
                         "\"" + drawn.text() + "\" leaves the panel at " + size[0] + "x" + size[1]);
             }
+            // Every letter of SETTINGS, every tile's name and its button: a
+            // check over no text at all would pass and prove nothing.
+            int expected = "SETTINGS".length() + 2 * new SettingsScreen(settings, feature -> true, () -> { }).rows().size();
+            assertTrue(texts >= expected, "only " + texts + " lines drawn at " + size[0] + "x" + size[1]);
             if (size[0] == 1920) {
                 // For a person to look at; nothing checks it.
                 canvas.save(new File("build/ui/panel-" + size[0] + "x" + size[1] + ".png"));
             }
         }
+    }
+
+    @Test
+    void where_the_game_cannot_blur_the_panel_darkens_what_is_behind_it_more() {
+        Panel panel = panel();
+        int blurredCorner = render(panel).pixel(5, 5);
+
+        panel.setBlurred(false);
+        int unblurredCorner = render(panel).pixel(5, 5);
+
+        assertTrue((unblurredCorner & 0xFF) < (blurredCorner & 0xFF),
+                "no darker: " + Integer.toHexString(blurredCorner) + " then " + Integer.toHexString(unblurredCorner));
     }
 }

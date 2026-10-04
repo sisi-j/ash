@@ -15,12 +15,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * the panel. This draws none of them while the panel is open
  * (`docs/research/0007`, and the spec's decision of 2026-10-03).
  *
+ * <p>Right after the HUD sets up the 2D projection, not at its start: in a
+ * world, that call is the only one that sets the projection every screen
+ * then draws with, and skipping it draws the panel nowhere at all.
+ *
  * <p>If it ever stops matching, the HUD simply shows under the panel again.
  */
 @Mixin(InGameHud.class)
 abstract class InGameHudPanelMixin {
 
-    @Inject(method = "render", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "render", cancellable = true, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/render/GameRenderer;setupHudMatrixMode()V", shift = At.Shift.AFTER))
     private void ash$hideUnderPanel(float tickDelta, CallbackInfo info) {
         if (MinecraftClient.getInstance().currentScreen instanceof AshSettingsScreen) {
             info.cancel();

@@ -8,6 +8,7 @@ import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.font.FontRenderContext;
 import java.awt.font.LineMetrics;
+import java.awt.font.TextAttribute;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Path2D;
@@ -17,10 +18,13 @@ import java.awt.image.DataBufferInt;
 import java.io.InputStream;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Rasterises the pieces of ash's interface with Java 2D, in Inter, and keeps
@@ -35,22 +39,58 @@ import java.util.concurrent.FutureTask;
  *
  * <p>Called on the game's render thread. Fonts load once, on a thread of
  * their own, as soon as {@link #preload} is called at startup, so the first
- * panel does not wait for them.
+ * panel does not wait for them. If Inter cannot be read, the system's sans
+ * serif stands in, so the panel still works, and the target is told why.
  */
 public final class Ink {
 
     /** The weights of Inter ash ships: the static TrueType files, since Java 2D cannot drive a variable font's axes. */
     public enum Weight {
-        REGULAR("Inter-Regular.ttf"),
-        SEMIBOLD("Inter-SemiBold.ttf"),
-        BOLD("Inter-Bold.ttf"),
-        EXTRABOLD("Inter-ExtraBold.ttf");
+        REGULAR("Inter-Regular.ttf", Font.PLAIN),
+        SEMIBOLD("Inter-SemiBold.ttf", Font.BOLD),
+        BOLD("Inter-Bold.ttf", Font.BOLD),
+        EXTRABOLD("Inter-ExtraBold.ttf", Font.BOLD);
 
         private final String file;
+        /** The system font's style that stands in for it if Inter cannot be read. */
+        private final int fallbackStyle;
 
-        Weight(String file) {
+        Weight(String file, int fallbackStyle) {
             this.file = file;
+            this.fallbackStyle = fallbackStyle;
         }
+    }
+
+    /** A corner of a rectangle, and the quarter of a disc that rounds it. */
+    public enum Corner {
+        TOP_LEFT, TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT;
+
+        boolean left() {
+            return this == TOP_LEFT || this == BOTTOM_LEFT;
+        }
+
+        boolean top() {
+            return this == TOP_LEFT || this == TOP_RIGHT;
+        }
+    }
+
+    /** A straight edge of a rectangle. */
+    public enum Edge {
+        TOP, RIGHT, BOTTOM, LEFT;
+
+        boolean horizontal() {
+            return this == TOP || this == BOTTOM;
+        }
+
+        /** Whether the piece's first pixel is the one farthest from the rectangle. */
+        boolean startsOutside() {
+            return this == TOP || this == LEFT;
+        }
+    }
+
+    /** The stand-in icons, until #65 brings Lucide's set. */
+    public enum Icon {
+        GEAR, LAYOUT
     }
 
     /** At most this many pixels are kept across every cached raster: 32 MB of ARGB. */
@@ -59,25 +99,23 @@ public final class Ink {
     private static final FontRenderContext METRICS = new FontRenderContext(null, true, true);
 
     private static FutureTask<Map<Weight, Font>> loading;
+    private static Consumer<String> warn = message -> { };
     private static final Map<String, Font> SIZED = new HashMap<>();
     private static long cachedPixels;
-    private static final LinkedHashMap<String, Raster> CACHE = new LinkedHashMap<String, Raster>(256, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Raster> eldest) {
-            if (cachedPixels > MAX_CACHED_PIXELS) {
-                cachedPixels -= (long) eldest.getValue().width() * eldest.getValue().height();
-                return true;
-            }
-            return false;
-        }
-    };
+    private static final LinkedHashMap<String, Raster> CACHE = new LinkedHashMap<>(256, 0.75f, true);
 
     private Ink() {
     }
 
-    /** Starts loading Inter on a thread of its own. Call once, at startup; calling again does nothing. */
-    public static synchronized void preload() {
+    /**
+     * Starts loading Inter on a thread of its own. Call once, at startup;
+     * calling again does nothing.
+     *
+     * @param warnings told, once, if Inter could not be read and the system's sans serif stands in
+     */
+    public static synchronized void preload(Consumer<String> warnings) {
         if (loading == null) {
+            warn = warnings;
             loading = new FutureTask<>(Ink::loadFonts);
             Thread thread = new Thread(loading, "ash fonts");
             thread.setDaemon(true);
@@ -90,28 +128,37 @@ public final class Ink {
         for (Weight weight : Weight.values()) {
             try (InputStream in = Ink.class.getResourceAsStream("/assets/ash/fonts/" + weight.file)) {
                 if (in == null) {
-                    throw new IllegalStateException("Inter is missing from the client: " + weight.file);
+                    throw new java.io.IOException("it is missing from the client");
                 }
                 fonts.put(weight, Font.createFont(Font.TRUETYPE_FONT, in));
-            } catch (java.io.IOException | java.awt.FontFormatException unreadable) {
-                throw new IllegalStateException("Inter could not be read: " + weight.file, unreadable);
+            } catch (java.io.IOException | java.awt.FontFormatException | RuntimeException unreadable) {
+                warn.accept("ash: " + weight.file + " could not be read (" + unreadable
+                        + "), so ash's settings use the system's sans serif in its place");
+                fonts.put(weight, new Font(Font.SANS_SERIF, weight.fallbackStyle, 1));
             }
         }
         return fonts;
     }
 
-    private static synchronized Font font(Weight weight, float size) {
-        String key = weight + "/" + size;
+    private static synchronized Font font(Weight weight, float size, float tracking) {
+        String key = weight + "/" + size + "/" + tracking;
         Font sized = SIZED.get(key);
         if (sized == null) {
-            preload();
+            preload(warn);
+            Font base;
             try {
-                sized = loading.get().get(weight).deriveFont(size);
+                base = loading.get().get(weight);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
-                throw new IllegalStateException("interrupted while loading Inter", interrupted);
+                base = new Font(Font.SANS_SERIF, weight.fallbackStyle, 1);
             } catch (ExecutionException failed) {
-                throw new IllegalStateException("Inter could not be loaded", failed.getCause());
+                base = new Font(Font.SANS_SERIF, weight.fallbackStyle, 1);
+            }
+            sized = base.deriveFont(size);
+            if (tracking != 0) {
+                Map<TextAttribute, Object> spacing = new HashMap<>();
+                spacing.put(TextAttribute.TRACKING, tracking);
+                sized = sized.deriveFont(spacing);
             }
             SIZED.put(key, sized);
         }
@@ -122,18 +169,23 @@ public final class Ink {
 
     /** How far {@code text} advances, in real pixels, rounded up. */
     public static int width(String text, Weight weight, float size) {
-        return (int) Math.ceil(font(weight, size).getStringBounds(text, METRICS).getWidth());
+        return width(text, weight, size, 0f);
+    }
+
+    /** @param tracking extra space after each letter, as a fraction of the size: the mockup's letter-spacing in em */
+    public static int width(String text, Weight weight, float size, float tracking) {
+        return (int) Math.ceil(font(weight, size, tracking).getStringBounds(text, METRICS).getWidth());
     }
 
     /** The height of one line, ascent and descent, in real pixels, rounded up. */
     public static int lineHeight(Weight weight, float size) {
-        LineMetrics line = font(weight, size).getLineMetrics("Hg", METRICS);
+        LineMetrics line = font(weight, size, 0f).getLineMetrics("Hg", METRICS);
         return (int) Math.ceil(line.getAscent() + line.getDescent());
     }
 
-    /** The height of a capital letter, for centring a line of capitals by eye rather than by its descent. */
+    /** The height of a capital letter, for placing a line of capitals by eye rather than by its descent. */
     public static int capHeight(Weight weight, float size) {
-        return (int) Math.round(font(weight, size).createGlyphVector(METRICS, "H").getVisualBounds().getHeight());
+        return (int) Math.round(font(weight, size, 0f).createGlyphVector(METRICS, "H").getVisualBounds().getHeight());
     }
 
     /**
@@ -141,40 +193,47 @@ public final class Ink {
      * with {@link Raster#drawAt}. It has a margin all round, so that a glyph
      * reaching outside its advance is not cut off.
      */
-    public static synchronized Raster text(String text, Weight weight, float size, int argb) {
-        String key = "text/" + weight + "/" + size + "/" + Integer.toHexString(argb) + "/" + text;
-        Raster cached = CACHE.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        Font font = font(weight, size);
-        LineMetrics line = font.getLineMetrics(text.isEmpty() ? "H" : text, METRICS);
-        int margin = (int) Math.ceil(size * 0.25f) + 1;
-        int w = width(text, weight, size) + 2 * margin;
-        int h = (int) Math.ceil(line.getAscent() + line.getDescent()) + 2 * margin;
-        BufferedImage image = new BufferedImage(Math.max(1, w), Math.max(1, h), BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = graphics(image);
-        g.setFont(font);
-        g.setColor(new Color(argb, true));
-        g.drawString(text, (float) margin, margin + line.getAscent());
-        g.dispose();
-        return remember(key, image, margin, margin, text);
+    public static Raster text(String text, Weight weight, float size, int argb) {
+        return text(text, weight, size, argb, 0f);
+    }
+
+    public static synchronized Raster text(String text, Weight weight, float size, int argb, float tracking) {
+        return cached("text/" + weight + "/" + size + "/" + tracking + "/" + Integer.toHexString(argb) + "/" + text, () -> {
+            Font font = font(weight, size, tracking);
+            LineMetrics line = font.getLineMetrics(text.isEmpty() ? "H" : text, METRICS);
+            int margin = (int) Math.ceil(size * 0.25f) + 1;
+            int w = width(text, weight, size, tracking) + 2 * margin;
+            int h = (int) Math.ceil(line.getAscent() + line.getDescent()) + 2 * margin;
+            BufferedImage image = new BufferedImage(Math.max(1, w), Math.max(1, h), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = graphics(image);
+            g.setFont(font);
+            g.setColor(new Color(argb, true));
+            g.drawString(text, (float) margin, margin + line.getAscent());
+            g.dispose();
+            return raster(image, margin, margin, text);
+        });
     }
 
     // ---- shapes ----
 
     /**
      * One corner of a rounded rectangle, anti-aliased: a quarter disc of
-     * radius {@code radius}, in the corner {@code quadrant} - 0 top-left, 1
-     * top-right, 2 bottom-right, 3 bottom-left. Computed by sampling, not by
-     * Java 2D, so that the edge is the same on every runtime.
+     * radius {@code radius}. Computed by sampling, not by Java 2D, so that
+     * the edge is the same on every runtime.
      */
-    public static synchronized Raster corner(int radius, int quadrant, int argb) {
-        String key = "corner/" + radius + "/" + quadrant + "/" + Integer.toHexString(argb);
-        Raster cached = CACHE.get(key);
-        if (cached != null) {
-            return cached;
-        }
+    public static synchronized Raster corner(int radius, Corner corner, int argb) {
+        return cached("corner/" + radius + "/" + corner + "/" + Integer.toHexString(argb),
+                () -> quarter(radius, corner, argb, 0));
+    }
+
+    /** One corner of a rounded rectangle's one-pixel outline: the quarter ring between {@code radius - 1} and {@code radius}. */
+    public static synchronized Raster cornerRing(int radius, Corner corner, int argb) {
+        return cached("ring/" + radius + "/" + corner + "/" + Integer.toHexString(argb),
+                () -> quarter(radius, corner, argb, radius - 1));
+    }
+
+    /** A quarter of an annulus from {@code inner} to {@code radius}, sampled four by four per pixel. */
+    private static Raster quarter(int radius, Corner corner, int argb, int inner) {
         int[] pixels = new int[radius * radius];
         int alpha = argb >>> 24;
         int samples = 4;
@@ -183,13 +242,10 @@ public final class Ink {
                 int inside = 0;
                 for (int sy = 0; sy < samples; sy++) {
                     for (int sx = 0; sx < samples; sx++) {
-                        // Distance from the disc's centre, which sits on the
-                        // inner corner of this quadrant.
-                        double px = x + (sx + 0.5) / samples;
-                        double py = y + (sy + 0.5) / samples;
-                        double dx = (quadrant == 0 || quadrant == 3) ? radius - px : px;
-                        double dy = (quadrant == 0 || quadrant == 1) ? radius - py : py;
-                        if (dx * dx + dy * dy <= (double) radius * radius) {
+                        double dx = toCentre(corner.left(), radius, x + (sx + 0.5) / samples);
+                        double dy = toCentre(corner.top(), radius, y + (sy + 0.5) / samples);
+                        double d2 = dx * dx + dy * dy;
+                        if (d2 <= (double) radius * radius && d2 >= (double) inner * inner) {
                             inside++;
                         }
                     }
@@ -198,43 +254,90 @@ public final class Ink {
                 pixels[y * radius + x] = (a << 24) | (argb & 0xFFFFFF);
             }
         }
-        return remember(key, radius, radius, pixels);
+        return new Raster(radius, radius, pixels, 0, 0, null);
     }
 
     /**
-     * The soft shadow around a rounded rectangle, as nine pieces: four
-     * corners, and four one-pixel strips stretched along the edges. Only
-     * outside the rectangle: inside is left to whatever is drawn there.
-     *
-     * @param piece 0-3 the corners as in {@link #corner}; 4 top, 5 right, 6 bottom, 7 left
-     * @param reach how far the shadow fades out to, past the rectangle's edge
+     * How far a point is from a corner piece's centre along one axis: the
+     * centre sits on the piece's inner corner, at {@code size} from the
+     * outer edge on a left or top piece and at 0 on a right or bottom one.
      */
-    public static synchronized Raster shadow(int radius, int reach, int alpha, int piece) {
-        String key = "shadow/" + radius + "/" + reach + "/" + alpha + "/" + piece;
-        Raster cached = CACHE.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        int size = radius + reach;
-        if (piece < 4) {
-            int[] pixels = new int[size * size];
-            for (int y = 0; y < size; y++) {
-                for (int x = 0; x < size; x++) {
-                    double dx = (piece == 0 || piece == 3) ? size - (x + 0.5) : x + 0.5;
-                    double dy = (piece == 0 || piece == 1) ? size - (y + 0.5) : y + 0.5;
-                    pixels[y * size + x] = shadowAt(Math.sqrt(dx * dx + dy * dy) - radius, reach, alpha);
-                }
+    private static double toCentre(boolean leftOrTop, int size, double at) {
+        return leftOrTop ? size - at : at;
+    }
+
+    /*
+     * The soft shadow of a rounded rectangle lowered by a drop, as light from
+     * above casts it, drawn only where the rectangle itself is not: none
+     * inside it, full strength where its lowered copy shows below it, and
+     * fading out to {@code reach} past the copy's edge. Each piece is worked
+     * out per pixel against both shapes, in a frame of a rectangle large
+     * enough that its corners never see each other, so a piece depends on
+     * the radius, reach, drop and strength alone.
+     */
+
+    /** The side of the large rectangle each shadow piece is worked out against. */
+    private static final int FRAME = 4096;
+
+    /**
+     * A corner of the shadow: four pieces, each as wide as the radius plus
+     * the reach; the bottom two also as tall as the drop more, so that they
+     * fill the band the lowered copy shows below the rectangle's corners.
+     * Placed by {@link Paint#shadow}.
+     */
+    public static synchronized Raster shadowCorner(int radius, int reach, int drop, int alpha, Corner corner) {
+        return cached("shadow/" + radius + "/" + reach + "/" + drop + "/" + alpha + "/" + corner, () -> {
+            int w = radius + reach;
+            int h = corner.top() ? radius + reach : radius + drop + reach;
+            int x0 = corner.left() ? -reach : FRAME - radius;
+            int y0 = corner.top() ? drop - reach : FRAME - radius;
+            return shadowPiece(radius, reach, drop, alpha, x0, y0, w, h);
+        });
+    }
+
+    /**
+     * A one-pixel strip of the shadow along an edge, to be stretched along it:
+     * above the top, the part of the reach the drop leaves showing; below the
+     * bottom, the drop's band at full strength and then the reach.
+     */
+    public static synchronized Raster shadowEdge(int radius, int reach, int drop, int alpha, Edge edge) {
+        return cached("shadow-edge/" + radius + "/" + reach + "/" + drop + "/" + alpha + "/" + edge, () -> {
+            switch (edge) {
+                case TOP:
+                    return shadowPiece(radius, reach, drop, alpha, FRAME / 2, drop - reach, 1, Math.max(1, reach - drop));
+                case BOTTOM:
+                    return shadowPiece(radius, reach, drop, alpha, FRAME / 2, FRAME, 1, drop + reach);
+                case LEFT:
+                    return shadowPiece(radius, reach, drop, alpha, -reach, FRAME / 2, reach, 1);
+                default:
+                    return shadowPiece(radius, reach, drop, alpha, FRAME, FRAME / 2, reach, 1);
             }
-            return remember(key, size, size, pixels);
+        });
+    }
+
+    private static Raster shadowPiece(int radius, int reach, int drop, int alpha, int x0, int y0, int w, int h) {
+        int[] pixels = new int[w * h];
+        double half = FRAME / 2.0;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                double px = x0 + x + 0.5;
+                double py = y0 + y + 0.5;
+                if (roundedDistance(px, py, half, half, half, radius) < 0) {
+                    continue;
+                }
+                double out = roundedDistance(px, py, half, half + drop, half, radius);
+                pixels[y * w + x] = out <= 0 ? alpha << 24 : shadowAt(out, reach, alpha);
+            }
         }
-        boolean horizontal = piece == 4 || piece == 6;
-        int[] pixels = new int[reach];
-        for (int i = 0; i < reach; i++) {
-            // Distance out from the edge, 0.5 at the pixel touching it.
-            double out = (piece == 4 || piece == 7) ? reach - (i + 0.5) : i + 0.5;
-            pixels[i] = shadowAt(out, reach, alpha);
-        }
-        return horizontal ? remember(key, 1, reach, pixels) : remember(key, reach, 1, pixels);
+        return new Raster(w, h, pixels, 0, 0, null);
+    }
+
+    /** How far a point is outside a rounded square of half-side {@code half} centred at (cx, cy): negative inside. */
+    private static double roundedDistance(double px, double py, double cx, double cy, double half, int radius) {
+        double qx = Math.abs(px - cx) - (half - radius);
+        double qy = Math.abs(py - cy) - (half - radius);
+        double outside = Math.sqrt(Math.max(qx, 0) * Math.max(qx, 0) + Math.max(qy, 0) * Math.max(qy, 0));
+        return outside + Math.min(Math.max(qx, qy), 0) - radius;
     }
 
     private static int shadowAt(double out, int reach, int alpha) {
@@ -247,34 +350,26 @@ public final class Ink {
 
     // ---- icons ----
 
-    /**
-     * A stand-in outline icon, drawn on a 24-unit grid with round strokes,
-     * until #65 brings Lucide's set: "gear" and "layout".
-     */
-    public static synchronized Raster icon(String name, int size, int argb) {
-        String key = "icon/" + name + "/" + size + "/" + Integer.toHexString(argb);
-        Raster cached = CACHE.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = graphics(image);
-        g.setColor(new Color(argb, true));
-        g.scale(size / 24.0, size / 24.0);
-        g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        if (name.equals("gear")) {
-            g.draw(gear());
-            g.draw(new Ellipse2D.Double(9, 9, 6, 6));
-        } else if (name.equals("layout")) {
-            g.draw(new RoundRectangle2D.Double(3, 3, 7, 9, 3, 3));
-            g.draw(new RoundRectangle2D.Double(14, 3, 7, 5, 3, 3));
-            g.draw(new RoundRectangle2D.Double(14, 12, 7, 9, 3, 3));
-            g.draw(new RoundRectangle2D.Double(3, 16, 7, 5, 3, 3));
-        } else {
-            throw new IllegalArgumentException("no icon " + name);
-        }
-        g.dispose();
-        return remember(key, image, 0, 0, null);
+    /** A stand-in outline icon, drawn on a 24-unit grid with round strokes, until #65 brings Lucide's set. */
+    public static synchronized Raster icon(Icon icon, int size, int argb) {
+        return cached("icon/" + icon + "/" + size + "/" + Integer.toHexString(argb), () -> {
+            BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = graphics(image);
+            g.setColor(new Color(argb, true));
+            g.scale(size / 24.0, size / 24.0);
+            g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            if (icon == Icon.GEAR) {
+                g.draw(gear());
+                g.draw(new Ellipse2D.Double(9, 9, 6, 6));
+            } else {
+                g.draw(new RoundRectangle2D.Double(3, 3, 7, 9, 3, 3));
+                g.draw(new RoundRectangle2D.Double(14, 3, 7, 5, 3, 3));
+                g.draw(new RoundRectangle2D.Double(14, 12, 7, 9, 3, 3));
+                g.draw(new RoundRectangle2D.Double(3, 16, 7, 5, 3, 3));
+            }
+            g.dispose();
+            return raster(image, 0, 0, null);
+        });
     }
 
     /** A cog of eight rounded teeth about the grid's centre. */
@@ -285,22 +380,40 @@ public final class Ink {
             double angle = Math.PI * i / teeth;
             double outer = i % 2 == 0 ? 10 : 7.6;
             double half = Math.PI / teeth * 0.42;
-            double a0 = angle - half;
-            double a1 = angle + half;
-            double x0 = 12 + outer * Math.cos(a0);
-            double y0 = 12 + outer * Math.sin(a0);
+            double x0 = 12 + outer * Math.cos(angle - half);
+            double y0 = 12 + outer * Math.sin(angle - half);
             if (i == 0) {
                 path.moveTo(x0, y0);
             } else {
                 path.lineTo(x0, y0);
             }
-            path.lineTo(12 + outer * Math.cos(a1), 12 + outer * Math.sin(a1));
+            path.lineTo(12 + outer * Math.cos(angle + half), 12 + outer * Math.sin(angle + half));
         }
         path.closePath();
         return AffineTransform.getRotateInstance(Math.PI / 16, 12, 12).createTransformedShape(path);
     }
 
     // ---- the cache ----
+
+    private static Raster cached(String key, Supplier<Raster> make) {
+        Raster raster = CACHE.get(key);
+        if (raster != null) {
+            return raster;
+        }
+        raster = make.get();
+        CACHE.put(key, raster);
+        cachedPixels += (long) raster.width() * raster.height();
+        Iterator<Map.Entry<String, Raster>> oldest = CACHE.entrySet().iterator();
+        while (cachedPixels > MAX_CACHED_PIXELS && oldest.hasNext()) {
+            Map.Entry<String, Raster> entry = oldest.next();
+            if (entry.getValue() == raster) {
+                break;
+            }
+            cachedPixels -= (long) entry.getValue().width() * entry.getValue().height();
+            oldest.remove();
+        }
+        return raster;
+    }
 
     private static Graphics2D graphics(BufferedImage image) {
         Graphics2D g = image.createGraphics();
@@ -312,19 +425,8 @@ public final class Ink {
         return g;
     }
 
-    private static Raster remember(String key, BufferedImage image, int originX, int originY, String text) {
+    private static Raster raster(BufferedImage image, int originX, int originY, String text) {
         int[] pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
-        Raster raster = new Raster(image.getWidth(), image.getHeight(), pixels, originX, originY, text);
-        return remember(key, raster);
-    }
-
-    private static Raster remember(String key, int width, int height, int[] pixels) {
-        return remember(key, new Raster(width, height, pixels, 0, 0, null));
-    }
-
-    private static Raster remember(String key, Raster raster) {
-        cachedPixels += (long) raster.width() * raster.height();
-        CACHE.put(key, raster);
-        return raster;
+        return new Raster(image.getWidth(), image.getHeight(), pixels, originX, originY, text);
     }
 }

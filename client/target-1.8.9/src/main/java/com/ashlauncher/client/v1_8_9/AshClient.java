@@ -76,7 +76,7 @@ public final class AshClient implements ClientModInitializer {
     public void onInitializeClient() {
         // Inter for ash's settings panel, loaded now on a thread of its own so
         // the first time the panel opens it is ready.
-        Ink.preload();
+        Ink.preload(LOG::warn);
         Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
         for (String problem : settings.problems()) {
             LOG.warn(problem);
