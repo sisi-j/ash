@@ -177,6 +177,15 @@ public final class SettingsScreen {
         }
 
         /**
+         * Why this feature cannot be switched, in one line, when it did not
+         * load: what the screen says when it is pressed, in the same terms as
+         * {@link #footer()}. Empty for a feature that did load.
+         */
+        public String whyUnavailable() {
+            return available() ? "" : name() + " did not load. An update to ash will fix it.";
+        }
+
+        /**
          * Flips the setting, at once and in the file. Does nothing for a row
          * that is not {@link #available()}: its switch is drawn as one that
          * cannot be pressed, and this does not rely on that.

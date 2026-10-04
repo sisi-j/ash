@@ -15,6 +15,7 @@ import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.sprint.ToggleSprintHook;
+import com.ashlauncher.client.ui.draw.Ink;
 import java.io.IOException;
 import java.util.EnumSet;
 import java.util.Set;
@@ -73,6 +74,9 @@ public final class AshClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // Inter for ash's settings panel, loaded now on a thread of its own so
+        // the first time the panel opens it is ready.
+        Ink.preload(LOG::warn);
         Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
         for (String problem : settings.problems()) {
             LOG.warn(problem);

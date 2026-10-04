@@ -34,8 +34,21 @@ final class Shapes {
      * and every card are drawn this way.
      */
     static void bordered(ScreenSurface surface, Rect at, int radius, int border, int fill) {
-        rounded(surface, at, radius, border);
+        // The border as an edge, never under the fill: the final design's
+        // fills are translucent, and a border painted beneath one shows
+        // through it.
+        int r = Math.max(1, Math.min(radius, Math.min(at.width, at.height) / 2));
         rounded(surface, new Rect(at.x + 1, at.y + 1, at.width - 2, at.height - 2), radius - 1, fill);
+        surface.fill(at.x + r, at.y, at.width - 2 * r, 1, border);
+        surface.fill(at.x + r, at.y + at.height - 1, at.width - 2 * r, 1, border);
+        surface.fill(at.x, at.y + r, 1, at.height - 2 * r, border);
+        surface.fill(at.x + at.width - 1, at.y + r, 1, at.height - 2 * r, border);
+        if (r >= 2) {
+            surface.fill(at.x + 1, at.y + 1, 1, 1, border);
+            surface.fill(at.x + at.width - 2, at.y + 1, 1, 1, border);
+            surface.fill(at.x + 1, at.y + at.height - 2, 1, 1, border);
+            surface.fill(at.x + at.width - 2, at.y + at.height - 2, 1, 1, border);
+        }
     }
 
     /**
@@ -50,13 +63,13 @@ final class Shapes {
     }
 
     /**
-     * An on/off switch: a pill with a knob. On is the brief's primary colour
-     * with the knob at the right; off is its emphasis grey with the knob at
-     * the left; a switch that cannot be pressed is dimmer still.
+     * An on/off switch: a pill with a white knob. On is green with the knob
+     * at the right; off is a faint white with the knob at the left; a switch
+     * that cannot be pressed is fainter still.
      */
     static void onOffSwitch(ScreenSurface surface, Rect at, boolean on, boolean available) {
-        int track = !available ? Palette.LINE : on ? Palette.TEXT : Palette.EMPHASIS;
-        int knob = !available ? Palette.EMPHASIS : on ? Palette.BACKGROUND : Palette.MUTED;
+        int track = !available ? Palette.LINE : on ? Palette.GREEN : Palette.RAISED_HOVER;
+        int knob = !available ? Palette.MUTED : Palette.TEXT;
         rounded(surface, at, at.height / 2, track);
         int size = at.height - 4;
         int x = on && available ? at.x + at.width - 2 - size : at.x + 2;

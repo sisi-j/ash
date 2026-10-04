@@ -116,6 +116,9 @@ public final class AshSmokeTest implements ClientModInitializer {
         // tick the player at all.
         client.submit(() -> {
             client.options.pauseOnLostFocus = false;
+            // Peaceful, so no slime wanders into the middle of the screen
+            // between two frames whose crosshair pixels are compared.
+            client.options.difficulty = net.minecraft.world.Difficulty.PEACEFUL;
             client.startIntegratedServer("ash-smoke-test", "ash smoke test",
                     new LevelInfo(0L, LevelInfo.GameMode.SURVIVAL, false, false, LevelGeneratorType.FLAT));
         });
@@ -130,12 +133,14 @@ public final class AshSmokeTest implements ClientModInitializer {
         crosshairOptionsWork(client);
         crosshairWorks(client);
         hitIndicatorWorks(client);
+        panelIsCrispAtEveryGuiScale(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
                 + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
                 + " of the game's and gave way to it when switched off, and its options changed what it drew, and"
-                + " the hit indicator marked the player's own hit on a pig and not a hurt the player had not attacked it for");
+                + " the hit indicator marked the player's own hit on a pig and not a hurt the player had not attacked it for,"
+                + " and ash's panel drew the same pixels at every GUI scale");
         // The clean way out: this asks the game to stop, so the run task exits
         // zero and Gradle reports a pass.
         client.scheduleStop();
@@ -487,7 +492,8 @@ public final class AshSmokeTest implements ClientModInitializer {
             if (target == null) {
                 return false;
             }
-            screen.mouseClicked(target.centreX(), target.centreY(), 0);
+            // Real pixels: the panel is drawn in them, and so is where it says it drew.
+            screen.clickAt(target.centreX(), target.centreY());
             screen.mouseReleased(target.centreX(), target.centreY(), 0);
             return true;
         });
@@ -645,6 +651,68 @@ public final class AshSmokeTest implements ClientModInitializer {
             return surface.fills > 0;
         });
         return shows != null && shows;
+    }
+
+    /**
+     * ash's panel draws in the screen's real pixels, so it looks exactly the
+     * same at every GUI scale: the white pixels of its SETTINGS letters are
+     * the same pixels at each. At this test's 854 by 480 window the game
+     * offers scales 1 and 2, and Auto; the 1.21.11 test, which can resize its
+     * window, covers 3 as well.
+     */
+    private static void panelIsCrispAtEveryGuiScale(MinecraftClient client) {
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
+        java.util.Set<Long> first = null;
+        for (int scale : new int[] {1, 2, 0}) {
+            onClient(client, () -> {
+                client.options.guiScale = scale;
+                return null;
+            });
+            tap(client, settingsKey.getCode());
+            AshSettingsScreen screen = await("open ash's settings at GUI scale " + scale, () ->
+                    client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+            pause(500L);
+            Rect letters = onClient(client, () -> screen.panel().lettersArea());
+            String name = "ash-panel-gui-scale-" + (scale == 0 ? "auto" : scale) + ".png";
+            screenshot(client, name);
+            keyIntoScreen(client, screen, settingsKey.getCode());
+            await("close ash's settings at GUI scale " + scale, () -> client.currentScreen == null ? client : null);
+            java.util.Set<Long> white = whitePixels(new File(new File(client.runDirectory, "screenshots"), name), letters);
+            if (white.size() < 50) {
+                fail("SETTINGS is not on the panel at GUI scale " + scale + ": " + white.size() + " white pixels in "
+                        + letters);
+            }
+            if (first == null) {
+                first = white;
+            } else if (!first.equals(white)) {
+                fail("at GUI scale " + (scale == 0 ? "Auto" : scale) + " SETTINGS is not the same pixels as at GUI scale"
+                        + " 1: the panel is not drawn at real resolution");
+            }
+        }
+        onClient(client, () -> {
+            client.options.guiScale = 0;
+            return null;
+        });
+    }
+
+    /** Where a screenshot is white, inside a rectangle of real pixels, as points relative to it. */
+    private static java.util.Set<Long> whitePixels(File shot, Rect area) {
+        BufferedImage image = null;
+        try {
+            image = ImageIO.read(shot);
+        } catch (IOException unreadable) {
+            fail("could not read the screenshot " + shot + " (" + unreadable + ")");
+        }
+        java.util.Set<Long> white = new java.util.HashSet<>();
+        for (int y = area.y; y < area.y + area.height; y++) {
+            for (int x = area.x; x < area.x + area.width; x++) {
+                int rgb = image.getRGB(x, y);
+                if (((rgb >> 16) & 0xFF) >= 240 && ((rgb >> 8) & 0xFF) >= 240 && (rgb & 0xFF) >= 240) {
+                    white.add(((long) (x - area.x) << 32) | (y - area.y));
+                }
+            }
+        }
+        return white;
     }
 
     /** Runs {@code work} on the integrated server's thread and waits for its answer. */

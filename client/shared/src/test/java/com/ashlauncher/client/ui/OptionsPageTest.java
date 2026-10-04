@@ -10,6 +10,7 @@ import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.settings.Setting;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.ui.draw.FakeCanvas;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,10 +29,14 @@ class OptionsPageTest {
 
     private Settings settings;
     private Panel panel;
+    private int width = 1920;
+    private int height = 1080;
 
     private Panel open(int width, int height) {
         settings = Settings.load(configDir);
-        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> "Right Shift", () -> { });
+        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> { });
+        this.width = width;
+        this.height = height;
         panel.resize(width, height);
         render();
         click(panel.optionsLinkOf(Feature.CROSSHAIR));
@@ -39,13 +44,13 @@ class OptionsPageTest {
     }
 
     private Panel open() {
-        return open(427, 240);
+        return open(1920, 1080);
     }
 
-    private FakeScreenSurface render() {
-        FakeScreenSurface surface = new FakeScreenSurface();
-        panel.render(surface, -1, -1);
-        return surface;
+    private FakeCanvas render() {
+        FakeCanvas canvas = new FakeCanvas(width, height);
+        panel.render(canvas, -1, -1);
+        return canvas;
     }
 
     private void click(Rect at) {
@@ -61,8 +66,8 @@ class OptionsPageTest {
     @Test
     void only_a_feature_with_options_has_an_options_link() {
         settings = Settings.load(configDir);
-        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> "Right Shift", () -> { });
-        panel.resize(427, 240);
+        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> { });
+        panel.resize(width, height);
         render();
 
         assertNotNull(panel.optionsLinkOf(Feature.CROSSHAIR), "the crosshair's card has no options link");
@@ -72,11 +77,11 @@ class OptionsPageTest {
     @Test
     void the_page_shows_the_feature_its_switch_every_option_and_a_way_back() {
         open();
-        FakeScreenSurface surface = render();
+        FakeCanvas surface = render();
 
         for (String line : new String[] {"< All features", "Crosshair", "Shape", "Size", "Gap", "Thickness", "Colour",
                 "Opacity", "Outline", "Reset to defaults", "Preview"}) {
-            assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.lines());
+            assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.texts());
         }
         assertNotNull(panel.switchOf(Feature.CROSSHAIR), "the feature's own switch is not on its page");
     }
@@ -169,17 +174,20 @@ class OptionsPageTest {
     void escape_while_typing_a_colour_stops_typing_and_does_not_close_the_panel() {
         java.util.List<String> closed = new java.util.ArrayList<>();
         settings = Settings.load(configDir);
-        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> "Right Shift",
-                () -> closed.add("closed"));
-        panel.resize(427, 240);
+        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> closed.add("closed"));
+        panel.resize(width, height);
         render();
         click(panel.optionsLinkOf(Feature.CROSSHAIR));
         click(panel.hexBoxOf(Settings.CROSSHAIR_COLOUR));
 
         panel.keyPressed(Key.ESCAPE);
         assertEquals(java.util.List.of(), closed, "Escape closed the panel mid-typing");
+        render();
+        assertNotNull(panel.backLink(), "the first Escape left the page instead of just stopping the typing");
         panel.keyPressed(Key.ESCAPE);
-        assertEquals(java.util.List.of("closed"), closed, "a second Escape did not close it");
+        assertEquals(java.util.List.of(), closed, "the second Escape closed the panel instead of going back");
+        panel.keyPressed(Key.ESCAPE);
+        assertEquals(java.util.List.of("closed"), closed, "a third Escape, on the tiles, did not close it");
     }
 
     @Test
@@ -212,12 +220,12 @@ class OptionsPageTest {
         open();
         click(panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0x4DFF88));
 
-        FakeScreenSurface surface = render();
+        FakeCanvas surface = render();
 
         for (String name : new String[] {"Sky", "Snow", "Night"}) {
             assertTrue(surface.drew(name), name + " is not labelled");
         }
-        long green = surface.fills.stream().filter(f -> f.colour() == 0xFF4DFF88).count();
+        long green = surface.fills.stream().filter(f -> f.argb() == 0xFF4DFF88).count();
         assertTrue(green >= 3, "the chosen colour is not in all three previews: " + green + " fills");
     }
 
@@ -233,12 +241,14 @@ class OptionsPageTest {
 
     @Test
     void at_the_smallest_gui_size_every_control_can_be_reached() {
-        open(320, 240);
-        FakeScreenSurface surface = render();
+        open(854, 480);
+        FakeCanvas surface = render();
 
-        for (FakeScreenSurface.Text text : surface.texts) {
-            assertTrue(text.x() >= 0 && text.x() + surface.textWidth(text.text()) <= 320 && text.y() + 9 <= 240,
-                    "off screen: " + text);
+        for (FakeCanvas.Drawn text : surface.drawn) {
+            if (text.text() != null) {
+                assertTrue(text.x() >= 0 && text.x() + text.width() <= 854 && text.y() + text.height() <= 480,
+                        "off screen: " + text.text());
+            }
         }
         for (int i = 0; i < 20 && panel.resetToDefaults() == null; i++) {
             panel.mouseScrolled(-1);
@@ -274,7 +284,7 @@ class OptionsPageTest {
         open();
 
         click(panel.choiceOf(Settings.CROSSHAIR_SHAPE, "dot"));
-        FakeScreenSurface surface = render();
+        FakeCanvas surface = render();
 
         assertFalse(surface.drew("Gap"), "a dot is offered a gap");
         assertFalse(surface.drew("Thickness"), "a dot is offered a thickness");
@@ -287,8 +297,8 @@ class OptionsPageTest {
     void a_crosshair_that_did_not_load_offers_no_options() {
         settings = Settings.load(configDir);
         panel = new Panel(new SettingsScreen(settings, feature -> feature != Feature.CROSSHAIR, () -> { }),
-                () -> "Right Shift", () -> { });
-        panel.resize(427, 240);
+                () -> { });
+        panel.resize(width, height);
         render();
 
         assertNull(panel.optionsLinkOf(Feature.CROSSHAIR), "options for a crosshair the game is not drawing");
@@ -297,14 +307,14 @@ class OptionsPageTest {
     @Test
     void the_hit_indicator_s_page_sets_its_colour_and_how_long_it_shows_in_steps_of_50_ms() throws IOException {
         settings = Settings.load(configDir);
-        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> "Right Shift", () -> { });
-        panel.resize(427, 240);
+        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> { });
+        panel.resize(width, height);
         render();
         click(panel.optionsLinkOf(Feature.HIT_INDICATOR));
-        FakeScreenSurface surface = render();
+        FakeCanvas surface = render();
 
         for (String line : new String[] {"Hit indicator", "Colour", "Opacity", "Duration", "300 ms"}) {
-            assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.lines());
+            assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.texts());
         }
         assertFalse(surface.drew("Preview"), "a preview of a crosshair on the hit indicator's page");
 

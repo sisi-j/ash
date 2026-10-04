@@ -8,7 +8,9 @@
     "ClientPlayNetworkHandlerMixin",
     "ClientPlayerEntityMixin",
     "ClientPlayerInteractionManagerMixin",
+    "GameRendererAccess",
     "InGameHudMixin",
+    "InGameHudPanelMixin",
     "MinecraftClientMixin"
   ],
   "injectors": {

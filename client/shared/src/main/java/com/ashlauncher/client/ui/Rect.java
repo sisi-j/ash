@@ -1,6 +1,6 @@
 package com.ashlauncher.client.ui;
 
-/** A rectangle on screen, in GUI units: where something is drawn, and so where a click on it lands. */
+/** A rectangle on screen, in the units of whatever drew it - real pixels for the panel - where something is drawn, and so where a click on it lands. */
 public final class Rect {
 
     public final int x;
