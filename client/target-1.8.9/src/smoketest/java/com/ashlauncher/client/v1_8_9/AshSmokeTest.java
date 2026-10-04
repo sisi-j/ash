@@ -487,7 +487,8 @@ public final class AshSmokeTest implements ClientModInitializer {
             if (target == null) {
                 return false;
             }
-            screen.mouseClicked(target.centreX(), target.centreY(), 0);
+            // Real pixels: the panel is drawn in them, and so is where it says it drew.
+            screen.clickAt(target.centreX(), target.centreY());
             screen.mouseReleased(target.centreX(), target.centreY(), 0);
             return true;
         });

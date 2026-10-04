@@ -249,7 +249,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 - **Changes apply at once and are saved as they are made.** Nothing waits for the screen to close.
 - ~~**Each target draws the screen with its own vanilla widgets, thinly.** Layout and behaviour are the same on both targets, and the widgets look like each target's own.~~ **ash draws its own interface, the same on both targets.** (*Amended 2026-10-03 by the product owner's decision, after the prototype on branch `prototype/ash-ui`.*)
   - The product owner wants a menu like Lunar's in kind, but simpler and in ash's grayscale. Vanilla widgets would look like each game's own grey buttons, so they are dropped.
-  - ~~**The layout, for now, is the prototype's design A, "Panel"**, a stand-in drawn from rectangles and text in the game's own font, with stepped rounded corners.~~ Superseded by the final design below. Design A shipped with #55 and #34 and stays until the final design replaces it.
+  - ~~**The layout, for now, is the prototype's design A, "Panel"**, a stand-in drawn from rectangles and text in the game's own font, with stepped rounded corners.~~ Superseded by the final design below. Design A shipped with #55 and #34. #63 replaced its frame and cards with the final frame and tiles on 2026-10-04; its options pages stay, drawn in Inter, until #67.
   - **The final design** (*settled 2026-10-03 by the product owner's brief and three rounds on an interactive mockup: branch `prototype/final-design`, https://claude.ai/artifact/J3nd5iXkeJtMsU1Nnt2ZJe, version 3*):
     - **Frame.**
       - The panel covers 85% of the screen, centred with equal margins, and has rounded corners and a soft shadow.

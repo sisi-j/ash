@@ -2,349 +2,219 @@ package com.ashlauncher.client.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ashlauncher.client.report.Feature;
-import com.ashlauncher.client.settings.OnOff;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.ui.draw.FakeCanvas;
+import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * ash's settings panel, driven the way a player drives it - clicks at points
- * on the screen, keys typed - and judged by what it draws and what it saves.
- * No game: the surface is a fake that records text and rectangles.
+ * ash's settings panel in the final design, driven the way a player drives
+ * it - clicks at points on the screen, keys - and judged by what it draws and
+ * what it saves. No game: the canvas is a fake that records what was drawn
+ * and composites real pixels.
  */
 class PanelTest {
 
-    /** The GUI size of a 1280 by 720 window at the default scale. */
-    private static final int WIDTH = 427;
-    private static final int HEIGHT = 240;
+    private static final int WIDTH = 1920;
+    private static final int HEIGHT = 1080;
 
     @TempDir
     Path configDir;
 
     private final List<String> closed = new ArrayList<>();
+    private final AtomicLong now = new AtomicLong();
+    private Settings settings;
 
-    private Panel panel(Settings settings, Predicate<Feature> landed) {
-        Panel panel = new Panel(new SettingsScreen(settings, landed, () -> { }), () -> "Right Shift",
-                () -> closed.add("closed"));
-        panel.resize(WIDTH, HEIGHT);
+    private Panel panel(Predicate<Feature> landed, int width, int height) {
+        settings = Settings.load(configDir);
+        Panel panel = new Panel(new SettingsScreen(settings, landed, () -> { }), () -> closed.add("closed"), now::get);
+        panel.resize(width, height);
         return panel;
     }
 
-    private Panel panel(Settings settings) {
-        return panel(settings, feature -> true);
+    private Panel panel() {
+        return panel(feature -> true, WIDTH, HEIGHT);
     }
 
-    private static FakeScreenSurface render(Panel panel) {
-        return render(panel, new FakeScreenSurface());
+    private static FakeCanvas render(Panel panel) {
+        return render(panel, WIDTH, HEIGHT);
     }
 
-    private static FakeScreenSurface render(Panel panel, FakeScreenSurface surface) {
-        panel.render(surface, -1, -1);
-        return surface;
-    }
-
-    /** The text drawn inside a rectangle, top to bottom, joined with spaces. */
-    private static String textIn(FakeScreenSurface surface, Rect area) {
-        StringBuilder text = new StringBuilder();
-        for (FakeScreenSurface.Text drawn : surface.texts) {
-            if (area.contains(drawn.x(), drawn.y())) {
-                text.append(text.length() == 0 ? "" : " ").append(drawn.text());
-            }
-        }
-        return text.toString();
+    private static FakeCanvas render(Panel panel, int width, int height) {
+        FakeCanvas canvas = new FakeCanvas(width, height);
+        panel.render(canvas, -1, -1);
+        return canvas;
     }
 
     private static void click(Panel panel, Rect at) {
-        panel.mouseClicked(at.centreX(), at.centreY());
+        assertNotNull(at, "nothing on screen to click");
+        assertTrue(panel.mouseClicked(at.centreX(), at.centreY()), "the click landed on nothing");
     }
 
-    private static void type(Panel panel, String text) {
-        for (char c : text.toCharArray()) {
-            panel.charTyped(c);
+    @Test
+    void the_panel_covers_85_percent_of_the_screen_centred() {
+        Panel panel = panel();
+        Rect at = panel.panel();
+
+        assertEquals(144, at.x);
+        assertEquals(81, at.y);
+        assertEquals(WIDTH - 2 * 144, at.width);
+        assertEquals(HEIGHT - 2 * 81, at.height);
+    }
+
+    @Test
+    void every_switchable_feature_has_a_tile_with_its_name_and_its_state() {
+        Panel panel = panel();
+        FakeCanvas canvas = render(panel);
+
+        for (SettingsScreen.Row row : new SettingsScreen(settings, feature -> true, () -> { }).rows()) {
+            assertTrue(canvas.drew(row.name()), row.name() + " has no tile: " + canvas.texts());
+            assertNotNull(panel.switchOf(row.feature()), row.name() + "'s button is not on view");
         }
+        assertTrue(canvas.drew("ENABLED"), canvas.texts().toString());
     }
 
     @Test
-    void every_declared_setting_has_a_card_with_its_name_and_what_it_does() {
-        FakeScreenSurface surface;
-        assertFalse(Settings.switches().isEmpty(), "the test proves nothing with no settings declared");
-        Panel panel = panel(Settings.load(configDir));
-        surface = render(panel);
-        for (OnOff setting : Settings.switches()) {
-            Rect card = panel.cardOf(setting.feature());
-            // The "Options >" link is the card's own, not part of what the feature does.
-            String inCard = textIn(surface, card).replace(" Options >", "");
-            // The name, then as much of its own description as fits, in its own card.
-            String name = setting.feature().displayName();
-            assertTrue(inCard.startsWith(name + " "), setting.key() + "'s card reads \"" + inCard + "\"");
-            String shown = inCard.substring(name.length() + 1).replace("...", "");
-            assertTrue(shown.length() >= 12 && setting.description().startsWith(shown),
-                    setting.key() + "'s card shows \"" + shown + "\", not its description");
-        }
-        assertTrue(surface.drew("ash"), "no wordmark");
-    }
+    void settings_runs_down_the_strip_one_capital_at_a_time() {
+        Panel panel = panel();
+        FakeCanvas canvas = render(panel);
 
-    @Test
-    void clicking_a_card_s_switch_switches_the_feature_now_and_in_the_file() {
-        Settings settings = Settings.load(configDir);
-        Panel panel = panel(settings);
-        render(panel);
-
-        click(panel, panel.switchOf(Feature.FPS_READOUT));
-
-        assertFalse(settings.get(Settings.FPS_READOUT), "the running game did not see the change");
-        assertFalse(Settings.load(configDir).get(Settings.FPS_READOUT), "the change was not saved");
-        click(panel, panel.switchOf(Feature.FPS_READOUT));
-        assertTrue(settings.get(Settings.FPS_READOUT), "a second click did not switch it back");
-    }
-
-    @Test
-    void a_category_shows_only_its_own_cards_and_all_shows_every_one() {
-        Panel panel = panel(Settings.load(configDir));
-        render(panel);
-
-        click(panel, panel.categoryAt("Movement"));
-        FakeScreenSurface movement = render(panel);
-
-        assertTrue(movement.drew("Toggle sprint"));
-        assertFalse(movement.drew("FPS readout"), "a HUD card shown under Movement");
-        assertFalse(movement.drew("Crosshair"), "a PvP card shown under Movement");
-
-        click(panel, panel.categoryAt("All"));
-        FakeScreenSurface all = render(panel);
-        for (OnOff setting : Settings.switches()) {
-            assertTrue(all.drew(setting.feature().displayName()), setting.key() + " missing under All");
-        }
-    }
-
-    @Test
-    void each_category_is_listed_with_how_many_features_it_has() {
-        Panel panel = panel(Settings.load(configDir));
-        FakeScreenSurface surface = render(panel);
-
-        for (String category : new String[] {"All", "PvP", "HUD", "Movement"}) {
-            long expected = category.equals("All") ? Settings.switches().size()
-                    : Settings.switches().stream().filter(s -> s.category().displayName().equals(category)).count();
-            assertEquals(category + " " + expected, textIn(surface, panel.categoryAt(category)),
-                    "the " + category + " row");
-        }
-    }
-
-    @Test
-    void no_category_s_name_runs_into_its_count() {
-        // The game's own font drew "Movement1" in the first real-game
-        // screenshot: the column was sized by guess, not by the font.
-        Panel panel = panel(Settings.load(configDir));
-        FakeScreenSurface surface = render(panel);
-
-        for (String category : new String[] {"All", "PvP", "HUD", "Movement"}) {
-            Rect row = panel.categoryAt(category);
-            FakeScreenSurface.Text name = null;
-            FakeScreenSurface.Text count = null;
-            for (FakeScreenSurface.Text text : surface.texts) {
-                if (row.contains(text.x(), text.y())) {
-                    if (name == null) {
-                        name = text;
-                    } else {
-                        count = text;
-                    }
+        Rect strip = panel.panel();
+        int lastY = -1;
+        for (char letter : "SETTINGS".toCharArray()) {
+            FakeCanvas.Drawn drawn = null;
+            for (FakeCanvas.Drawn each : canvas.drawn) {
+                if (String.valueOf(letter).equals(each.text()) && each.y() > lastY) {
+                    drawn = each;
+                    break;
                 }
             }
-            assertTrue(name != null && count != null, category + " is not drawn as a name and a count");
-            int space = count.x() - (name.x() + surface.textWidth(name.text()));
-            assertTrue(space >= 4, category + "'s name and count are " + space + " apart");
-            assertTrue(count.x() + surface.textWidth(count.text()) <= row.x + row.width, category + "'s count overflows");
+            assertNotNull(drawn, "no " + letter + " below the last letter");
+            assertTrue(drawn.x() >= strip.x && drawn.x() + drawn.width() <= strip.x + Math.round(5.2f * WIDTH / 100) + 4,
+                    letter + " is outside the strip");
+            lastY = drawn.y();
         }
+        assertTrue(lastY < panel.editHudButton().y, "the letters run into Edit HUD");
     }
 
     @Test
-    void a_switch_is_drawn_as_what_it_is_knob_right_when_on_and_left_when_off() {
-        Settings settings = Settings.load(configDir);
-        Panel panel = panel(settings);
-        Rect on = panel.switchOf(Feature.FPS_READOUT);
+    void a_tile_s_button_switches_the_feature_now_and_in_the_file() throws Exception {
+        Panel panel = panel();
+        render(panel);
 
-        assertEquals(Palette.BACKGROUND, knobColour(render(panel), on, true), "an on switch's knob is not at the right");
-        click(panel, on);
-        assertEquals(Palette.MUTED, knobColour(render(panel), on, false), "an off switch's knob is not at the left");
-    }
+        click(panel, panel.switchOf(Feature.FPS_READOUT));
 
-    /** The colour filled at the middle of one end of a switch, where its knob sits. */
-    private static int knobColour(FakeScreenSurface surface, Rect at, boolean right) {
-        int x = right ? at.x + at.width - 5 : at.x + 4;
-        int y = at.centreY();
-        int colour = 0;
-        for (FakeScreenSurface.Fill fill : surface.fills) {
-            if (x >= fill.x() && x < fill.x() + fill.width() && y >= fill.y() && y < fill.y() + fill.height()) {
-                colour = fill.colour();
-            }
-        }
-        return colour;
+        assertFalse(settings.get(Settings.FPS_READOUT));
+        assertTrue(Files.readString(configDir.resolve("ash.properties")).contains("\nfps-readout.enabled=false\n"));
+        assertTrue(render(panel).drew("DISABLED"));
     }
 
     @Test
-    void typing_filters_the_cards_and_backspace_brings_them_back() {
-        Panel panel = panel(Settings.load(configDir));
-
-        type(panel, "cross");
-        FakeScreenSurface filtered = render(panel);
-
-        assertTrue(filtered.drew("cross"), "what was typed is not shown in the search box");
-        assertTrue(filtered.drew("Crosshair"));
-        assertFalse(filtered.drew("FPS readout"), "a card that does not match is still shown");
-
-        for (int i = 0; i < "cross".length(); i++) {
-            panel.keyPressed(Key.BACKSPACE);
-        }
-        FakeScreenSurface cleared = render(panel);
-        assertTrue(cleared.drew("FPS readout"), "clearing the search did not bring the cards back");
-        assertTrue(cleared.drew("Search features"), "the empty search box lost its hint");
-    }
-
-    @Test
-    void a_search_that_matches_nothing_says_so() {
-        Panel panel = panel(Settings.load(configDir));
-
-        type(panel, "reach");
-        FakeScreenSurface surface = render(panel);
-
-        assertTrue(surface.drew("Nothing matches \"reach\"."), surface.lines().toString());
-    }
-
-    @Test
-    void a_feature_that_did_not_load_says_so_and_its_switch_does_nothing() {
-        Settings settings = Settings.load(configDir);
-        Panel panel = panel(settings, feature -> feature != Feature.TOGGLE_SPRINT);
-        FakeScreenSurface surface = render(panel);
+    void a_feature_that_did_not_load_reads_unavailable_and_cannot_be_switched() {
+        Panel panel = panel(feature -> feature != Feature.TOGGLE_SPRINT, WIDTH, HEIGHT);
+        FakeCanvas before = render(panel);
+        assertTrue(before.drew("UNAVAILABLE"), before.texts().toString());
 
         click(panel, panel.switchOf(Feature.TOGGLE_SPRINT));
 
-        assertTrue(surface.drew("Did not load"), surface.lines().toString());
-        assertTrue(settings.get(Settings.TOGGLE_SPRINT), "a switch that does nothing was switched anyway");
-        assertTrue(String.join(" ", surface.lines()).contains("problem with ash"),
-                "the footer does not say whose problem it is: " + surface.lines());
+        assertTrue(settings.get(Settings.TOGGLE_SPRINT), "an unavailable feature was switched");
+        assertTrue(render(panel).drew("Toggle sprint did not load. An update to ash will fix it."));
     }
 
     @Test
-    void the_close_button_closes_the_panel_and_the_footer_names_the_key() {
-        Panel panel = panel(Settings.load(configDir));
-        FakeScreenSurface surface = render(panel);
+    void the_tile_or_its_gear_opens_a_feature_s_options_and_escape_goes_back_then_closes() {
+        Panel panel = panel();
+        render(panel);
+        Rect gear = panel.optionsLinkOf(Feature.CROSSHAIR);
+        assertNotNull(gear, "the crosshair's tile has no gear");
+        assertNull(panel.optionsLinkOf(Feature.FPS_READOUT), "a feature with no options has a gear");
 
-        click(panel, panel.closeButton());
-
-        assertEquals(List.of("closed"), closed);
-        assertTrue(surface.drew("Right Shift closes"), surface.lines().toString());
-        assertTrue(surface.drew("Changes save as you make them"), surface.lines().toString());
-    }
-
-    @Test
-    void escape_closes_the_panel() {
-        Panel panel = panel(Settings.load(configDir));
+        click(panel, gear);
+        render(panel);
+        assertNull(panel.tileOf(Feature.CROSSHAIR), "the tiles are still showing under the options");
+        assertNotNull(panel.backLink(), "the options page did not open");
 
         panel.keyPressed(Key.ESCAPE);
+        render(panel);
+        assertNotNull(panel.tileOf(Feature.CROSSHAIR), "Escape did not go back to the tiles");
+        assertEquals(List.of(), closed);
 
-        assertEquals(List.of("closed"), closed);
+        Rect tile = panel.tileOf(Feature.CROSSHAIR);
+        panel.mouseClicked(tile.centreX(), tile.y + tile.height / 3);
+        render(panel);
+        assertNotNull(panel.backLink(), "clicking the tile's body did not open its options");
+
+        panel.keyPressed(Key.ESCAPE);
+        panel.keyPressed(Key.ESCAPE);
+        assertEquals(List.of("closed"), closed, "Escape on the tiles did not close the panel");
     }
 
     @Test
-    void typing_never_splits_a_character_in_two() {
-        // A character outside the basic plane is two chars in Java; the
-        // search keeps it whole when typed and when deleted.
-        Panel panel = panel(Settings.load(configDir));
-        int grin = 0x1F600;
-
-        panel.charTyped('a');
-        panel.charTyped(grin);
-        panel.keyPressed(Key.BACKSPACE);
-
-        assertTrue(render(panel).drew("a"), "Backspace took half a character, or the 'a' with it");
-    }
-
-    @Test
-    void cards_that_do_not_fit_are_reached_by_scrolling() {
-        // A taller font - as ash's own typeface might be - makes the cards
-        // taller, so three no longer fit at 320 by 240, the smallest GUI size
-        // the game ever uses.
-        Settings settings = Settings.load(configDir);
-        Panel panel = panel(settings);
-        panel.resize(320, 240);
-        FakeScreenSurface tall = render(panel, new FakeScreenSurface(18));
-        assertTrue(panel.maxScroll() > 0, "the test proves nothing if every card fits");
-        assertEquals(null, panel.switchOf(Feature.CROSSHAIR), "the third card is on view without scrolling");
-        assertTrue(tall.fills.stream().anyMatch(f -> f.colour() == Palette.MUTED && f.width() == 2),
-                "nothing shows there is more to scroll to");
-
-        panel.mouseScrolled(-1);
-        render(panel, new FakeScreenSurface(18));
-        click(panel, panel.switchOf(Feature.CROSSHAIR));
-
-        assertFalse(settings.get(Settings.CROSSHAIR), "the card scrolled to could not be switched");
-        panel.mouseScrolled(1);
-        render(panel, new FakeScreenSurface(18));
-        assertTrue(panel.switchOf(Feature.FPS_READOUT) != null, "scrolling back up did not bring the first card back");
-    }
-
-    @Test
-    void a_click_on_nothing_does_nothing() {
-        Settings settings = Settings.load(configDir);
-        Panel panel = panel(settings);
+    void edit_hud_says_it_is_coming_soon_for_a_moment() {
+        Panel panel = panel();
         render(panel);
 
-        boolean handled = panel.mouseClicked(1, 1);
+        click(panel, panel.editHudButton());
+        assertTrue(render(panel).drew("Edit HUD is coming soon."));
 
-        assertFalse(handled);
-        assertEquals(List.of(), closed);
-        for (OnOff setting : Settings.switches()) {
-            assertEquals(setting.fallback(), settings.get(setting), setting.key());
-        }
+        now.addAndGet(3_000_000_000L);
+        assertFalse(render(panel).drew("Edit HUD is coming soon."), "the message never went away");
     }
 
     @Test
-    void at_every_common_gui_size_everything_stays_on_screen_and_no_card_overlaps_another() {
-        // The game picks the largest GUI scale that leaves at least 320 by 240,
-        // so 320 by 240 is the smallest a GUI ever is; 427 by 240 is 1280 by
-        // 720 at scale 3. Each size is tried with and without the notice a
-        // feature that did not load puts above the footer.
-        for (int[] size : new int[][] {{320, 240}, {427, 240}, {480, 270}, {640, 360}, {960, 540}}) {
-          for (boolean notice : new boolean[] {false, true}) {
-            Panel panel = panel(Settings.load(configDir), feature -> !notice || feature != Feature.TOGGLE_SPRINT);
-            panel.resize(size[0], size[1]);
-            FakeScreenSurface surface = render(panel);
-            String at = size[0] + "x" + size[1] + (notice ? " with the notice" : "");
+    void the_gear_opens_ash_s_own_settings_and_again_goes_back() {
+        Panel panel = panel();
+        render(panel);
 
-            for (FakeScreenSurface.Fill fill : surface.fills) {
-                assertTrue(fill.x() >= 0 && fill.y() >= 0 && fill.x() + fill.width() <= size[0]
-                        && fill.y() + fill.height() <= size[1], "off screen at " + at + ": " + fill);
-            }
-            for (FakeScreenSurface.Text text : surface.texts) {
-                assertTrue(text.x() >= 0 && text.y() >= 0 && text.x() + surface.textWidth(text.text()) <= size[0]
-                        && text.y() + surface.lineHeight() <= size[1], "text off screen at " + at + ": " + text);
-            }
-            for (OnOff setting : Settings.switches()) {
-                assertTrue(panel.cardOf(setting.feature()) != null || panel.maxScroll() > 0,
-                        setting.key() + "'s card is neither on view nor reachable by scrolling at " + at);
-            }
-            List<Rect> cards = new ArrayList<>();
-            for (OnOff setting : Settings.switches()) {
-                Rect card = panel.cardOf(setting.feature());
-                if (card != null) {
-                    cards.add(card);
+        click(panel, panel.gearButton());
+        assertTrue(render(panel).drew("ash settings"));
+        assertNull(panel.tileOf(Feature.CROSSHAIR));
+
+        click(panel, panel.gearButton());
+        render(panel);
+        assertNotNull(panel.tileOf(Feature.CROSSHAIR));
+    }
+
+    @Test
+    void a_click_outside_the_panel_lands_on_nothing() {
+        Panel panel = panel();
+        render(panel);
+
+        assertFalse(panel.mouseClicked(10, 10));
+        assertTrue(settings.get(Settings.FPS_READOUT));
+    }
+
+    @Test
+    void at_common_window_sizes_every_tile_and_its_text_stays_inside_the_panel() throws Exception {
+        for (int[] size : new int[][] {{854, 480}, {1280, 720}, {1920, 1080}, {2560, 1440}, {3840, 2160}}) {
+            Panel panel = panel(feature -> true, size[0], size[1]);
+            FakeCanvas canvas = render(panel, size[0], size[1]);
+            Rect inside = panel.panel();
+            for (FakeCanvas.Drawn drawn : canvas.drawn) {
+                if (drawn.text() == null) {
+                    continue;
                 }
+                assertTrue(inside.contains(drawn.x(), drawn.y())
+                        && inside.contains(drawn.x() + drawn.width() - 1, drawn.y() + drawn.height() - 1),
+                        "\"" + drawn.text() + "\" leaves the panel at " + size[0] + "x" + size[1]);
             }
-            for (int i = 0; i < cards.size(); i++) {
-                for (int j = i + 1; j < cards.size(); j++) {
-                    assertFalse(cards.get(i).overlaps(cards.get(j)), "cards overlap at " + at + ": " + cards.get(i) + " "
-                            + cards.get(j));
-                }
+            if (size[0] == 1920) {
+                // For a person to look at; nothing checks it.
+                canvas.save(new File("build/ui/panel-" + size[0] + "x" + size[1] + ".png"));
             }
-          }
         }
     }
 }

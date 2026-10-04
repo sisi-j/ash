@@ -433,8 +433,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             if (target == null) {
                 throw new AssertionError("ash's panel does not show " + what);
             }
-            double scale = client.getWindow().getGuiScale();
-            return new double[] {(target.centreX() + 0.5) * scale, (target.centreY() + 0.5) * scale};
+            // The panel is drawn in real pixels; the cursor is in window
+            // coordinates, which differ from them only on a high-DPI screen.
+            var window = client.getWindow();
+            return new double[] {(target.centreX() + 0.5) * window.getScreenWidth() / window.getWidth(),
+                (target.centreY() + 0.5) * window.getScreenHeight() / window.getHeight()};
         });
         context.getInput().setCursorPos(at[0], at[1]);
         context.getInput().pressMouse(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT);
