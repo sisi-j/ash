@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
   describeAge,
-  describeBytes,
   isUiError,
   type Accounts as AccountList,
   type Catalogue,
-  type DeletionPreview,
   type Instance,
   type InstanceId,
   type LauncherPreferences,
@@ -15,10 +13,10 @@ import {
   LOADER_LABELS,
 } from "./api";
 import { Icon } from "./icons";
-import { useLaunch, type Launch } from "./launch";
+import { InstancePage } from "./InstancePage";
+import { useLaunch } from "./launch";
 import { LaunchFailure } from "./LaunchFailure";
 import { PlayPage } from "./PlayPage";
-import { Settings } from "./Settings";
 import { SettingsPage } from "./SettingsPage";
 import { EmptyPage, Sidebar, type Page } from "./Sidebar";
 import { SignIn } from "./SignIn";
@@ -37,7 +35,6 @@ export default function App() {
   const [error, setError] = useState<UiError | null>(null);
   const [playView, setPlayView] = useState<PlayView>("home");
   const [preferences, setPreferences] = useState<LauncherPreferences | null>(null);
-  const [pendingDeletion, setPendingDeletion] = useState<DeletionPreview | null>(null);
   const [accounts, setAccounts] = useState<AccountList | null>(null);
   const [page, setPage] = useState<Page>("play");
   // Adding an account, from the title bar's menu. Signing in with no
@@ -136,40 +133,19 @@ export default function App() {
     [reloadInstances, fail],
   );
 
+  /** Renames an instance; why not, if ash refused, for the page to say on its row. */
   const rename = useCallback(
     async (id: InstanceId, name: string) => {
       try {
         await api.renameInstance(id, name);
         await reloadInstances(id);
+        return null;
       } catch (e) {
-        fail(e);
+        return isUiError(e) ? e.message : "ash could not rename it.";
       }
     },
-    [reloadInstances, fail],
+    [reloadInstances],
   );
-
-  const askToDelete = useCallback(
-    async (id: InstanceId) => {
-      try {
-        setPendingDeletion(await api.previewDeletion(id));
-      } catch (e) {
-        fail(e);
-      }
-    },
-    [fail],
-  );
-
-  const confirmDelete = useCallback(async () => {
-    if (!pendingDeletion) return;
-    try {
-      await api.deleteInstance(pendingDeletion.instance.id);
-      setPendingDeletion(null);
-      setPlayView("home");
-      await reloadInstances();
-    } catch (e) {
-      fail(e);
-    }
-  }, [pendingDeletion, reloadInstances, fail]);
 
   return (
     <div className="shell">
@@ -233,16 +209,17 @@ export default function App() {
             <NewInstance catalogue={catalogue} onCancel={() => setPlayView("home")} onCreate={create} />
           </section>
         ) : playView === "instance" && selected ? (
-          <section className="page">
-            <BackTo onBack={() => setPlayView("home")} />
-            <InstanceDetail
-              instance={selected}
-              launch={launch}
-              onRename={rename}
-              onReveal={() => api.revealGameDirectory(selected.id).catch(fail)}
-              onDelete={() => askToDelete(selected.id)}
-            />
-          </section>
+          <InstancePage
+            key={selected.id}
+            instance={selected}
+            launch={launch}
+            onRename={(name) => rename(selected.id, name)}
+            onDeleted={() => {
+              setPlayView("home");
+              void reloadInstances();
+            }}
+            onBack={() => setPlayView("home")}
+          />
         ) : (
           <PlayPage
             player={active}
@@ -268,14 +245,6 @@ export default function App() {
           onClose={launch.dismiss}
         />
       )}
-
-      {pendingDeletion && (
-        <DeleteDialog
-          preview={pendingDeletion}
-          onCancel={() => setPendingDeletion(null)}
-          onConfirm={confirmDelete}
-        />
-      )}
     </div>
   );
 }
@@ -289,101 +258,6 @@ function BackTo(props: { onBack: () => void }) {
       </span>
       Play
     </button>
-  );
-}
-
-// ---- instance detail -------------------------------------------------------
-
-/**
- * The selected instance's own page, from its cog: today's controls as they
- * were, until #72 gives the page its final look.
- */
-function InstanceDetail(props: {
-  instance: Instance;
-  launch: Launch;
-  onRename: (id: InstanceId, name: string) => void;
-  onReveal: () => void;
-  onDelete: () => void;
-}) {
-  const { instance } = props;
-  const { phase } = props.launch;
-  const [draft, setDraft] = useState(instance.name);
-
-  useEffect(() => setDraft(instance.name), [instance.id, instance.name]);
-
-  const dirty = draft.trim() !== instance.name && draft.trim().length > 0;
-
-  return (
-    <section className="detail">
-      <input
-        className="detail-name"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && dirty && props.onRename(instance.id, draft)}
-        aria-label="Instance name"
-      />
-
-      <dl className="facts">
-        <div>
-          <dt>Version</dt>
-          <dd className="numeric">{instance.version_id}</dd>
-        </div>
-        <div>
-          <dt>Loader</dt>
-          {/* Shown, never edited: it was chosen when the instance was
-              created and there is no operation that changes it. */}
-          <dd>{LOADER_LABELS[instance.loader]}</dd>
-        </div>
-        {instance.loader !== "vanilla" && (
-          <div>
-            <dt>ash settings</dt>
-            {/* The default key, said once where a new player looks. It is
-                rebindable in the game's Controls, and the launcher never
-                reads the game's own options, so a player who moved it knows
-                where it went. */}
-            <dd>Right Shift, in game</dd>
-          </div>
-        )}
-        <div>
-          <dt>Last played</dt>
-          <dd>{instance.last_played_ms ? describeAge(instance.last_played_ms) : "never"}</dd>
-        </div>
-        <div>
-          <dt>Created</dt>
-          <dd>{describeAge(instance.created_at_ms)}</dd>
-        </div>
-      </dl>
-
-      <div className="actions">
-        <button className="button" disabled={!dirty} onClick={() => props.onRename(instance.id, draft)}>
-          Save name
-        </button>
-        <button className="button" onClick={props.onReveal}>
-          Open folder
-        </button>
-        <button className="button" onClick={() => void api.revealLog()}>
-          Show log
-        </button>
-        {/* Fetching an instance's files ahead of time, for a slow
-            connection: the LAUNCH area on the Play page shows the progress. */}
-        {phase.at === "idle" && phase.plan.missing_files > 0 && (
-          <button className="button" onClick={() => props.launch.start("prepare")}>
-            Download only ({describeBytes(phase.plan.missing_bytes)})
-          </button>
-        )}
-        {phase.at === "working" && (
-          <button className="button" disabled>
-            Downloading…
-          </button>
-        )}
-        <button className="button button-danger" onClick={props.onDelete}>
-          Delete
-        </button>
-      </div>
-
-      <h3 className="panel-title">This machine</h3>
-      <Settings key={instance.id} id={instance.id} />
-    </section>
   );
 }
 
@@ -539,57 +413,5 @@ function NewInstance(props: {
         </p>
       )}
     </section>
-  );
-}
-
-// ---- delete ----------------------------------------------------------------
-
-function DeleteDialog(props: {
-  preview: DeletionPreview;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const { preview } = props;
-
-  return (
-    <div className="scrim" role="dialog" aria-modal="true">
-      <div className="dialog">
-        <h2 className="heading">Delete “{preview.instance.name}”?</h2>
-
-        <p className="muted">
-          This cannot be undone. {describeBytes(preview.total_bytes)} will be removed.
-        </p>
-
-        {preview.worlds.length > 0 ? (
-          <>
-            <h3 className="panel-title">
-              {preview.worlds.length} world{preview.worlds.length === 1 ? "" : "s"} will be lost
-            </h3>
-            <ul className="worlds">
-              {preview.worlds.map((world) => (
-                <li key={world}>{world}</li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <p className="muted">No worlds in this instance.</p>
-        )}
-
-        <p className="muted">
-          {preview.resource_packs} resource pack{preview.resource_packs === 1 ? "" : "s"},{" "}
-          {preview.screenshots} screenshot{preview.screenshots === 1 ? "" : "s"}.
-          Shared game files in the depot are not touched.
-        </p>
-
-        <div className="actions">
-          <button className="button button-danger" onClick={props.onConfirm}>
-            Delete permanently
-          </button>
-          <button className="button" onClick={props.onCancel} autoFocus>
-            Keep it
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

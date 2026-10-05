@@ -37,6 +37,7 @@ type State = {
  * been checked it is shown but ignores clicks.
  */
 const launchGame = (page: Page) => page.locator('.launch-button[aria-disabled="false"]').click();
+const openInstance = (page: Page) => page.getByRole("button", { name: "1.21.11 settings" }).click();
 const openPage = (label: string) => (page: Page) => page.getByRole("navigation").getByRole("button", { name: label }).click();
 
 /** How many audio contexts the page made: one the first time a sound plays, none if none ever does. */
@@ -101,10 +102,60 @@ const STATES: State[] = [
     verify: async (page) => ((await page.locator(".launch-area.is-launching").count()) === 0 ? null : "the scene reacted to Download only"),
   },
   { name: "degraded", shows: "Hit indicator did not load last time." },
+  { name: "instance-page", shows: "Window size", reach: openInstance },
   {
-    name: "instance-page",
-    shows: "This machine",
-    reach: (page) => page.getByRole("button", { name: "1.21.11 settings" }).click(),
+    name: "instance-memory",
+    shows: "Saved",
+    reach: async (page) => {
+      await openInstance(page);
+      await page.getByRole("radio", { name: "Custom" }).click();
+    },
+    verify: async (page) => ((await page.locator('input[type="range"]').count()) === 1 ? null : "Custom memory showed no slider"),
+  },
+  {
+    name: "instance-refused",
+    shows: "Window size must be between",
+    reach: async (page) => {
+      await openInstance(page);
+      await page.getByLabel("Window width").fill("100");
+      await page.getByLabel("Window height").fill("100");
+    },
+  },
+  {
+    // A refused value must not ride along with another row's save.
+    name: "instance-refused-then-memory",
+    shows: "Saved",
+    reach: async (page) => {
+      await openInstance(page);
+      await page.getByLabel("Window width").fill("100");
+      await page.getByLabel("Window height").fill("100");
+      await page.getByText("Window size must be between").waitFor();
+      await page.getByRole("radio", { name: "Custom" }).click();
+    },
+    verify: async (page) =>
+      (await page.locator('input[type="range"]').count()) === 1 &&
+      (await page.getByText("Window size must be between").count()) === 1
+        ? null
+        : "the memory save carried the refused window size",
+  },
+  {
+    name: "instance-delete",
+    shows: "cannot be undone",
+    reach: async (page) => {
+      await openInstance(page);
+      await page.getByRole("button", { name: "Delete instance" }).click();
+    },
+  },
+  {
+    name: "instance-deleted",
+    shows: "LAUNCH GAME",
+    // Confirmed on the page, and back to Play.
+    reach: async (page) => {
+      await openInstance(page);
+      await page.getByRole("button", { name: "Delete instance" }).click();
+      await page.getByRole("button", { name: "Delete", exact: true }).click();
+    },
+    verify: async (page) => ((await page.locator(".instance-page").count()) === 0 ? null : "still on the instance page after deleting"),
   },
   { name: "new-instance", shows: "Built for", reach: (page) => page.getByRole("button", { name: "New", exact: true }).click() },
   { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
