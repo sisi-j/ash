@@ -88,6 +88,10 @@ The launcher starts the game through its process port and watches for it to exit
 - **Edges.** `shadow: true` gives an undecorated window a 1px border on Windows, with rounded corners on Windows 11 **[DOC]**.
 - **Snapping.** Dragging hands the move to Windows, so drag-to-edge snapping should keep working. A custom maximise button does not get Windows 11's snap-layouts flyout. Both are from issue reports **[COMMUNITY]**, so the ticket's manual test checks them.
 
+*Amended 2026-10-04, while building #64:*
+- **Double-click is Tauri's own.** In Tauri 2.11, the drag-region script maximises on a double click by itself (`internal_toggle_maximize`, allowed by `core:window:default`). No manual `toggleMaximize()` is needed, and adding one would maximise twice. `data-tauri-drag-region="deep"` makes a whole bar drag, its text included; its buttons never start a drag **[PRACTICE]**, checked in the real app.
+- **The first capabilities file needs `core:default` too.** With no capabilities at all, Tauri rejects every plugin command, `event.listen` among them. So the Play page's progress and launch events never arrived in the real app before #64 **[PRACTICE]**, checked through WebView2 remote debugging with and without the file.
+
 ## 6. The launch sound
 
 The approved mockup synthesises its click and start sounds in the browser with the Web Audio API. The launcher's web view is Chromium-based (Spec, *Testing*) and supports the same API. **Judgement:** keep it synthesised. There is no file to ship, nothing to licence, and the sound the product owner approved is exactly the sound players hear. It plays only after a click, which is when the browser allows audio anyway, and it is off when "Launch sounds" is off.

@@ -4,6 +4,8 @@ dist/
 dist-ssr/
 .vite/
 *.tsbuildinfo
+# The launcher UI check's screenshots, for looking at, never committed.
+launcher/ui-check/screenshots/
 
 # --- Rust / Tauri ---
 target/

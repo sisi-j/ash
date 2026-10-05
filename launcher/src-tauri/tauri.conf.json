@@ -12,13 +12,16 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "ash",
         "width": 1000,
         "height": 660,
         "minWidth": 840,
         "minHeight": 560,
         "resizable": true,
-        "backgroundColor": "#0E0E0F"
+        "decorations": false,
+        "shadow": true,
+        "backgroundColor": "#0B0B0D"
       }
     ],
     "security": {

@@ -1,17 +1,74 @@
-/* Pure grayscale, no accent colour. Contrast and weight carry hierarchy.
-   Sora / Inter / JetBrains Mono get bundled as local woff2 during the UI
-   work; the app's CSP blocks remote font hosts, so a system stack stands in
-   until then rather than silently failing to load. */
+/* The in-game palette: near-black with a faint soft glow, translucent white
+   surfaces and white text. Green, red and grey each mean one thing - on or
+   faster, off or slower, no change - and are used for nothing else.
+
+   One face, Inter, bundled: the app's content security policy blocks every
+   remote host, and a player's launcher must look the same with no network.
+   `font-display: block` holds the text back for the moment Inter takes to
+   load rather than flashing a fallback, and the launcher UI check fails if
+   any text is drawn in anything but Inter. */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/Inter-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("/fonts/Inter-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("/fonts/Inter-SemiBold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/Inter-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 800;
+  font-display: block;
+  src: url("/fonts/Inter-ExtraBold.woff2") format("woff2");
+}
 
 :root {
-  --bg: #0e0e0f;
-  --text: #fafafa;
-  --muted: #8b8c90;
-  --emphasis: #3a3a3c;
-  --rule: #1c1c1e;
+  color-scheme: dark;
 
-  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "Cascadia Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --page: #0b0b0d;
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.64);
+  --text-3: rgba(255, 255, 255, 0.4);
+  --icon: rgba(255, 255, 255, 0.8);
+  --fill: rgba(255, 255, 255, 0.06);
+  --fill-2: rgba(255, 255, 255, 0.1);
+  --fill-3: rgba(255, 255, 255, 0.16);
+  --line: rgba(255, 255, 255, 0.09);
+  --popover: rgba(24, 24, 28, 0.96);
+
+  --green: #22c55e;
+  --red: #f0433a;
+  --red-text: #ff8a84;
+  --grey: #a7ada6;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --font: "Inter", sans-serif;
 }
 
 * {
@@ -26,130 +83,467 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg);
+  overflow: hidden;
+  background:
+    radial-gradient(60vw 34vw at 78% -6%, rgba(150, 165, 255, 0.1), transparent 70%),
+    radial-gradient(48vw 30vw at 8% 108%, rgba(255, 255, 255, 0.04), transparent 70%),
+    var(--page);
   color: var(--text);
-  font-family: var(--sans);
+  font-family: var(--font);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 2px;
+}
+
+.icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* ---- shell ---- */
 
 .shell {
   display: grid;
-  grid-template-columns: 15rem 1fr;
+  grid-template-rows: 44px 1fr;
+  grid-template-columns: 60px 1fr;
   height: 100%;
 }
 
-.rail {
+.titlebar {
+  grid-column: 1 / -1;
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem 1rem;
-  border-right: 1px solid var(--rule);
-  overflow: hidden;
+  align-items: center;
+  gap: 12px;
+  padding-left: 20px;
+  border-bottom: 1px solid var(--line);
 }
 
 .wordmark {
-  margin: 0 0 0.5rem 0.5rem;
-  font-size: 1.375rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
 }
 
-.rail-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
+.window-controls {
+  display: flex;
+  align-self: stretch;
 }
 
-.rail-item {
+.window-controls button {
+  width: 46px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+
+.window-controls button:hover {
+  background: var(--fill);
+  color: var(--text);
+}
+
+/* The one red that is not a meaning: Windows' own close hover, which players
+   expect under their mouse in that corner. */
+.window-controls .close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.window-controls .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.125rem;
+  gap: 6px;
+  padding: 12px 9px;
+  border-right: 1px solid var(--line);
+}
+
+.nav {
+  position: relative;
   width: 100%;
-  padding: 0.5rem;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
   border: 0;
-  border-radius: 4px;
+  border-radius: 9px;
   background: transparent;
-  color: var(--muted);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  color: var(--icon);
+  transition: background 160ms ease-out, color 160ms ease-out;
 }
 
-.rail-item:hover {
-  background: var(--rule);
+.nav:hover {
+  background: var(--fill);
   color: var(--text);
 }
 
-.rail-item.is-selected {
-  background: var(--rule);
+.nav[aria-current="page"] {
+  background: var(--fill-2);
   color: var(--text);
 }
 
-.rail-name {
-  font-weight: 500;
+.nav .icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* The page's name, beside the icon, on hover or keyboard focus. */
+.nav::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translate(-4px, -50%);
+  opacity: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--popover);
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 140ms ease-out, transform 200ms var(--ease-out);
+}
+
+.nav:hover::after,
+.nav:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.nav-bottom {
+  margin-top: auto;
+}
+
+.main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 28px;
+}
+
+/* ---- account menu ---- */
+
+.account-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.account-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 16rem;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-weight: 600;
+}
+
+.account-button:hover,
+.account-button[aria-expanded="true"] {
+  background: var(--fill);
+}
+
+.account-button .icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.account-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
 }
 
-.rail-version {
-  font-size: 0.75rem;
-  color: var(--muted);
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  width: 15rem;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--popover);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  transform-origin: top right;
+  animation: menu-in 220ms var(--ease-out);
 }
 
-.rail-loader {
-  margin-left: 0.4375rem;
-  padding: 0.0625rem 0.3125rem;
-  border: 1px solid var(--emphasis);
-  border-radius: 3px;
-  font-size: 0.6875rem;
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
 }
 
-.rail-new {
+.menu > button {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
 }
 
-/* ---- main ---- */
+.menu > button:hover:not(:disabled) {
+  background: var(--fill);
+}
 
-.main {
-  padding: 2.5rem 2.5rem 2rem;
-  overflow-y: auto;
+.menu > button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.menu .face,
+.menu-glyph {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.menu-glyph {
+  display: grid;
+  place-items: center;
+}
+
+.menu-glyph .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.menu-check {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  flex: none;
+}
+
+.menu hr {
+  margin: 5px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.menu .danger {
+  color: var(--red-text);
+}
+
+.menu-confirm {
+  padding: 6px 8px 4px;
+}
+
+.menu-confirm p {
+  margin: 0 0 8px;
+}
+
+.menu-confirm .muted {
+  font-size: 12.5px;
+}
+
+.menu-confirm .actions {
+  margin-top: 10px;
+}
+
+/* A Mojang skin URL is the whole 64x64 texture; the face is the 8x8 block at
+   (8,8). Sized in percent so the crop holds at any face size: the sheet is
+   eight faces wide, and the face is the second along and the second down. */
+.face {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 6px;
+  image-rendering: pixelated;
+  background-size: 800% 800%;
+  background-position: 14.2857% 14.2857%;
+  background-repeat: no-repeat;
+  background-color: var(--fill-2);
+}
+
+.face-empty {
+  background: var(--fill-2);
+}
+
+/* ---- pages ---- */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.empty-state {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.empty-state .icon {
+  width: 46px;
+  height: 46px;
+  color: var(--text-3);
+}
+
+.empty-state b {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Play, until its final layout: the instances on the left, the selected
+   one's details beside them. */
+.play {
+  display: grid;
+  grid-template-columns: 14rem 1fr;
+  gap: 28px;
+  align-items: start;
+}
+
+.instances {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--fill);
+}
+
+.instance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.instance-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  transition: background 140ms ease-out;
+}
+
+.instance-row:hover {
+  background: var(--fill);
+}
+
+.instance-row.is-selected {
+  background: var(--fill-3);
+}
+
+.instance-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.instance-version {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.instance-loader {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.instance-new {
+  margin-top: 8px;
+  justify-content: center;
+}
+
+.play-main {
+  min-width: 0;
 }
 
 .detail {
-  max-width: 28rem;
+  max-width: 30rem;
 }
 
 .heading {
-  margin: 0 0 1.25rem;
-  font-size: 1.125rem;
-  font-weight: 500;
+  margin: 0 0 18px;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .detail-name {
   width: 100%;
-  margin-bottom: 1.5rem;
-  padding: 0.375rem 0;
+  margin-bottom: 20px;
+  padding: 4px 0;
   border: 0;
-  border-bottom: 1px solid var(--emphasis);
+  border-bottom: 1px solid var(--fill-3);
   background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 1.375rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .detail-name:focus {
@@ -158,37 +552,38 @@ body {
 }
 
 .detail-name::placeholder {
-  color: var(--emphasis);
+  color: var(--text-3);
 }
 
 .facts {
-  margin: 0 0 1.75rem;
+  margin: 0 0 24px;
   display: grid;
-  gap: 0.625rem;
+  gap: 8px;
 }
 
 .facts div {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
-  border-bottom: 1px solid var(--rule);
-  padding-bottom: 0.5rem;
+  gap: 16px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line);
 }
 
 .facts dt {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .facts dd {
   margin: 0;
+  font-weight: 600;
 }
 
 .empty {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.875rem;
+  gap: 12px;
 }
 
 /* ---- controls ---- */
@@ -196,104 +591,108 @@ body {
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1.25rem 0 0;
+  gap: 8px;
+  margin: 18px 0 0;
 }
 
 .button {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--emphasis);
-  border-radius: 4px;
-  padding: 0.375rem 0.875rem;
-  font: inherit;
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition: border-color 120ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fill-2);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 140ms ease-out;
+}
+
+.button .icon {
+  width: 14px;
+  height: 14px;
 }
 
 .button:hover:not(:disabled) {
-  border-color: var(--text);
+  background: var(--fill-3);
 }
 
 .button:disabled {
-  color: var(--emphasis);
-  border-color: var(--rule);
+  background: var(--fill);
+  color: var(--text-3);
   cursor: default;
 }
 
-.button:focus-visible {
-  outline: 2px solid var(--text);
-  outline-offset: 2px;
+.button-danger {
+  background: rgba(240, 67, 58, 0.16);
+  color: var(--red-text);
 }
 
-/* Weight, not hue: the destructive action is the only filled button. */
 .button-danger:hover:not(:disabled) {
-  background: var(--text);
-  color: var(--bg);
-  border-color: var(--text);
+  background: var(--red);
+  color: #fff;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  gap: 6px;
+  margin-bottom: 20px;
 }
 
 .chip {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--emphasis);
-  border-radius: 4px;
-  padding: 0.3125rem 0.75rem;
-  font-size: 0.875rem;
-  cursor: pointer;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--text-2);
+  font-weight: 600;
+  transition: background 160ms var(--ease-out), color 160ms ease-out;
 }
 
 .chip:hover {
   color: var(--text);
-  border-color: var(--text);
 }
 
 .chip.is-selected {
-  background: var(--text);
-  color: var(--bg);
-  border-color: var(--text);
+  background: #fff;
+  color: var(--page);
 }
 
 .select {
   width: 100%;
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--emphasis);
-  border-radius: 4px;
-  padding: 0.25rem;
-  font-family: var(--mono);
-  font-size: 0.875rem;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill);
 }
 
 .select:focus {
   outline: none;
-  border-color: var(--text);
+  border-color: var(--fill-3);
 }
 
 .select option {
-  background: var(--bg);
-  padding: 0.1875rem 0.375rem;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: transparent;
+}
+
+.select option:checked {
+  background: var(--fill-3);
 }
 
 .toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.4375rem;
-  color: var(--muted);
-  font-size: 0.8125rem;
+  gap: 7px;
+  color: var(--text-2);
+  font-size: 13px;
   cursor: pointer;
 }
 
 .toggle input {
-  accent-color: var(--text);
+  accent-color: var(--green);
   cursor: pointer;
 }
 
@@ -301,16 +700,21 @@ body {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 16px;
 }
 
 .panel-title {
-  margin: 0 0 0.625rem;
-  font-size: 0.75rem;
-  font-weight: 500;
+  margin: 0 0 10px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
+}
+
+/* A new section after a row of buttons, not a caption for them. */
+.actions + .panel-title {
+  margin-top: 32px;
 }
 
 /* ---- dialog ---- */
@@ -318,62 +722,73 @@ body {
 .scrim {
   position: fixed;
   inset: 0;
+  z-index: 10;
   display: grid;
   place-items: center;
-  padding: 2rem;
-  background: rgba(14, 14, 15, 0.8);
+  padding: 32px;
+  background: rgba(0, 0, 0, 0.6);
 }
 
 .dialog {
-  width: min(26rem, 100%);
+  width: min(27rem, 100%);
   max-height: 100%;
   overflow-y: auto;
-  padding: 1.5rem;
-  border: 1px solid var(--emphasis);
-  border-radius: 6px;
-  background: var(--bg);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #151518;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
 .worlds {
-  margin: 0 0 1rem;
-  padding-left: 1.125rem;
-  font-family: var(--mono);
-  font-size: 0.8125rem;
+  margin: 0 0 16px;
+  padding-left: 18px;
+  font-size: 13px;
 }
 
 /* ---- text ---- */
 
+/* One face: numbers that change line up through Inter's tabular figures. */
 .numeric {
-  font-family: var(--mono);
-  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .muted {
-  color: var(--muted);
-  margin: 0 0 0.75rem;
+  margin: 0 0 12px;
+  color: var(--text-2);
+}
+
+.muted strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .note {
-  margin-top: 1.75rem;
-  font-size: 0.8125rem;
+  margin-top: 24px;
+  font-size: 13px;
 }
 
 .error {
-  margin: 0 0 1.5rem;
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--emphasis);
-  border-radius: 4px;
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid rgba(240, 67, 58, 0.35);
+  border-radius: 10px;
+  background: rgba(240, 67, 58, 0.12);
   cursor: pointer;
 }
 
-/* A feature of ash's did not load. Boxed like an error so it is seen before
-   Play, but not one: nothing to click, and nothing the player did wrong. */
+/* A feature of ash's did not load. Boxed so it is seen before Play, but not
+   red: nothing to click, and nothing the player did wrong. */
 .notice {
-  margin: 0 0 1.5rem;
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--emphasis);
-  border-radius: 4px;
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill);
+}
+
+.playing-as {
+  margin-bottom: 12px;
 }
 
 /* ---- scrollbars, kept in palette ---- */
@@ -383,7 +798,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--emphasis);
+  background: var(--fill-3);
   border-radius: 4px;
 }
 
@@ -391,93 +806,45 @@ body {
   background: transparent;
 }
 
-/* ---- accounts ---- */
-
-.account {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.4375rem 0.5rem;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.account:hover {
-  color: var(--text);
-  border-color: var(--emphasis);
-}
-
-/* A Mojang skin URL is the whole 64x64 texture. The face is the 8x8 block at
-   (8,8), so scale the sheet to 160px and offset by 20px to crop to it. */
-.face {
-  width: 20px;
-  height: 20px;
-  border-radius: 2px;
-  flex-shrink: 0;
-  image-rendering: pixelated;
-  background-size: 160px 160px;
-  background-position: -20px -20px;
-  background-repeat: no-repeat;
-  background-color: var(--emphasis);
-}
-
-.face-empty {
-  background: var(--emphasis);
-}
-
-.account-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* ---- device code ---- */
 
 .code {
   display: block;
   width: 100%;
-  margin: 0.5rem 0 0.375rem;
-  padding: 1rem;
-  border: 1px solid var(--emphasis);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 2rem;
-  font-weight: 500;
+  margin: 8px 0 6px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--fill);
+  font-size: 32px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.12em;
   text-align: center;
-  cursor: pointer;
   user-select: all;
 }
 
 .code:hover {
-  border-color: var(--text);
+  background: var(--fill-2);
 }
 
 .copy-hint {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 .waiting {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
+  gap: 8px;
+  margin-top: 24px;
 }
 
 .pulse {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--muted);
+  background: var(--text-2);
   animation: pulse 1.6s ease-in-out infinite;
 }
 
@@ -491,20 +858,13 @@ body {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pulse {
-    animation: none;
-    opacity: 0.6;
-  }
-}
-
 /* ---- progress ---- */
 
 .bar {
-  height: 3px;
-  margin: 0 0 0.875rem;
-  background: var(--rule);
+  height: 4px;
+  margin: 0 0 14px;
   border-radius: 2px;
+  background: var(--fill-2);
   overflow: hidden;
 }
 
@@ -514,170 +874,91 @@ body {
   transition: width 180ms ease;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .bar-fill {
-    transition: none;
-  }
-}
+/* ---- game output ---- */
 
-/* ---- game output --------------------------------------------------------- */
-
-/* A crash log is read, not skimmed: monospace, scrollable, and capped so it
-   never pushes the actions off the screen. */
+/* A crash log is read, not skimmed: scrollable, and capped so it never pushes
+   the actions off the screen. */
 .log {
-  margin: 0.5rem 0 0;
-  padding: 0.75rem;
+  margin: 8px 0 0;
+  padding: 12px;
   max-height: 16rem;
   overflow: auto;
-  background: #131315;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  font-family: var(--mono);
-  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   line-height: 1.5;
-  color: var(--muted);
   white-space: pre-wrap;
   word-break: break-all;
+  user-select: text;
 }
 
 /* A quieter affordance than a button, for something most players never open. */
 .link {
-  margin-top: 0.75rem;
+  margin-top: 12px;
   padding: 0;
-  background: none;
   border: 0;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.8125rem;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
   text-decoration: underline;
   text-underline-offset: 3px;
-  cursor: pointer;
 }
 
 .link:hover {
   color: var(--text);
 }
 
-.link:focus-visible {
-  outline: 2px solid var(--text);
-  outline-offset: 2px;
-}
-
-/* ---- accounts ------------------------------------------------------------ */
-
-.account-list {
-  list-style: none;
-  margin: 0 0 1.25rem;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.account-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: transparent;
-}
-
-/* The armed account is marked, not merely ordered: joining a server as the
-   wrong player is the failure this whole screen exists to prevent. */
-.account-row.is-active {
-  border-color: var(--emphasis);
-}
-
-.face-lg {
-  width: 32px;
-  height: 32px;
-  background-size: 256px 256px;
-  background-position: -32px -32px;
-}
-
-.account-who {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  min-width: 0;
-  flex: 1;
-}
-
-.account-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.badge {
-  padding: 0.125rem 0.5rem;
-  border: 1px solid var(--emphasis);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.playing-as {
-  margin-bottom: 0.75rem;
-}
-
-.playing-as strong {
-  color: var(--text);
-  font-weight: 500;
-}
-
-/* ---- settings fields ----------------------------------------------------- */
+/* ---- settings fields ---- */
 
 .field {
   display: grid;
   grid-template-columns: 5.5rem 1fr;
   align-items: center;
-  gap: 0.5rem 0.875rem;
-  margin-bottom: 1rem;
+  gap: 8px 14px;
+  margin-bottom: 16px;
 }
 
 .field-label {
-  color: var(--muted);
-  font-size: 0.8125rem;
+  color: var(--text-2);
+  font-size: 13px;
 }
 
 .field-input {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 /* The note sits under the input, not the label, so the eye reads
    label -> value -> what the value means. */
 .field-note {
   grid-column: 2;
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 .input {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  padding: 0.375rem 0.625rem;
-  font: inherit;
-  font-size: 0.8125rem;
-  min-width: 0;
   flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fill-2);
+  box-shadow: inset 0 0 0 1px transparent;
+  font-size: 13px;
+  transition: box-shadow 160ms ease-out;
 }
 
 .input:focus {
   outline: none;
-  border-color: var(--emphasis);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
-.input:focus-visible {
-  outline: 2px solid var(--text);
-  outline-offset: 1px;
+.input::placeholder {
+  color: var(--text-3);
 }
 
 /* Numeric fields are read as quantities, so they get a fixed width rather
@@ -687,11 +968,31 @@ body {
 }
 
 .unit {
-  color: var(--muted);
-  font-size: 0.8125rem;
+  color: var(--text-2);
+  font-size: 13px;
 }
 
 .saved-note {
   align-self: center;
-  font-size: 0.8125rem;
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav,
+  .nav::after,
+  .button,
+  .chip,
+  .instance-row,
+  .bar-fill {
+    transition: none;
+  }
+
+  .menu {
+    animation: none;
+  }
+
+  .pulse {
+    animation: none;
+    opacity: 0.6;
+  }
 }

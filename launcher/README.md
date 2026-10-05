@@ -42,8 +42,31 @@ plausible 404. Depot and instance roots are plain config values pointed at a
 `TempDir`, which is why `ash-core` never reads the environment itself —
 resolving a real path is the adapter's job.
 
+## The launcher UI check
+
+```
+cd launcher
+npx playwright install chromium   # once
+npm run check:ui
+```
+
+Builds the real screens as the app builds them, but with
+`ui-check/fake-api.ts` in place of `src/api.ts`, and renders each state that
+matters in Chromium: signed out, no instances, preparing, playing, a failed
+launch, a degradation notice, the account menu, and each sidebar page. The
+fake is typed against the real module, so the two cannot drift apart without
+a type error. The page is served under the app's own content security policy.
+
+A state fails if it throws, logs an error, never shows what it should, or
+draws any text in a face other than the bundled Inter - asked of Chromium's
+renderer, which names the font it actually drew with. Screenshots land in
+`ui-check/screenshots/` and in CI's `launcher-ui` artifact, for looking at;
+they are never compared, because font rendering differs by machine.
+
 ## Fonts
 
-The app's CSP blocks remote hosts, so Sora, Inter and JetBrains Mono need
-bundling as local woff2 before they can be used. A system stack stands in
-until then rather than silently failing to load.
+Inter 4.1 is the only face, in game and here. Its official woff2 files ship
+unmodified in `public/fonts/`, in the five weights the design uses, with the
+SIL Open Font Licence beside them, so the licence ships in the app with the
+fonts. The app's content security policy blocks
+every remote host, so nothing is ever fetched.
