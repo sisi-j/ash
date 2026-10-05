@@ -55,7 +55,9 @@ Builds the real screens as the app builds them, but with
 matters in Chromium: signed out, no instances, idle, the account menu,
 preparing (with launch sounds on and off), playing, a failed launch, a crash,
 an instance that could not be checked, Download only, a degradation notice,
-the instance page, the new-instance form, and each sidebar page. The
+the instance page (custom memory saved, a refused window size, the delete
+confirmation, and back to Play after deleting), the new-instance form, and
+each sidebar page. The
 fake is typed against the real module, so the two cannot drift apart without
 a type error. The page is served under the app's own content security policy.
 

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open } from "@tauri-apps/plugin-dialog";
 
 // ---- mirrors of ash-core types --------------------------------------------
 
@@ -286,6 +287,21 @@ export const api = {
     invoke<void>("reveal_game_directory", { id }),
   /** ash's own log: the first thing anyone asks for when a launch fails. */
   revealLog: () => invoke<void>("reveal_log"),
+
+  /**
+   * The Windows open-file dialog, for a Java the player picks; `null` if
+   * they cancel. Only a path comes back: whether it is a Java ash can use is
+   * ash-core's to say, when the setting is saved.
+   */
+  chooseJava: async (): Promise<string | null> => {
+    const picked = await open({
+      title: "Choose Java",
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Java (java.exe, javaw.exe)", extensions: ["exe"] }],
+    });
+    return typeof picked === "string" ? picked : null;
+  },
 };
 
 /**

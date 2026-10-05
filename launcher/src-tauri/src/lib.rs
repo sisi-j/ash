@@ -484,6 +484,7 @@ fn dirs_next_data_dir() -> std::path::PathBuf {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         // In `setup` rather than on the builder, because the client jars live
         // in the installation and only an `AppHandle` knows where that is.
         .setup(|app| {

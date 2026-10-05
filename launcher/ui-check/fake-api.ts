@@ -236,7 +236,11 @@ export const api: typeof real.api = {
 
   overrides: () => resolve({ memory_mb: null, java_executable: null, resolution: null }),
   degradationNotice: () => resolve(notice),
-  setOverrides: (_id, settings) => resolve(settings),
+  // ash-core's own refusal for a window it would not open.
+  setOverrides: (_id, settings) =>
+    settings.resolution && Math.min(settings.resolution.width, settings.resolution.height) < 320
+      ? Promise.reject({ kind: "invalid_setting", message: "Window size must be between 320 and 15360 pixels.", retryable: false })
+      : resolve(settings),
   defaultMemoryMb: () => resolve(4096),
   launcherPreferences: () => resolve({ launch_sounds: state !== "sounds-off" }),
   setLauncherPreferences: (preferences) => resolve(preferences),
@@ -246,10 +250,17 @@ export const api: typeof real.api = {
   createInstance: () => Promise.reject({ kind: "unknown", message: "Not in the check.", retryable: false }),
   renameInstance: (id, name) => resolve({ ...INSTANCES.find((i) => i.id === id)!, name }),
   previewDeletion: (id) =>
-    resolve({ instance: INSTANCES.find((i) => i.id === id)!, worlds: [], resource_packs: 0, screenshots: 0, total_bytes: 0 }),
+    resolve({
+      instance: INSTANCES.find((i) => i.id === id)!,
+      worlds: ["Survival", "Bedwars practice"],
+      resource_packs: 2,
+      screenshots: 41,
+      total_bytes: 1_840_000_000,
+    }),
   deleteInstance: nothing,
   revealGameDirectory: nothing,
   revealLog: nothing,
+  chooseJava: () => resolve("C:\Program Files\Java\jdk-21\bin\javaw.exe"),
 };
 
 /** No window to move: the buttons do nothing here, which is all a screenshot needs. */
