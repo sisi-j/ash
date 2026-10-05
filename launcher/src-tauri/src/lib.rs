@@ -11,8 +11,8 @@ use ash_core::http::ReqwestHttp;
 use ash_core::process::OsProcessPort;
 use ash_core::{
     Account, Accounts, Ash, Cancel, Catalogue, Config, DegradationNotice, DeletionPreview,
-    GameStatus, Instance, InstanceId, InvocationView, Loader, MachineOverrides, PendingSignIn,
-    Plan, PrepareEvent, ProgressSink, Runtime, SignInStatus,
+    GameStatus, Instance, InstanceId, InvocationView, LauncherPreferences, Loader,
+    MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -275,6 +275,19 @@ async fn set_overrides(
     state.ash.set_overrides(&id, settings).map_err(UiError::from)
 }
 
+#[tauri::command]
+fn launcher_preferences(state: tauri::State<'_, AppState>) -> LauncherPreferences {
+    state.ash.launcher_preferences()
+}
+
+#[tauri::command]
+fn set_launcher_preferences(
+    state: tauri::State<'_, AppState>,
+    preferences: LauncherPreferences,
+) -> Result<LauncherPreferences, UiError> {
+    state.ash.set_launcher_preferences(preferences).map_err(UiError::from)
+}
+
 // ---- launching ----
 
 /// Start the game.
@@ -508,6 +521,8 @@ pub fn run() {
             stop_game,
             overrides,
             set_overrides,
+            launcher_preferences,
+            set_launcher_preferences,
             degradation_notice,
             default_memory_mb,
             reveal_log

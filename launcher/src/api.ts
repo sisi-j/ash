@@ -164,6 +164,15 @@ export type MachineOverrides = {
   resolution: Resolution | null;
 };
 
+/**
+ * Mirrors `ash_core::LauncherPreferences`: the launcher's own settings, not
+ * any one instance's.
+ */
+export type LauncherPreferences = {
+  /** A short sound when LAUNCH GAME is clicked, and a quieter one when the game starts. */
+  launch_sounds: boolean;
+};
+
 export type PrepareOutcome = {
   ok: boolean;
   plan: Plan | null;
@@ -244,6 +253,10 @@ export const api = {
   setOverrides: (id: InstanceId, settings: MachineOverrides) =>
     invoke<MachineOverrides>("set_overrides", { id, settings }),
   defaultMemoryMb: () => invoke<number>("default_memory_mb"),
+
+  launcherPreferences: () => invoke<LauncherPreferences>("launcher_preferences"),
+  setLauncherPreferences: (preferences: LauncherPreferences) =>
+    invoke<LauncherPreferences>("set_launcher_preferences", { preferences }),
 
   instances: () => invoke<Instance[]>("instances"),
   /** The loaders this version target can run, vanilla always among them. */

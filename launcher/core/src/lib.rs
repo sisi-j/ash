@@ -25,6 +25,7 @@ mod load_report;
 mod loader;
 mod natives;
 mod overrides;
+mod preferences;
 mod profile;
 mod runtime;
 mod version;
@@ -45,6 +46,7 @@ pub use instance::{DeletionPreview, Instance, InstanceId};
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
 pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
+pub use preferences::LauncherPreferences;
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
 pub use version::Os;
@@ -544,6 +546,22 @@ impl Ash {
         settings.validate()?;
         overrides::save(&self.config.data_root, id, &settings)?;
         Ok(settings)
+    }
+
+    // ---- launcher preferences ---------------------------------------------
+
+    /// The launcher's own settings. Defaults when there is no file, or one
+    /// that cannot be read: a preference never stops the launcher opening.
+    pub fn launcher_preferences(&self) -> LauncherPreferences {
+        preferences::load(&self.config.data_root)
+    }
+
+    pub fn set_launcher_preferences(
+        &self,
+        preferences: LauncherPreferences,
+    ) -> Result<LauncherPreferences, AshError> {
+        preferences::save(&self.config.data_root, &preferences)?;
+        Ok(preferences)
     }
 
     // ---- launching --------------------------------------------------------

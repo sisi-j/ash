@@ -4,29 +4,39 @@ import {
   describeAge,
   describeBytes,
   isUiError,
-  type Account,
   type Accounts as AccountList,
   type Catalogue,
   type DeletionPreview,
   type Instance,
   type InstanceId,
+  type LauncherPreferences,
   type Loader,
   type UiError,
   LOADER_LABELS,
 } from "./api";
 import { Icon } from "./icons";
-import { Play } from "./Play";
+import { useLaunch, type Launch } from "./launch";
+import { LaunchFailure } from "./LaunchFailure";
+import { PlayPage } from "./PlayPage";
 import { Settings } from "./Settings";
+import { SettingsPage } from "./SettingsPage";
 import { EmptyPage, Sidebar, type Page } from "./Sidebar";
 import { SignIn } from "./SignIn";
 import { TitleBar } from "./TitleBar";
+
+/**
+ * What the Play page is showing: home, with LAUNCH GAME; the selected
+ * instance's own page, from its cog; or the form for a new one.
+ */
+type PlayView = "home" | "instance" | "new";
 
 export default function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
   const [selectedId, setSelectedId] = useState<InstanceId | null>(null);
   const [error, setError] = useState<UiError | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [playView, setPlayView] = useState<PlayView>("home");
+  const [preferences, setPreferences] = useState<LauncherPreferences | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<DeletionPreview | null>(null);
   const [accounts, setAccounts] = useState<AccountList | null>(null);
   const [page, setPage] = useState<Page>("play");
@@ -60,6 +70,7 @@ export default function App() {
     void reloadInstances();
     api.catalogue().then(setCatalogue).catch(fail);
     api.accounts().then(setAccounts).catch(fail);
+    api.launcherPreferences().then(setPreferences).catch(fail);
   }, [reloadInstances, fail]);
 
   const signedIn = (accounts?.accounts.length ?? 0) > 0;
@@ -98,12 +109,25 @@ export default function App() {
     () => instances.find((i) => i.id === selectedId) ?? null,
     [instances, selectedId],
   );
+  const launch = useLaunch(selected?.id ?? null);
+
+  const savePreferences = useCallback(
+    async (next: LauncherPreferences) => {
+      setPreferences(next);
+      try {
+        setPreferences(await api.setLauncherPreferences(next));
+      } catch (e) {
+        fail(e);
+      }
+    },
+    [fail],
+  );
 
   const create = useCallback(
     async (name: string, versionId: string, loader: Loader) => {
       try {
         const made = await api.createInstance(name, versionId, loader);
-        setCreating(false);
+        setPlayView("home");
         await reloadInstances(made.id);
       } catch (e) {
         fail(e);
@@ -140,6 +164,7 @@ export default function App() {
     try {
       await api.deleteInstance(pendingDeletion.instance.id);
       setPendingDeletion(null);
+      setPlayView("home");
       await reloadInstances();
     } catch (e) {
       fail(e);
@@ -160,6 +185,7 @@ export default function App() {
         onOpen={(next) => {
           setPage(next);
           setSigningIn(false);
+          if (next === "play") setPlayView("home");
         }}
       />
 
@@ -199,73 +225,44 @@ export default function App() {
           />
         ) : page === "settings" ? (
           // The launcher's own settings. Each instance's settings for this
-          // machine are on its Play page, as they were.
-          <EmptyPage
-            page="settings"
-            headline="Settings are coming soon"
-            detail="Default memory, what ash does when the game starts, launch sounds and language will be set here."
-          />
+          // machine are on its own page, from its cog.
+          <SettingsPage preferences={preferences} onChange={savePreferences} />
+        ) : playView === "new" ? (
+          <section className="page">
+            <BackTo onBack={() => setPlayView("home")} />
+            <NewInstance catalogue={catalogue} onCancel={() => setPlayView("home")} onCreate={create} />
+          </section>
+        ) : playView === "instance" && selected ? (
+          <section className="page">
+            <BackTo onBack={() => setPlayView("home")} />
+            <InstanceDetail
+              instance={selected}
+              launch={launch}
+              onRename={rename}
+              onReveal={() => api.revealGameDirectory(selected.id).catch(fail)}
+              onDelete={() => askToDelete(selected.id)}
+            />
+          </section>
         ) : (
-          <div className="play">
-            <aside className="instances">
-              <h3 className="panel-title">Instances</h3>
-              <ul className="instance-list">
-                {instances.map((instance) => (
-                  <li key={instance.id}>
-                    <button
-                      className={`instance-row${instance.id === selectedId && !creating ? " is-selected" : ""}`}
-                      onClick={() => {
-                        setSelectedId(instance.id);
-                        setCreating(false);
-                      }}
-                    >
-                      <span className="instance-name">{instance.name}</span>
-                      <span className="numeric instance-version">
-                        {instance.version_id}
-                        {/* Only when there is something to say. Every instance has
-                            a loader, but printing "Vanilla" on every row is a word
-                            that distinguishes nothing. */}
-                        {instance.loader !== "vanilla" && (
-                          <span className="instance-loader">{LOADER_LABELS[instance.loader]}</span>
-                        )}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <button className="button instance-new" onClick={() => setCreating(true)}>
-                <Icon name="plus" />
-                New instance
-              </button>
-            </aside>
-
-            <div className="play-main">
-              {creating ? (
-                <NewInstance
-                  catalogue={catalogue}
-                  onCancel={() => setCreating(false)}
-                  onCreate={create}
-                />
-              ) : selected ? (
-                <InstanceDetail
-                  instance={selected}
-                  playingAs={active}
-                  onRename={rename}
-                  onReveal={() => api.revealGameDirectory(selected.id).catch(fail)}
-                  onDelete={() => askToDelete(selected.id)}
-                />
-              ) : (
-                <div className="empty">
-                  <p className="muted">No instances yet.</p>
-                  <button className="button" onClick={() => setCreating(true)}>
-                    Create your first
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          <PlayPage
+            player={active}
+            instances={instances}
+            selected={selected}
+            launch={launch}
+            sounds={preferences?.launch_sounds ?? true}
+            onSelect={setSelectedId}
+            onOpen={(id) => {
+              setSelectedId(id);
+              setPlayView("instance");
+            }}
+            onNew={() => setPlayView("new")}
+          />
         )}
       </main>
+
+      {(launch.phase.at === "failed" || launch.phase.at === "crashed") && (
+        <LaunchFailure phase={launch.phase} onRetry={() => launch.start("play")} onClose={launch.dismiss} />
+      )}
 
       {pendingDeletion && (
         <DeleteDialog
@@ -278,16 +275,33 @@ export default function App() {
   );
 }
 
+/** Back to the Play page, from a page reached from it. */
+function BackTo(props: { onBack: () => void }) {
+  return (
+    <button className="back" onClick={props.onBack}>
+      <span className="back-arrow">
+        <Icon name="back" />
+      </span>
+      Play
+    </button>
+  );
+}
+
 // ---- instance detail -------------------------------------------------------
 
+/**
+ * The selected instance's own page, from its cog: today's controls as they
+ * were, until #72 gives the page its final look.
+ */
 function InstanceDetail(props: {
   instance: Instance;
-  playingAs: Account | null;
+  launch: Launch;
   onRename: (id: InstanceId, name: string) => void;
   onReveal: () => void;
   onDelete: () => void;
 }) {
   const { instance } = props;
+  const { phase } = props.launch;
   const [draft, setDraft] = useState(instance.name);
 
   useEffect(() => setDraft(instance.name), [instance.id, instance.name]);
@@ -345,13 +359,22 @@ function InstanceDetail(props: {
         <button className="button" onClick={() => void api.revealLog()}>
           Show log
         </button>
+        {/* Fetching an instance's files ahead of time, for a slow
+            connection: the LAUNCH area on the Play page shows the progress. */}
+        {phase.at === "idle" && phase.plan.missing_files > 0 && (
+          <button className="button" onClick={() => props.launch.start("prepare")}>
+            Download only ({describeBytes(phase.plan.missing_bytes)})
+          </button>
+        )}
+        {phase.at === "working" && (
+          <button className="button" disabled>
+            Downloading…
+          </button>
+        )}
         <button className="button button-danger" onClick={props.onDelete}>
           Delete
         </button>
       </div>
-
-      <h3 className="panel-title">Play</h3>
-      <Play id={instance.id} playingAs={props.playingAs} />
 
       <h3 className="panel-title">This machine</h3>
       <Settings key={instance.id} id={instance.id} />

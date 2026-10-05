@@ -112,6 +112,29 @@ const notice: DegradationNotice | null =
       }
     : null;
 
+/** States where clicking LAUNCH GAME starts a download, so the click has steps to show. */
+const downloads = state === "preparing" || state === "sounds-off";
+
+/**
+ * A crash: running when the page first asks, and gone - uncleanly - every
+ * time after, as a game that fell over a moment after starting would be.
+ */
+let statusAsked = 0;
+function status(): real.GameStatus | null {
+  statusAsked += 1;
+  if (state === "playing") return { state: "running" };
+  if (state === "crashed") return statusAsked === 1 ? { state: "running" } : { state: "exited", code: 1, clean: false };
+  return null;
+}
+
+const CRASH_LOG = [
+  "[Render thread/INFO]: Loaded 1371 recipes",
+  "[Render thread/ERROR]: Unreported exception thrown!",
+  "java.lang.OutOfMemoryError: Java heap space",
+  "	at net.minecraft.client.renderer.LevelRenderer.renderLevel(LevelRenderer.java:1204)",
+  "	at net.minecraft.client.Minecraft.runTick(Minecraft.java:1311)",
+];
+
 // ---- events ---------------------------------------------------------------
 
 const progress = new Set<(event: PrepareEvent) => void>();
@@ -196,8 +219,8 @@ export const api: typeof real.api = {
       version_id: id,
       java_component: null,
       total_files: 4300,
-      missing_files: state === "preparing" ? 1243 : 0,
-      missing_bytes: state === "preparing" ? 412_000_000 : 0,
+      missing_files: downloads ? 1243 : 0,
+      missing_bytes: downloads ? 412_000_000 : 0,
     }),
   prepareInstance: nothing,
   ensureRuntime: () => resolve({ component: "java-runtime-delta", version_name: "21", java_executable: "java" }),
@@ -205,14 +228,16 @@ export const api: typeof real.api = {
 
   launch: async () => launch(),
   previewLaunch: () => resolve({ program: "java", args: [], working_directory: "" }),
-  gameStatus: () => resolve(state === "playing" ? { state: "running" as const } : null),
-  gameLog: () => resolve([]),
+  gameStatus: () => resolve(status()),
+  gameLog: () => resolve(state === "crashed" ? CRASH_LOG : []),
   stopGame: nothing,
 
   overrides: () => resolve({ memory_mb: null, java_executable: null, resolution: null }),
   degradationNotice: () => resolve(notice),
   setOverrides: (_id, settings) => resolve(settings),
   defaultMemoryMb: () => resolve(4096),
+  launcherPreferences: () => resolve({ launch_sounds: state !== "sounds-off" }),
+  setLauncherPreferences: (preferences) => resolve(preferences),
 
   instances: () => resolve(instances),
   loadersFor: (versionId) => resolve(versionId === "1.8.9" ? ["vanilla", "legacy_fabric"] : ["vanilla", "fabric"]),

@@ -128,6 +128,10 @@ _Avoid_: active cosmetic, selected skin, worn item
 The per-account blob that follows a player between machines — feature settings, launcher preferences, instance definitions and server entries.
 _Avoid_: config, preferences, sync blob
 
+**Launcher preferences**:
+The launcher's own settings, as opposed to any one instance's: launch sounds today, then what ash does when the game starts and its language. Kept by ash-core under the data root. Unlike a machine-local override, a preference means the same on any machine, so synced settings will carry it.
+_Avoid_: launcher settings, app settings, config
+
 **Machine-local override**:
 A field deliberately excluded from sync because it only makes sense on one machine: memory allocation, Java path, window resolution.
 _Avoid_: local config, machine settings, device settings

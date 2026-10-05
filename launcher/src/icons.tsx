@@ -26,6 +26,7 @@ const PATHS = {
     </>
   ),
   chevron: <path d="M6 9l6 6 6-6" />,
+  back: <path d="M19 12H5M12 19l-7-7 7-7" />,
   minimise: <path d="M5 12h14" />,
   maximise: <rect x="5" y="5" width="14" height="14" rx="1.5" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
