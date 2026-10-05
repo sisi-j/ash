@@ -66,6 +66,7 @@ they are never compared, because font rendering differs by machine.
 ## Fonts
 
 Inter 4.1 is the only face, in game and here. Its official woff2 files ship
-unmodified in `src/fonts/`, in the five weights the design uses, with the
-SIL Open Font Licence beside them. The app's content security policy blocks
+unmodified in `public/fonts/`, in the five weights the design uses, with the
+SIL Open Font Licence beside them, so the licence ships in the app with the
+fonts. The app's content security policy blocks
 every remote host, so nothing is ever fetched.

@@ -20,7 +20,7 @@ import { build, preview } from "vite";
 
 const here = import.meta.dirname;
 const configFile = path.join(here, "vite.config.ts");
-const shots = path.join(here, "screenshots");
+const screenshots = path.join(here, "screenshots");
 
 type State = {
   name: string;
@@ -32,7 +32,7 @@ type State = {
 
 /** The instance's Play button, not the sidebar's page of the same name. */
 const clickPlay = (page: Page) => page.getByRole("main").getByRole("button", { name: "Play", exact: true }).click();
-const go = (label: string) => (page: Page) => page.getByRole("navigation").getByRole("button", { name: label }).click();
+const openPage = (label: string) => (page: Page) => page.getByRole("navigation").getByRole("button", { name: label }).click();
 
 const STATES: State[] = [
   { name: "signed-out", shows: "Sign in with Microsoft" },
@@ -47,9 +47,9 @@ const STATES: State[] = [
   { name: "playing", shows: "Running" },
   { name: "failed-launch", shows: "Java could not start the game.", reach: clickPlay },
   { name: "degraded", shows: "Hit indicator did not load last time." },
-  { name: "mods", shows: "Mods are coming soon", reach: go("Mods") },
-  { name: "news", shows: "News is coming soon", reach: go("News") },
-  { name: "settings", shows: "Settings are coming soon", reach: go("Settings") },
+  { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
+  { name: "news", shows: "News is coming soon", reach: openPage("News") },
+  { name: "settings", shows: "Settings are coming soon", reach: openPage("Settings") },
 ];
 
 /** The bundled weights, by the names their files give them. */
@@ -101,7 +101,7 @@ async function check(page: Page, base: string, state: State): Promise<string[]> 
     if (!BUNDLED.test(face) && count > 0) problems.push(`drew ${count} glyphs in ${face}, not Inter`);
   }
 
-  await page.screenshot({ path: path.join(shots, `${state.name}.png`) });
+  await page.screenshot({ path: path.join(screenshots, `${state.name}.png`) });
   return problems;
 }
 
@@ -110,7 +110,7 @@ const server = await preview({ configFile });
 const base = server.resolvedUrls?.local[0];
 if (!base) throw new Error("The preview server gave no address.");
 
-mkdirSync(shots, { recursive: true });
+mkdirSync(screenshots, { recursive: true });
 const browser = await chromium.launch();
 let failed = 0;
 try {
@@ -135,7 +135,7 @@ try {
   await server.close();
 }
 
-console.log(`\nScreenshots: ${shots}`);
+console.log(`\nScreenshots: ${screenshots}`);
 if (failed > 0) {
   console.log(`${failed} of ${STATES.length} states failed.`);
   process.exit(1);

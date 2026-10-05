@@ -157,7 +157,7 @@ export default function App() {
       />
       <Sidebar
         page={page}
-        onGo={(next) => {
+        onOpen={(next) => {
           setPage(next);
           setSigningIn(false);
         }}
@@ -187,26 +187,23 @@ export default function App() {
         ) : page === "mods" ? (
           // Until third-party mods can be added to an instance (#46).
           <EmptyPage
-            title="Mods"
-            icon="mods"
+            page="mods"
             headline="Mods are coming soon"
-            detail="Mods you add to an instance will show here."
+            detail="Third-party mods you add to an instance will show here."
           />
         ) : page === "news" ? (
           <EmptyPage
-            title="News"
-            icon="news"
+            page="news"
             headline="News is coming soon"
-            detail="Patch notes and announcements will show here."
+            detail="News posts and patch notes will show here."
           />
         ) : page === "settings" ? (
           // The launcher's own settings. Each instance's settings for this
           // machine are on its Play page, as they were.
           <EmptyPage
-            title="Settings"
-            icon="settings"
+            page="settings"
             headline="Settings are coming soon"
-            detail="Default memory, what ash does when the game starts, and launch sounds will be set here."
+            detail="Default memory, what ash does when the game starts, launch sounds and language will be set here."
           />
         ) : (
           <div className="play">

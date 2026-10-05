@@ -38,12 +38,12 @@ function skin(map: Record<string, string>, rows: string[]): string {
   const canvas = document.createElement("canvas");
   canvas.width = 64;
   canvas.height = 64;
-  const g = canvas.getContext("2d");
-  if (!g) return "";
+  const pen = canvas.getContext("2d");
+  if (!pen) return "";
   rows.forEach((row, y) =>
     [...row].forEach((ch, x) => {
-      g.fillStyle = map[ch] ?? "#000";
-      g.fillRect(8 + x, 8 + y, 1, 1);
+      pen.fillStyle = map[ch] ?? "#000";
+      pen.fillRect(8 + x, 8 + y, 1, 1);
     }),
   );
   return canvas.toDataURL();
@@ -183,8 +183,13 @@ export const api: typeof real.api = {
   cancelSignIn: nothing,
   accounts: () => resolve(accounts),
   selectAccount: (profileId) => resolve({ ...accounts, active: profileId }),
-  removeAccount: (profileId) =>
-    resolve({ accounts: accounts.accounts.filter((a) => a.profile_id !== profileId), active: null }),
+  removeAccount: (profileId) => {
+    // As ash-core does it: signing out the active account hands the slot to
+    // the first one left, so no screen shows a state the app never reaches.
+    const left = accounts.accounts.filter((a) => a.profile_id !== profileId);
+    const active = accounts.active === profileId ? (left[0]?.profile_id ?? null) : accounts.active;
+    return resolve({ accounts: left, active });
+  },
 
   planInstance: (id) =>
     resolve({

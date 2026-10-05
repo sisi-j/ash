@@ -11,26 +11,13 @@ import { Icon } from "./icons";
  * bar's text drag too; its buttons do not, because Tauri never starts a drag
  * from something clickable.
  */
-export function TitleBar(props: {
-  accounts: Accounts | null;
-  busy: boolean;
-  onSelect: (profileId: string) => void;
-  onSignOut: (profileId: string) => void;
-  onAdd: () => void;
-}) {
+export function TitleBar(props: Omit<AccountChoices, "accounts"> & { accounts: Accounts | null }) {
+  const { accounts, ...choices } = props;
   return (
     <header className="titlebar" data-tauri-drag-region="deep">
       <span className="wordmark">ash</span>
 
-      {props.accounts && (
-        <AccountMenu
-          accounts={props.accounts}
-          busy={props.busy}
-          onSelect={props.onSelect}
-          onSignOut={props.onSignOut}
-          onAdd={props.onAdd}
-        />
-      )}
+      {accounts && <AccountMenu accounts={accounts} {...choices} />}
 
       <div className="window-controls">
         <button aria-label="Minimise" onClick={() => void appWindow.minimise()}>
@@ -54,13 +41,16 @@ export function TitleBar(props: {
  * between a main and an alt needs to see which one is armed, because joining
  * a server as the wrong person is the failure this menu exists to prevent.
  */
-function AccountMenu(props: {
+/** Who ash knows, and what the account menu can do with them. */
+type AccountChoices = {
   accounts: Accounts;
   busy: boolean;
   onSelect: (profileId: string) => void;
   onSignOut: (profileId: string) => void;
   onAdd: () => void;
-}) {
+};
+
+function AccountMenu(props: AccountChoices) {
   const { accounts, active } = props.accounts;
   const current = accounts.find((a) => a.profile_id === active) ?? null;
   const [open, setOpen] = useState(false);
@@ -74,19 +64,19 @@ function AccountMenu(props: {
       setConfirming(false);
       return;
     }
-    const away = (e: MouseEvent) => {
+    const clickOutside = (e: MouseEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
-    const escape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", escape);
+    const pressEscape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", clickOutside);
+    document.addEventListener("keydown", pressEscape);
     return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", escape);
+      document.removeEventListener("mousedown", clickOutside);
+      document.removeEventListener("keydown", pressEscape);
     };
   }, [open]);
 
-  const choose = (then: () => void) => () => {
+  const closeThen = (then: () => void) => () => {
     setOpen(false);
     then();
   };
@@ -132,7 +122,7 @@ function AccountMenu(props: {
                 <button
                   className="button button-danger"
                   disabled={props.busy}
-                  onClick={choose(() => props.onSignOut(current.profile_id))}
+                  onClick={closeThen(() => props.onSignOut(current.profile_id))}
                 >
                   Sign out
                 </button>
@@ -149,7 +139,7 @@ function AccountMenu(props: {
                   role="menuitemradio"
                   aria-checked={account.profile_id === active}
                   disabled={props.busy}
-                  onClick={choose(() => {
+                  onClick={closeThen(() => {
                     if (account.profile_id !== active) props.onSelect(account.profile_id);
                   })}
                 >
@@ -163,7 +153,7 @@ function AccountMenu(props: {
                 </button>
               ))}
               <hr />
-              <button role="menuitem" onClick={choose(props.onAdd)}>
+              <button role="menuitem" onClick={closeThen(props.onAdd)}>
                 <span className="menu-glyph">
                   <Icon name="plus" />
                 </span>
@@ -184,7 +174,7 @@ function AccountMenu(props: {
 }
 
 /** A Mojang skin is the whole 64 by 64 texture; the stylesheet crops it to the face. */
-export function Face(props: { account: Account }) {
+function Face(props: { account: Account }) {
   return props.account.skin_url ? (
     <span
       className="face"
