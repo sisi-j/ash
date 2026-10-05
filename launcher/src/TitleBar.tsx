@@ -174,7 +174,7 @@ function AccountMenu(props: AccountChoices) {
 }
 
 /** A Mojang skin is the whole 64 by 64 texture; the stylesheet crops it to the face. */
-function Face(props: { account: Account }) {
+export function Face(props: { account: Account }) {
   return props.account.skin_url ? (
     <span
       className="face"

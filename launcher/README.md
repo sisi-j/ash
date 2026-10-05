@@ -52,12 +52,16 @@ npm run check:ui
 
 Builds the real screens as the app builds them, but with
 `ui-check/fake-api.ts` in place of `src/api.ts`, and renders each state that
-matters in Chromium: signed out, no instances, preparing, playing, a failed
-launch, a degradation notice, the account menu, and each sidebar page. The
+matters in Chromium: signed out, no instances, idle, the account menu,
+preparing (with launch sounds on and off), playing, a failed launch, a crash,
+an instance that could not be checked, Download only, a degradation notice,
+the instance page, the new-instance form, and each sidebar page. The
 fake is typed against the real module, so the two cannot drift apart without
 a type error. The page is served under the app's own content security policy.
 
-A state fails if it throws, logs an error, never shows what it should, or
+A state fails if it throws, logs an error, never shows what it should, fails
+a check of its own (no sound with launch sounds off, a still scene with
+reduced motion, no failure card for a failed check), or
 draws any text in a face other than the bundled Inter - asked of Chromium's
 renderer, which names the font it actually drew with. Screenshots land in
 `ui-check/screenshots/` and in CI's `launcher-ui` artifact, for looking at;

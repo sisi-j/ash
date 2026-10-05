@@ -385,6 +385,11 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
         - the scene brightens and slowly zooms, with a light sweeping across;
         - the button fills through named steps (checking files, downloading with a percentage, starting) and ends on a green tick and PLAYING;
         - a short sound plays on the click, and a quieter one when the game starts, unless launch sounds are off in Settings.
+      - *Settled 2026-10-04, before #71:*
+        - **While the game runs**, the button stays green on PLAYING, with a small Stop under it. It returns to LAUNCH GAME when the game closes.
+        - **A failed launch or a crash** blurs the launcher behind a card, as Lunar does. The card shows the reason, a crash's last output with Copy, and Try again (only when a retry can help), Show log and Close.
+        - **"A feature didn't load"** is not a failure, so it stays a quiet grey line under the LAUNCH area.
+        - **Launch sounds** is the first of the launcher preferences, kept by ash-core. Settings shows its switch.
     - **Below it, left to right:**
       - **Recent servers** for the selected instance, each with its status and player count, the most recent first. **Join** launches the instance straight into that server. A server that is offline cannot be joined.
         - *Settled 2026-10-03, after `docs/research/0008`:* the game's server list records no recency, so **ash's client records every server the player joins, with the time**, however they joined. A vanilla instance, or an ash instance that has joined nothing yet, shows its own server list in the player's order.

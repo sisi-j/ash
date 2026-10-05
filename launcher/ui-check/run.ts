@@ -28,28 +28,88 @@ type State = {
   shows: string;
   /** What to click, after load, to reach it. */
   reach?: (page: Page) => Promise<void>;
+  /** Anything else this state must be true of; a problem, or null. */
+  verify?: (page: Page) => Promise<string | null>;
 };
 
-/** The instance's Play button, not the sidebar's page of the same name. */
-const clickPlay = (page: Page) => page.getByRole("main").getByRole("button", { name: "Play", exact: true }).click();
+/**
+ * LAUNCH GAME, once it can be clicked: before the instance's files have
+ * been checked it is shown but ignores clicks.
+ */
+const launchGame = (page: Page) => page.locator('.launch-button[aria-disabled="false"]').click();
 const openPage = (label: string) => (page: Page) => page.getByRole("navigation").getByRole("button", { name: label }).click();
+
+/** How many audio contexts the page made: one the first time a sound plays, none if none ever does. */
+const soundsMade = (page: Page) => page.evaluate(() => (window as unknown as { audioContexts?: number }).audioContexts ?? 0);
 
 const STATES: State[] = [
   { name: "signed-out", shows: "Sign in with Microsoft" },
-  { name: "no-instances", shows: "No instances yet." },
-  { name: "idle", shows: "Everything this instance needs is in the depot." },
+  { name: "no-instances", shows: "No instances yet" },
+  {
+    name: "idle",
+    shows: "LAUNCH GAME",
+    // With reduced motion the scene is one still frame: the same picture
+    // half a second apart. And a picture at all, not a blank canvas.
+    verify: async (page) => {
+      const frame = () => page.locator(".scene").evaluate((c: HTMLCanvasElement) => c.toDataURL());
+      const first = await frame();
+      await page.waitForTimeout(500);
+      const blank = await page.locator(".scene").evaluate((c: HTMLCanvasElement) => {
+        const pixels = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+        return pixels.every((v, i) => i % 4 === 3 || v === 0);
+      });
+      if (blank) return "the scene drew nothing";
+      return first === (await frame()) ? null : "the scene moved with reduced motion on";
+    },
+  },
   {
     name: "account-menu",
     shows: "Add account",
     reach: (page) => page.getByRole("button", { name: "Steve" }).click(),
   },
-  { name: "preparing", shows: "already in the depot", reach: clickPlay },
-  { name: "playing", shows: "Running" },
-  { name: "failed-launch", shows: "Java could not start the game.", reach: clickPlay },
+  {
+    name: "preparing",
+    shows: "DOWNLOADING",
+    reach: launchGame,
+    verify: async (page) => ((await soundsMade(page)) > 0 ? null : "the click made no sound with launch sounds on"),
+  },
+  {
+    name: "sounds-off",
+    shows: "DOWNLOADING",
+    reach: launchGame,
+    // The proof that nothing plays: no audio is ever set up.
+    verify: async (page) => ((await soundsMade(page)) === 0 ? null : "a sound played with launch sounds off"),
+  },
+  { name: "playing", shows: "PLAYING" },
+  { name: "failed-launch", shows: "Java could not start the game.", reach: launchGame },
+  { name: "crashed", shows: "OutOfMemoryError" },
+  {
+    name: "unchecked",
+    shows: "ash could not reach Mojang to check this instance.",
+    // Nothing was launched, so nothing failed: no card over the launcher.
+    verify: async (page) => ((await page.locator(".failure-scrim").count()) === 0 ? null : "a failed check opened the failure card"),
+  },
+  {
+    name: "download-only",
+    shows: "DOWNLOADING",
+    reach: async (page) => {
+      await page.getByRole("button", { name: "1.21.11 settings" }).click();
+      await page.getByRole("button", { name: /Download only/ }).click();
+      await page.getByRole("button", { name: "Play", exact: true }).first().click();
+    },
+    // The scene answers a launch, not files fetched ahead of time.
+    verify: async (page) => ((await page.locator(".launch-area.is-launching").count()) === 0 ? null : "the scene reacted to Download only"),
+  },
   { name: "degraded", shows: "Hit indicator did not load last time." },
+  {
+    name: "instance-page",
+    shows: "This machine",
+    reach: (page) => page.getByRole("button", { name: "1.21.11 settings" }).click(),
+  },
+  { name: "new-instance", shows: "Built for", reach: (page) => page.getByRole("button", { name: "New", exact: true }).click() },
   { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
   { name: "news", shows: "News is coming soon", reach: openPage("News") },
-  { name: "settings", shows: "Settings are coming soon", reach: openPage("Settings") },
+  { name: "settings", shows: "Launch sounds", reach: openPage("Settings") },
 ];
 
 /** The bundled weights, by the names their files give them. */
@@ -91,6 +151,8 @@ async function check(page: Page, base: string, state: State): Promise<string[]> 
   } catch {
     problems.push(`never showed "${state.shows}"`);
   }
+  const verified = await state.verify?.(page);
+  if (verified) problems.push(verified);
   await page.evaluate(() => document.fonts.ready);
 
   const faces = await facesDrawn(page);
@@ -119,6 +181,17 @@ try {
       viewport: { width: 1000, height: 660 },
       deviceScaleFactor: 1,
       reducedMotion: "reduce",
+    });
+    // Counts the audio contexts the page makes, for the launch sound checks.
+    await context.addInitScript(() => {
+      const Real = window.AudioContext;
+      const counted = window as unknown as { audioContexts?: number };
+      window.AudioContext = class extends Real {
+        constructor(options?: AudioContextOptions) {
+          super(options);
+          counted.audioContexts = (counted.audioContexts ?? 0) + 1;
+        }
+      };
     });
     const problems = await check(await context.newPage(), base, state);
     await context.close();

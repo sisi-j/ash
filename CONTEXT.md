@@ -14,6 +14,8 @@ _Avoid_: app, client, desktop client
 The game-side mod layer ash injects into Minecraft. The other senses always get qualified — "the vanilla client", "an API client". It ships inside the installer rather than being downloaded, so the launcher and the client can never be version-skewed — which is what tells it apart from a bundled mod.
 _Avoid_: mod, ash mod, Minecraft client
 
+In front of players an instance is "ash client" when it runs the client - every modded instance ash makes does - and "vanilla" when it does not.
+
 **Backend**:
 The separately deployed service holding ash accounts, entitlements, stats, synced settings and news.
 _Avoid_: server (that means a Minecraft server here), API
@@ -127,6 +129,10 @@ _Avoid_: active cosmetic, selected skin, worn item
 **Synced settings**:
 The per-account blob that follows a player between machines — feature settings, launcher preferences, instance definitions and server entries.
 _Avoid_: config, preferences, sync blob
+
+**Launcher preferences**:
+The launcher's own settings, as opposed to any one instance's: launch sounds today, then what ash does when the game starts and its language. Kept by ash-core under the data root. Unlike a machine-local override, a preference means the same on any machine, so synced settings will carry it.
+_Avoid_: launcher settings, app settings, config
 
 **Machine-local override**:
 A field deliberately excluded from sync because it only makes sense on one machine: memory allocation, Java path, window resolution.
