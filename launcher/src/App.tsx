@@ -133,19 +133,18 @@ export default function App() {
     [reloadInstances, fail],
   );
 
-  /** Renames the selected instance; whether it worked, for the page to say so. */
+  /** Renames an instance; why not, if ash refused, for the page to say on its row. */
   const rename = useCallback(
     async (id: InstanceId, name: string) => {
       try {
         await api.renameInstance(id, name);
         await reloadInstances(id);
-        return true;
+        return null;
       } catch (e) {
-        fail(e);
-        return false;
+        return isUiError(e) ? e.message : "ash could not rename it.";
       }
     },
-    [reloadInstances, fail],
+    [reloadInstances],
   );
 
   return (

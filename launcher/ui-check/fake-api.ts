@@ -238,7 +238,8 @@ export const api: typeof real.api = {
   degradationNotice: () => resolve(notice),
   // ash-core's own refusal for a window it would not open.
   setOverrides: (_id, settings) =>
-    settings.resolution && Math.min(settings.resolution.width, settings.resolution.height) < 320
+    settings.resolution &&
+    [settings.resolution.width, settings.resolution.height].some((side) => side < 320 || side > 15360)
       ? Promise.reject({ kind: "invalid_setting", message: "Window size must be between 320 and 15360 pixels.", retryable: false })
       : resolve(settings),
   defaultMemoryMb: () => resolve(4096),
@@ -260,7 +261,7 @@ export const api: typeof real.api = {
   deleteInstance: nothing,
   revealGameDirectory: nothing,
   revealLog: nothing,
-  chooseJava: () => resolve("C:\Program Files\Java\jdk-21\bin\javaw.exe"),
+  chooseJava: () => resolve(String.raw`C:\Program Files\Java\jdk-21\bin\javaw.exe`),
 };
 
 /** No window to move: the buttons do nothing here, which is all a screenshot needs. */

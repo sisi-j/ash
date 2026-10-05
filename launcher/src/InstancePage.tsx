@@ -23,86 +23,67 @@ const SAVE_AFTER_MS = 500;
 /** The page's rows, for saying which one a save or a refusal belongs to. */
 type Row = "name" | "memory" | "window" | "java";
 
-type Status = { row: Row; saved: true } | { row: Row; saved: false; message: string };
+/** What the last save on a row came to: saved, or refused and why. */
+type Status = { saved: true } | { saved: false; message: string };
 
-function gb(mb: number): number {
+/** One of the machine-local overrides, by its field. */
+type Field = keyof MachineOverrides;
+
+/** Megabytes in gigabytes as a label says them: exact, to one decimal. */
+function formatGb(mb: number): string {
+  const gb = mb / 1024;
+  return Number.isInteger(gb * 2) ? `${gb}` : gb.toFixed(1);
+}
+
+/** Megabytes as the slider's gigabytes, to its half-gigabyte step. */
+function toGb(mb: number): number {
   return Math.round((mb / 1024) * 2) / 2;
 }
 
-function whole(text: string): number | null {
+/**
+ * Where the knob sits. ash-core allows more than the slider shows (512 MB
+ * to 64 GB), so a figure set before this page existed keeps its own label
+ * while the knob rests at the nearer end, until the player moves it.
+ */
+function onSlider(gb: number): number {
+  return Math.min(MEMORY_MAX_GB, Math.max(MEMORY_MIN_GB, gb));
+}
+
+function parseWhole(text: string): number | null {
   const trimmed = text.trim();
   if (!/^\d+$/.test(trimmed)) return null;
   return Number(trimmed);
 }
 
+/** The window size as typed, both halves together: half a size is not a size. */
+type WindowText = { width: string; height: string };
+
 /**
- * An instance's own page, from its cog on Play: its name, and the settings
- * that belong to this machine - memory, window size, Java - then its game
- * folder, and deleting it.
- *
- * Each change saves on its own, shortly after the player stops typing or
- * dragging, as the in-game settings do; there is no Save button to forget.
- * A value ash refuses says why on its own row and is not saved.
+ * One waiting save per row, so a change to one row never cancels another's,
+ * and a newer change to a row replaces its older one still waiting. Leaving
+ * the page saves whatever was still waiting, rather than losing it.
  */
-export function InstancePage(props: {
-  instance: Instance;
-  launch: Launch;
-  onRename: (name: string) => Promise<boolean>;
-  onDeleted: () => void;
-  onBack: () => void;
-}) {
-  const { instance } = props;
-  const [name, setName] = useState(instance.name);
-  const [overrides, setOverrides] = useState<MachineOverrides | null>(null);
-  const [fallbackMb, setFallbackMb] = useState<number | null>(null);
-  const [width, setWidth] = useState("");
-  const [height, setHeight] = useState("");
-  const [status, setStatus] = useState<Status | null>(null);
-  const [loadError, setLoadError] = useState<UiError | null>(null);
-  // One waiting save per row, so a change to one row never cancels another's.
+function useRowSaves() {
   const pending = useRef(new Map<Row, { timer: number; run: () => void }>());
 
-  useEffect(() => {
-    setName(instance.name);
-  }, [instance.id, instance.name]);
-
-  useEffect(() => {
-    let live = true;
-    setStatus(null);
-    api
-      .overrides(instance.id)
-      .then((loaded) => {
-        if (!live) return;
-        setOverrides(loaded);
-        setWidth(loaded.resolution?.width.toString() ?? "");
-        setHeight(loaded.resolution?.height.toString() ?? "");
-      })
-      .catch((e) => live && setLoadError(e as UiError));
-    api.defaultMemoryMb().then((mb) => live && setFallbackMb(mb)).catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [instance.id]);
-
-  /** Runs `save` once the player has paused; a newer change to the row replaces one still waiting. */
-  const later = useCallback((row: Row, save: () => void, delay = SAVE_AFTER_MS) => {
-    const waiting = pending.current;
-    const earlier = waiting.get(row);
-    if (earlier) window.clearTimeout(earlier.timer);
-    const timer = window.setTimeout(() => {
-      waiting.delete(row);
-      save();
-    }, delay);
-    waiting.set(row, { timer, run: save });
-  }, []);
-
-  const forget = (row: Row) => {
+  const cancelSave = useCallback((row: Row) => {
     const earlier = pending.current.get(row);
     if (earlier) window.clearTimeout(earlier.timer);
     pending.current.delete(row);
-  };
+  }, []);
 
-  // Leaving the page saves whatever was still waiting, rather than losing it.
+  const scheduleSave = useCallback(
+    (row: Row, save: () => void, delay = SAVE_AFTER_MS) => {
+      cancelSave(row);
+      const timer = window.setTimeout(() => {
+        pending.current.delete(row);
+        save();
+      }, delay);
+      pending.current.set(row, { timer, run: save });
+    },
+    [cancelSave],
+  );
+
   useEffect(() => {
     const waiting = pending.current;
     return () => {
@@ -114,71 +95,165 @@ export function InstancePage(props: {
     };
   }, []);
 
-  const saveOverrides = useCallback(
-    (next: MachineOverrides, row: Row, delay?: number) => {
-      setOverrides(next);
-      later(row, async () => {
-        try {
-          setOverrides(await api.setOverrides(instance.id, next));
-          setStatus({ row, saved: true });
-        } catch (e) {
-          setStatus({ row, saved: false, message: (e as UiError).message });
-        }
-      }, delay);
+  return { scheduleSave, cancelSave };
+}
+
+/** Why ash refused something, on the row it belongs to. */
+function Refused(props: { message: string }) {
+  return (
+    <span className="setting-refused" role="alert">
+      {props.message}
+    </span>
+  );
+}
+
+/**
+ * An instance's own page, from its cog on Play: its name, and its
+ * machine-local overrides - memory, window size, Java - then its game
+ * folder, and deleting it.
+ *
+ * Each change saves on its own, shortly after the player stops typing or
+ * dragging, as the in-game settings do; there is no Save button to forget.
+ * A value ash refuses says why on its own row and is not saved.
+ */
+export function InstancePage(props: {
+  instance: Instance;
+  launch: Launch;
+  /** Renames the instance; why not, if ash refused. */
+  onRename: (name: string) => Promise<string | null>;
+  onDeleted: () => void;
+  onBack: () => void;
+}) {
+  const { instance } = props;
+  const [name, setName] = useState(instance.name);
+  const [overrides, setOverrides] = useState<MachineOverrides | null>(null);
+  const [fallbackMb, setFallbackMb] = useState<number | null>(null);
+  const [windowText, setWindowText] = useState<WindowText>({ width: "", height: "" });
+  // Per row, so one row's "Saved" never hides another row's refusal.
+  const [statuses, setStatuses] = useState<Partial<Record<Row, Status>>>({});
+  const setStatus = (row: Row, status: Status) => setStatuses((all) => ({ ...all, [row]: status }));
+  const [loadError, setLoadError] = useState<UiError | null>(null);
+  const { scheduleSave, cancelSave } = useRowSaves();
+  // What ash-core last confirmed, apart from what the page shows while a
+  // change waits to be saved; and the saves, one at a time.
+  const saved = useRef<MachineOverrides | null>(null);
+  const saving = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    setName(instance.name);
+  }, [instance.id, instance.name]);
+
+  useEffect(() => {
+    let live = true;
+    setStatuses({});
+    api
+      .overrides(instance.id)
+      .then((loaded) => {
+        if (!live) return;
+        saved.current = loaded;
+        setOverrides(loaded);
+        setWindowText({
+          width: loaded.resolution?.width.toString() ?? "",
+          height: loaded.resolution?.height.toString() ?? "",
+        });
+      })
+      .catch((e) => live && setLoadError(e as UiError));
+    api.defaultMemoryMb().then((mb) => live && setFallbackMb(mb)).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [instance.id]);
+
+  /**
+   * Shows a change at once and saves it once the player pauses.
+   *
+   * Saves run one at a time, each sending only its own field on top of what
+   * ash-core last confirmed, and each reply updates only that field on
+   * screen. So a value ash refused never rides along with another row's
+   * save, and an older reply never undoes a newer change still waiting.
+   * A refusal puts the field back to what was saved.
+   */
+  const saveField = useCallback(
+    <K extends Field>(field: K, value: MachineOverrides[K], row: Row, delay?: number) => {
+      setOverrides((shown) => shown && { ...shown, [field]: value });
+      scheduleSave(
+        row,
+        () => {
+          saving.current = saving.current.then(async () => {
+            const base = saved.current;
+            if (!base) return;
+            try {
+              const stored = await api.setOverrides(instance.id, { ...base, [field]: value });
+              saved.current = stored;
+              setOverrides((shown) => shown && { ...shown, [field]: stored[field] });
+              setStatus(row, { saved: true });
+            } catch (e) {
+              setOverrides((shown) => shown && { ...shown, [field]: base[field] });
+              setStatus(row, { saved: false, message: (e as UiError).message });
+            }
+          });
+        },
+        delay,
+      );
     },
-    [instance.id, later],
+    [instance.id, scheduleSave],
   );
 
   const changeName = (text: string) => {
     setName(text);
     const trimmed = text.trim();
     if (trimmed === "" || trimmed === instance.name) {
-      forget("name");
+      cancelSave("name");
       return;
     }
-    later("name", async () => {
-      if (await props.onRename(trimmed)) setStatus({ row: "name", saved: true });
+    scheduleSave("name", async () => {
+      const refused = await props.onRename(trimmed);
+      setStatus("name", refused ? { saved: false, message: refused } : { saved: true });
     });
   };
 
-  const changeWindow = (nextWidth: string, nextHeight: string) => {
-    setWidth(nextWidth);
-    setHeight(nextHeight);
+  const changeWindow = (next: WindowText) => {
+    setWindowText(next);
     if (!overrides) return;
-    const w = whole(nextWidth);
-    const h = whole(nextHeight);
-    if (nextWidth.trim() === "" && nextHeight.trim() === "") {
-      saveOverrides({ ...overrides, resolution: null }, "window");
+    const w = parseWhole(next.width);
+    const h = parseWhole(next.height);
+    if (next.width.trim() === "" && next.height.trim() === "") {
+      // Empty saves "none", never today's size: the game keeps choosing,
+      // rather than being pinned to whatever it chose the day this was set.
+      saveField("resolution", null, "window");
     } else if (w !== null && h !== null) {
-      saveOverrides({ ...overrides, resolution: { width: w, height: h } }, "window");
+      saveField("resolution", { width: w, height: h }, "window");
     } else {
       // Half a window size is not a window size: wait for the other half.
-      forget("window");
-      setStatus({ row: "window", saved: false, message: "Enter both a width and a height, or leave both empty." });
+      cancelSave("window");
+      setStatus("window", { saved: false, message: "Enter both a width and a height, or leave both empty." });
     }
   };
 
   const chooseJava = async () => {
     if (!overrides) return;
     const picked = await api.chooseJava().catch(() => null);
-    if (picked) saveOverrides({ ...overrides, java_executable: picked }, "java", 0);
+    if (picked) saveField("java_executable", picked, "java", 0);
   };
 
-  const note = (row: Row) =>
-    status?.row === row &&
-    (status.saved ? (
+  const rowStatus = (row: Row) => {
+    const status = statuses[row];
+    if (!status) return null;
+    return status.saved ? (
       <span className="setting-saved">
         <Icon name="check" />
         Saved
       </span>
     ) : (
-      <span className="setting-refused" role="alert">
-        {status.message}
-      </span>
-    ));
+      <Refused message={status.message} />
+    );
+  };
 
   const memoryMb = overrides?.memory_mb ?? null;
-  const shownGb = gb(memoryMb ?? fallbackMb ?? 2048);
+  // Before ash's default has arrived, a custom figure starts at the slider's
+  // low end rather than at a copy of a default that is ash-core's to give.
+  const shownGb = toGb(memoryMb ?? fallbackMb ?? MEMORY_MIN_GB * 1024);
+  const knobGb = onSlider(shownGb);
   const { phase } = props.launch;
 
   return (
@@ -210,7 +285,7 @@ export function InstancePage(props: {
               onBlur={() => name.trim() === "" && setName(instance.name)}
               spellCheck={false}
             />
-            {note("name")}
+            {rowStatus("name")}
           </div>
         </div>
 
@@ -225,9 +300,12 @@ export function InstancePage(props: {
                 role="radio"
                 aria-checked={memoryMb === null}
                 disabled={!overrides}
-                onClick={() => overrides && saveOverrides({ ...overrides, memory_mb: null }, "memory", 0)}
+                // "None", never the default's figure: an instance on Automatic
+                // follows ash's default as it changes, rather than being pinned
+                // to whatever it was the day the player chose Automatic.
+                onClick={() => overrides && saveField("memory_mb", null, "memory", 0)}
               >
-                Automatic{fallbackMb !== null && ` (${gb(fallbackMb)} GB)`}
+                Automatic{fallbackMb !== null && ` (${toGb(fallbackMb)} GB)`}
               </button>
               <button
                 className={`chip${memoryMb !== null ? " is-selected" : ""}`}
@@ -237,7 +315,7 @@ export function InstancePage(props: {
                 onClick={() =>
                   overrides &&
                   memoryMb === null &&
-                  saveOverrides({ ...overrides, memory_mb: Math.round(shownGb * 1024) }, "memory", 0)
+                  saveField("memory_mb", Math.round(shownGb * 1024), "memory", 0)
                 }
               >
                 Custom
@@ -250,19 +328,17 @@ export function InstancePage(props: {
                   min={MEMORY_MIN_GB}
                   max={MEMORY_MAX_GB}
                   step={MEMORY_STEP_GB}
-                  value={Math.min(MEMORY_MAX_GB, Math.max(MEMORY_MIN_GB, shownGb))}
+                  value={knobGb}
                   aria-labelledby="memory-label"
-                  style={{
-                    ["--filled" as string]: `${((Math.min(MEMORY_MAX_GB, Math.max(MEMORY_MIN_GB, shownGb)) - MEMORY_MIN_GB) / (MEMORY_MAX_GB - MEMORY_MIN_GB)) * 100}%`,
-                  }}
+                  style={{ ["--filled" as string]: `${((knobGb - MEMORY_MIN_GB) / (MEMORY_MAX_GB - MEMORY_MIN_GB)) * 100}%` }}
                   onChange={(e) =>
-                    saveOverrides({ ...overrides, memory_mb: Math.round(Number(e.target.value) * 1024) }, "memory")
+                    saveField("memory_mb", Math.round(Number(e.target.value) * 1024), "memory")
                   }
                 />
-                <output className="numeric">{shownGb} GB</output>
+                <output className="numeric">{formatGb(memoryMb)} GB</output>
               </div>
             )}
-            {note("memory")}
+            {rowStatus("memory")}
           </div>
         </div>
 
@@ -275,24 +351,24 @@ export function InstancePage(props: {
               <input
                 className="input numeric"
                 inputMode="numeric"
-                value={width}
+                value={windowText.width}
                 placeholder="auto"
                 aria-label="Window width"
                 disabled={!overrides}
-                onChange={(e) => changeWindow(e.target.value, height)}
+                onChange={(e) => changeWindow({ ...windowText, width: e.target.value })}
               />
               <span className="unit">×</span>
               <input
                 className="input numeric"
                 inputMode="numeric"
-                value={height}
+                value={windowText.height}
                 placeholder="auto"
                 aria-label="Window height"
                 disabled={!overrides}
-                onChange={(e) => changeWindow(width, e.target.value)}
+                onChange={(e) => changeWindow({ ...windowText, height: e.target.value })}
               />
             </div>
-            {note("window") || <span className="setting-hint">Leave both empty to let the game choose.</span>}
+            {rowStatus("window") || <span className="setting-hint">Leave both empty to let the game choose.</span>}
           </div>
         </div>
 
@@ -307,7 +383,7 @@ export function InstancePage(props: {
                 role="radio"
                 aria-checked={!overrides?.java_executable}
                 disabled={!overrides}
-                onClick={() => overrides && saveOverrides({ ...overrides, java_executable: null }, "java", 0)}
+                onClick={() => overrides && saveField("java_executable", null, "java", 0)}
               >
                 Automatic
               </button>
@@ -322,7 +398,7 @@ export function InstancePage(props: {
               </button>
             </div>
             {overrides?.java_executable && <span className="setting-path">{overrides.java_executable}</span>}
-            {note("java") || (
+            {rowStatus("java") || (
               <span className="setting-hint">Only if the Java ash downloads can't run on this machine.</span>
             )}
           </div>
@@ -355,6 +431,8 @@ export function InstancePage(props: {
         <p className="muted">
           <span className="numeric">{instance.version_id}</span> · {LOADER_LABELS[instance.loader]} · created{" "}
           {describeAge(instance.created_at_ms)}
+          {/* The loader is shown, never edited: it was chosen when the
+              instance was created and no operation changes it. */}
           {/* The default key, said once where a new player looks. It is
               rebindable in the game's Controls, and the launcher never reads
               the game's own options, so a player who moved it knows where. */}
@@ -419,11 +497,7 @@ function DeleteInstance(props: { instance: Instance; onDeleted: () => void }) {
         <button className="button button-danger" onClick={() => void ask()}>
           Delete instance
         </button>
-        {error && (
-          <span className="setting-refused" role="alert">
-            {error.message}
-          </span>
-        )}
+        {error && <Refused message={error.message} />}
       </>
     );
   }
@@ -443,11 +517,7 @@ function DeleteInstance(props: { instance: Instance; onDeleted: () => void }) {
         - <span className="numeric">{describeBytes(preview.total_bytes)}</span>, and it cannot be undone. Shared game
         files in the depot are not touched.
       </p>
-      {error && (
-        <span className="setting-refused" role="alert">
-          {error.message}
-        </span>
-      )}
+      {error && <Refused message={error.message} />}
       <div className="actions">
         <button className="button button-danger-solid" disabled={busy} onClick={() => void confirm()}>
           Delete

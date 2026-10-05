@@ -990,6 +990,7 @@ button {
   gap: 8px;
 }
 
+/* Read as quantities, so a fixed width rather than whatever space is going. */
 .window-size .input {
   flex: none;
   width: 6.5rem;

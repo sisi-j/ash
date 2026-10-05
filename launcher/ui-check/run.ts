@@ -122,6 +122,23 @@ const STATES: State[] = [
     },
   },
   {
+    // A refused value must not ride along with another row's save.
+    name: "instance-refused-then-memory",
+    shows: "Saved",
+    reach: async (page) => {
+      await openInstance(page);
+      await page.getByLabel("Window width").fill("100");
+      await page.getByLabel("Window height").fill("100");
+      await page.getByText("Window size must be between").waitFor();
+      await page.getByRole("radio", { name: "Custom" }).click();
+    },
+    verify: async (page) =>
+      (await page.locator('input[type="range"]').count()) === 1 &&
+      (await page.getByText("Window size must be between").count()) === 1
+        ? null
+        : "the memory save carried the refused window size",
+  },
+  {
     name: "instance-delete",
     shows: "cannot be undone",
     reach: async (page) => {
