@@ -26,17 +26,17 @@ const FILE: &str = "launcher-preferences.json";
 pub struct LauncherPreferences {
     /// A short sound when LAUNCH GAME is clicked and a quieter one when the
     /// game starts. On unless the player turns it off.
-    #[serde(default = "on")]
+    #[serde(default = "enabled")]
     pub launch_sounds: bool,
 }
 
-fn on() -> bool {
+fn enabled() -> bool {
     true
 }
 
 impl Default for LauncherPreferences {
     fn default() -> Self {
-        Self { launch_sounds: on() }
+        Self { launch_sounds: enabled() }
     }
 }
 

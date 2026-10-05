@@ -30,13 +30,18 @@ export type Progress = {
   note: string | null;
 };
 
+/** Playing, or only fetching the files ahead of time ("Download only"). */
+export type Goal = "prepare" | "play";
+
 export type Phase =
   | { at: "checking" }
+  /** ash could not say what the instance needs: nothing was launched, so nothing failed. */
+  | { at: "unchecked"; error: UiError }
   | { at: "idle"; plan: Plan }
-  | { at: "working"; progress: Progress; goal: "prepare" | "play" }
+  | { at: "working"; progress: Progress; goal: Goal }
   | { at: "running" }
   | { at: "crashed"; code: number | null; log: string[] }
-  | { at: "failed"; error: UiError };
+  | { at: "failed"; error: UiError; goal: Goal };
 
 const START: Progress = {
   stage: "checking",
@@ -53,7 +58,7 @@ const START: Progress = {
 const POLL_MS = 1500;
 
 /** The argument after `--flag`, for reading a value back off a command line. */
-function valueOf(args: string[], flag: string): string | null {
+function argumentAfter(args: string[], flag: string): string | null {
   const at = args.indexOf(flag);
   return at >= 0 ? (args[at + 1] ?? null) : null;
 }
@@ -68,10 +73,10 @@ export type Launch = {
    * relabel a game that is already up as someone else.
    */
   runningAs: string | null;
-  start: (what: "prepare" | "play") => void;
+  start: (what: Goal) => void;
   cancel: () => void;
   stop: () => void;
-  /** Back to idle after a failure or a crash has been read. */
+  /** Check the instance again: after a failure or a crash has been read, or a check that failed. */
   dismiss: () => void;
 };
 
@@ -86,7 +91,7 @@ export function useLaunch(id: InstanceId | null): Launch {
   const [phase, setPhase] = useState<Phase>({ at: "checking" });
   const [command, setCommand] = useState<InvocationView | null>(null);
   const [notice, setNotice] = useState<DegradationNotice | null>(null);
-  const goal = useRef<"prepare" | "play">("play");
+  const goal = useRef<Goal>("play");
 
   const replan = useCallback(async () => {
     if (id === null) return;
@@ -100,7 +105,7 @@ export function useLaunch(id: InstanceId | null): Launch {
       }
       setPhase({ at: "idle", plan: await api.planInstance(id) });
     } catch (e) {
-      setPhase({ at: "failed", error: e as UiError });
+      setPhase({ at: "unchecked", error: e as UiError });
     }
   }, [id]);
 
@@ -117,7 +122,8 @@ export function useLaunch(id: InstanceId | null): Launch {
   // player is about to play - including straight after a game closes, which
   // is when the client has just written a fresh report. Never in the way:
   // a notice that cannot be read is no notice, and Play still works.
-  const beforePlay = phase.at === "idle" || phase.at === "crashed" || phase.at === "failed";
+  const beforePlay =
+    phase.at === "idle" || phase.at === "unchecked" || phase.at === "crashed" || phase.at === "failed";
   useEffect(() => {
     if (!beforePlay || id === null) return;
     let live = true;
@@ -215,7 +221,7 @@ export function useLaunch(id: InstanceId | null): Launch {
     const prepared = onPrepareFinished((outcome) => {
       if (goal.current === "play") return;
       if (outcome.ok || outcome.error?.kind === "cancelled") void replan();
-      else if (outcome.error) setPhase({ at: "failed", error: outcome.error });
+      else if (outcome.error) setPhase({ at: "failed", error: outcome.error, goal: "prepare" });
     });
 
     const launched = onLaunchFinished((outcome) => {
@@ -224,7 +230,7 @@ export function useLaunch(id: InstanceId | null): Launch {
         setPhase({ at: "running" });
       } else if (outcome.error) {
         if (outcome.error.kind === "cancelled") void replan();
-        else setPhase({ at: "failed", error: outcome.error });
+        else setPhase({ at: "failed", error: outcome.error, goal: "play" });
       }
     });
 
@@ -236,13 +242,13 @@ export function useLaunch(id: InstanceId | null): Launch {
   }, [replan]);
 
   const start = useCallback(
-    (what: "prepare" | "play") => {
+    (what: Goal) => {
       if (id === null) return;
       goal.current = what;
       setCommand(null);
       setPhase({ at: "working", goal: what, progress: START });
       const call = what === "play" ? api.launch(id) : api.prepareInstance(id);
-      call.catch((e) => setPhase({ at: "failed", error: e as UiError }));
+      call.catch((e) => setPhase({ at: "failed", error: e as UiError, goal: what }));
     },
     [id],
   );
@@ -250,7 +256,7 @@ export function useLaunch(id: InstanceId | null): Launch {
   return {
     phase,
     notice,
-    runningAs: command ? valueOf(command.args, "--username") : null,
+    runningAs: command ? argumentAfter(command.args, "--username") : null,
     start,
     cancel: () => id !== null && void api.cancelPreparation(id),
     stop: () => id !== null && void api.stopGame(id),

@@ -633,6 +633,24 @@ button {
   }
 }
 
+/* Why LAUNCH GAME cannot be clicked yet: ash could not check the instance. */
+.launch-button.is-unavailable {
+  filter: grayscale(0.7) brightness(0.8);
+}
+
+.launch-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 80%;
+  margin: 0;
+  padding: 4px 4px 4px 12px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12.5px;
+}
+
 .launch-link {
   padding: 3px 12px;
   border: 0;
@@ -1292,14 +1310,13 @@ button {
   cursor: pointer;
 }
 
-/* A feature of ash's did not load. Boxed so it is seen before Play, but not
-   red: nothing to click, and nothing the player did wrong. */
+/* A feature of ash's did not load. A quiet grey line, not a box and not red:
+   the game still played, there is nothing to click, and nothing the player
+   did wrong. */
 .notice {
-  margin: 0 0 20px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--fill);
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
 }
 
 .playing-as {

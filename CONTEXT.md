@@ -14,6 +14,8 @@ _Avoid_: app, client, desktop client
 The game-side mod layer ash injects into Minecraft. The other senses always get qualified — "the vanilla client", "an API client". It ships inside the installer rather than being downloaded, so the launcher and the client can never be version-skewed — which is what tells it apart from a bundled mod.
 _Avoid_: mod, ash mod, Minecraft client
 
+In front of players an instance is "ash client" when it runs the client - every modded instance ash makes does - and "vanilla" when it does not.
+
 **Backend**:
 The separately deployed service holding ash accounts, entitlements, stats, synced settings and news.
 _Avoid_: server (that means a Minecraft server here), API

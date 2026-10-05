@@ -1,7 +1,7 @@
-import { describeAge, type Account, type Instance, type InstanceId } from "./api";
+import { describeAge, describeKind, type Account, type Instance, type InstanceId } from "./api";
 import { Icon } from "./icons";
 import type { Launch } from "./launch";
-import { kindOf, LaunchArea } from "./LaunchArea";
+import { LaunchArea } from "./LaunchArea";
 import { Face } from "./TitleBar";
 
 /**
@@ -79,9 +79,10 @@ export function PlayPage(props: {
         <InstancesCard
           instances={props.instances}
           selected={selected.id}
-          // Choosing another instance mid-launch would show its LAUNCH GAME
-          // over a launch that is still running for this one.
-          locked={launch.phase.at === "working"}
+          // Choosing another instance mid-launch or mid-game would show its
+          // LAUNCH GAME over a game still going for this one - and stop
+          // watching that game, so a crash would go unseen.
+          locked={launch.phase.at === "working" || launch.phase.at === "running"}
           onSelect={props.onSelect}
           onOpen={props.onOpen}
           onNew={props.onNew}
@@ -133,7 +134,7 @@ function InstancesCard(props: {
             <span className="instance-text">
               <b>{instance.name}</b>
               <small>
-                {kindOf(instance)} ·{" "}
+                {describeKind(instance)} ·{" "}
                 {instance.last_played_ms ? describeAge(instance.last_played_ms) : "never played"}
               </small>
             </span>

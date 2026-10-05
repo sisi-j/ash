@@ -21,7 +21,9 @@ export function LaunchFailure(props: {
   const { phase } = props;
   const [copied, setCopied] = useState(false);
   const output = phase.at === "crashed" ? phase.log.slice(-LAST_LINES).join("\n") : "";
-  const canRetry = phase.at === "crashed" || phase.error.retryable;
+  // A crash says nothing about whether playing again will work, so the
+  // button says what it does rather than promising a fix.
+  const retry = phase.at === "crashed" ? "Play again" : phase.error.retryable ? "Try again" : null;
 
   useEffect(() => {
     const escape = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
@@ -46,7 +48,7 @@ export function LaunchFailure(props: {
           !
         </div>
         <h2 id="failure-title" className="failure-title">
-          {phase.at === "crashed" ? "The game crashed" : "Launch failed"}
+          {phase.at === "crashed" ? "The game crashed" : phase.goal === "prepare" ? "Download failed" : "Launch failed"}
         </h2>
         <p className="failure-reason">
           {phase.at === "crashed"
@@ -67,9 +69,9 @@ export function LaunchFailure(props: {
         )}
 
         <div className="actions">
-          {canRetry && (
+          {retry && (
             <button className="button button-go" onClick={props.onRetry}>
-              Try again
+              {retry}
             </button>
           )}
           <button className="button" onClick={() => void api.revealLog()}>

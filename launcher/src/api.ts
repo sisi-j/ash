@@ -57,6 +57,19 @@ export const LOADER_LABELS: Record<Loader, string> = {
   legacy_fabric: "Legacy Fabric",
 };
 
+/**
+ * "ash client" or "vanilla", as an instance's row and LAUNCH GAME call it.
+ * Every modded instance ash makes runs the ash client, and a vanilla one
+ * does not, so the loader is what tells them apart.
+ *
+ * Unlike the version-and-loader line this replaced, where "Vanilla" on
+ * every row distinguished nothing, these two words are the choice the
+ * player is making, so a vanilla row says so (the spec's Instances card).
+ */
+export function describeKind(instance: Instance): string {
+  return instance.loader === "vanilla" ? "vanilla" : "ash client";
+}
+
 export type Instance = {
   id: InstanceId;
   name: string;

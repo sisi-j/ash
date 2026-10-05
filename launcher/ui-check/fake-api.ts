@@ -113,7 +113,7 @@ const notice: DegradationNotice | null =
     : null;
 
 /** States where clicking LAUNCH GAME starts a download, so the click has steps to show. */
-const downloads = state === "preparing" || state === "sounds-off";
+const downloads = state === "preparing" || state === "sounds-off" || state === "download-only";
 
 /**
  * A crash: running when the page first asks, and gone - uncleanly - every
@@ -215,14 +215,16 @@ export const api: typeof real.api = {
   },
 
   planInstance: (id) =>
-    resolve({
+    state === "unchecked"
+      ? Promise.reject({ kind: "offline", message: "ash could not reach Mojang to check this instance.", retryable: true })
+      : resolve({
       version_id: id,
       java_component: null,
       total_files: 4300,
       missing_files: downloads ? 1243 : 0,
       missing_bytes: downloads ? 412_000_000 : 0,
-    }),
-  prepareInstance: nothing,
+        }),
+  prepareInstance: async () => launch(),
   ensureRuntime: () => resolve({ component: "java-runtime-delta", version_name: "21", java_executable: "java" }),
   cancelPreparation: nothing,
 

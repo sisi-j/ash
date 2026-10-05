@@ -83,6 +83,23 @@ const STATES: State[] = [
   { name: "playing", shows: "PLAYING" },
   { name: "failed-launch", shows: "Java could not start the game.", reach: launchGame },
   { name: "crashed", shows: "OutOfMemoryError" },
+  {
+    name: "unchecked",
+    shows: "ash could not reach Mojang to check this instance.",
+    // Nothing was launched, so nothing failed: no card over the launcher.
+    verify: async (page) => ((await page.locator(".failure-scrim").count()) === 0 ? null : "a failed check opened the failure card"),
+  },
+  {
+    name: "download-only",
+    shows: "DOWNLOADING",
+    reach: async (page) => {
+      await page.getByRole("button", { name: "1.21.11 settings" }).click();
+      await page.getByRole("button", { name: /Download only/ }).click();
+      await page.getByRole("button", { name: "Play", exact: true }).first().click();
+    },
+    // The scene answers a launch, not files fetched ahead of time.
+    verify: async (page) => ((await page.locator(".launch-area.is-launching").count()) === 0 ? null : "the scene reacted to Download only"),
+  },
   { name: "degraded", shows: "Hit indicator did not load last time." },
   {
     name: "instance-page",

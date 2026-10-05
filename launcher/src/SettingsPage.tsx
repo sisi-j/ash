@@ -24,7 +24,7 @@ export function SettingsPage(props: {
             className="switch"
             role="switch"
             aria-labelledby="launch-sounds"
-            aria-checked={preferences?.launch_sounds ?? true}
+            aria-checked={preferences?.launch_sounds ?? false}
             disabled={!preferences}
             onClick={() => preferences && props.onChange({ ...preferences, launch_sounds: !preferences.launch_sounds })}
           />

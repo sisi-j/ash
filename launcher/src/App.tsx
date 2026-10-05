@@ -249,7 +249,8 @@ export default function App() {
             instances={instances}
             selected={selected}
             launch={launch}
-            sounds={preferences?.launch_sounds ?? true}
+            // Silent until ash-core has said: the default is its to give.
+            sounds={preferences?.launch_sounds ?? false}
             onSelect={setSelectedId}
             onOpen={(id) => {
               setSelectedId(id);
@@ -261,7 +262,11 @@ export default function App() {
       </main>
 
       {(launch.phase.at === "failed" || launch.phase.at === "crashed") && (
-        <LaunchFailure phase={launch.phase} onRetry={() => launch.start("play")} onClose={launch.dismiss} />
+        <LaunchFailure
+          phase={launch.phase}
+          onRetry={() => launch.start(launch.phase.at === "failed" ? launch.phase.goal : "play")}
+          onClose={launch.dismiss}
+        />
       )}
 
       {pendingDeletion && (
