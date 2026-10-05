@@ -14,19 +14,12 @@ import {
   type UiError,
   LOADER_LABELS,
 } from "./api";
-import { Accounts } from "./Accounts";
+import { Icon } from "./icons";
 import { Play } from "./Play";
 import { Settings } from "./Settings";
+import { EmptyPage, Sidebar, type Page } from "./Sidebar";
 import { SignIn } from "./SignIn";
-
-/**
- * What the main area is showing instead of an instance.
- *
- * One value rather than two booleans: "managing accounts" and "signing in"
- * are steps in one flow, and two flags would allow a fourth state that means
- * nothing.
- */
-type Overlay = null | "accounts" | "sign-in";
+import { TitleBar } from "./TitleBar";
 
 export default function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -36,7 +29,10 @@ export default function App() {
   const [creating, setCreating] = useState(false);
   const [pendingDeletion, setPendingDeletion] = useState<DeletionPreview | null>(null);
   const [accounts, setAccounts] = useState<AccountList | null>(null);
-  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [page, setPage] = useState<Page>("play");
+  // Adding an account, from the title bar's menu. Signing in with no
+  // account at all needs no flag: there is nothing else ash can do.
+  const [signingIn, setSigningIn] = useState(false);
   const [switching, setSwitching] = useState(false);
 
   const fail = useCallback((e: unknown) => {
@@ -87,10 +83,8 @@ export default function App() {
     async (profileId: string) => {
       setSwitching(true);
       try {
-        const left = await api.removeAccount(profileId);
-        setAccounts(left);
-        // Nobody left to manage, so the only useful screen is signing in.
-        if (left.accounts.length === 0) setOverlay("sign-in");
+        // With nobody left, signing in is all the main area shows.
+        setAccounts(await api.removeAccount(profileId));
       } catch (e) {
         fail(e);
       } finally {
@@ -154,56 +148,20 @@ export default function App() {
 
   return (
     <div className="shell">
-      <nav className="rail">
-        <h1 className="wordmark">ash</h1>
-
-        <button
-          className="account"
-          onClick={() =>
-            setOverlay((current) =>
-              current === "accounts" ? null : signedIn ? "accounts" : "sign-in",
-            )
-          }
-          title={active ? "Manage accounts" : "Sign in"}
-        >
-          {active?.skin_url ? (
-            <span
-              className="face"
-              style={{ backgroundImage: `url(${active.skin_url})` }}
-              aria-hidden="true"
-            />
-          ) : (
-            <span className="face face-empty" aria-hidden="true" />
-          )}
-          <span className="account-name">{active ? active.username : "Sign in"}</span>
-        </button>
-
-        <ul className="rail-list">
-          {instances.map((instance) => (
-            <li key={instance.id}>
-              <button
-                className={`rail-item${instance.id === selectedId ? " is-selected" : ""}`}
-                onClick={() => setSelectedId(instance.id)}
-              >
-                <span className="rail-name">{instance.name}</span>
-                <span className="numeric rail-version">
-                  {instance.version_id}
-                  {/* Only when there is something to say. Every instance has
-                      a loader, but printing "Vanilla" on every row is a word
-                      that distinguishes nothing. */}
-                  {instance.loader !== "vanilla" && (
-                    <span className="rail-loader">{LOADER_LABELS[instance.loader]}</span>
-                  )}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        <button className="button rail-new" onClick={() => setCreating(true)}>
-          New instance
-        </button>
-      </nav>
+      <TitleBar
+        accounts={accounts}
+        busy={switching}
+        onSelect={selectAccount}
+        onSignOut={removeAccount}
+        onAdd={() => setSigningIn(true)}
+      />
+      <Sidebar
+        page={page}
+        onGo={(next) => {
+          setPage(next);
+          setSigningIn(false);
+        }}
+      />
 
       <main className="main">
         {error && (
@@ -212,49 +170,102 @@ export default function App() {
           </p>
         )}
 
-        {overlay === "sign-in" || (!signedIn && accounts !== null && overlay === null) ? (
+        {signingIn || (!signedIn && accounts !== null) ? (
           <SignIn
             onSignedIn={() => {
-              // Back to the list, so adding a third account is one click and
-              // it is obvious who is now armed to play.
+              // Back to where the player was, now playing as whoever just
+              // signed in: ash makes a new account the active one.
               api.accounts()
                 .then((loaded) => {
                   setAccounts(loaded);
-                  setOverlay(loaded.accounts.length > 1 ? "accounts" : null);
+                  setSigningIn(false);
                 })
                 .catch(fail);
             }}
-            onCancel={signedIn ? () => setOverlay("accounts") : undefined}
+            onCancel={signedIn ? () => setSigningIn(false) : undefined}
           />
-        ) : overlay === "accounts" && accounts ? (
-          <Accounts
-            accounts={accounts}
-            busy={switching}
-            onSelect={selectAccount}
-            onRemove={removeAccount}
-            onAdd={() => setOverlay("sign-in")}
-            onClose={() => setOverlay(null)}
+        ) : page === "mods" ? (
+          // Until third-party mods can be added to an instance (#46).
+          <EmptyPage
+            title="Mods"
+            icon="mods"
+            headline="Mods are coming soon"
+            detail="Mods you add to an instance will show here."
           />
-        ) : creating ? (
-          <NewInstance
-            catalogue={catalogue}
-            onCancel={() => setCreating(false)}
-            onCreate={create}
+        ) : page === "news" ? (
+          <EmptyPage
+            title="News"
+            icon="news"
+            headline="News is coming soon"
+            detail="Patch notes and announcements will show here."
           />
-        ) : selected ? (
-          <InstanceDetail
-            instance={selected}
-            playingAs={active}
-            onRename={rename}
-            onReveal={() => api.revealGameDirectory(selected.id).catch(fail)}
-            onDelete={() => askToDelete(selected.id)}
+        ) : page === "settings" ? (
+          // The launcher's own settings. Each instance's settings for this
+          // machine are on its Play page, as they were.
+          <EmptyPage
+            title="Settings"
+            icon="settings"
+            headline="Settings are coming soon"
+            detail="Default memory, what ash does when the game starts, and launch sounds will be set here."
           />
         ) : (
-          <div className="empty">
-            <p className="muted">No instances yet.</p>
-            <button className="button" onClick={() => setCreating(true)}>
-              Create your first
-            </button>
+          <div className="play">
+            <aside className="instances">
+              <h3 className="panel-title">Instances</h3>
+              <ul className="instance-list">
+                {instances.map((instance) => (
+                  <li key={instance.id}>
+                    <button
+                      className={`instance-row${instance.id === selectedId && !creating ? " is-selected" : ""}`}
+                      onClick={() => {
+                        setSelectedId(instance.id);
+                        setCreating(false);
+                      }}
+                    >
+                      <span className="instance-name">{instance.name}</span>
+                      <span className="numeric instance-version">
+                        {instance.version_id}
+                        {/* Only when there is something to say. Every instance has
+                            a loader, but printing "Vanilla" on every row is a word
+                            that distinguishes nothing. */}
+                        {instance.loader !== "vanilla" && (
+                          <span className="instance-loader">{LOADER_LABELS[instance.loader]}</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button className="button instance-new" onClick={() => setCreating(true)}>
+                <Icon name="plus" />
+                New instance
+              </button>
+            </aside>
+
+            <div className="play-main">
+              {creating ? (
+                <NewInstance
+                  catalogue={catalogue}
+                  onCancel={() => setCreating(false)}
+                  onCreate={create}
+                />
+              ) : selected ? (
+                <InstanceDetail
+                  instance={selected}
+                  playingAs={active}
+                  onRename={rename}
+                  onReveal={() => api.revealGameDirectory(selected.id).catch(fail)}
+                  onDelete={() => askToDelete(selected.id)}
+                />
+              ) : (
+                <div className="empty">
+                  <p className="muted">No instances yet.</p>
+                  <button className="button" onClick={() => setCreating(true)}>
+                    Create your first
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>

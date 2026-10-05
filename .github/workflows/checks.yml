@@ -179,3 +179,17 @@ jobs:
         working-directory: launcher
       - run: npx tsc --noEmit
         working-directory: launcher
+      # The launcher UI check: every screen state in Chromium against a fake
+      # of the launcher's API, failing on an error or on any text not drawn
+      # in the bundled Inter. Screenshots are uploaded for a person to look
+      # at, never compared.
+      - run: npx playwright install --with-deps chromium
+        working-directory: launcher
+      - run: npm run check:ui
+        working-directory: launcher
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: launcher-ui
+          path: launcher/ui-check/screenshots/
+          if-no-files-found: ignore

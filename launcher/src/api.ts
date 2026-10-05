@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // ---- mirrors of ash-core types --------------------------------------------
 
@@ -259,6 +260,19 @@ export const api = {
     invoke<void>("reveal_game_directory", { id }),
   /** ash's own log: the first thing anyone asks for when a launch fails. */
   revealLog: () => invoke<void>("reveal_log"),
+};
+
+/**
+ * The launcher's own window, for the title bar that replaces the system one.
+ *
+ * Fetched on each call rather than once at load: outside the app - the
+ * launcher UI check renders these screens in a plain browser - there is no
+ * window to fetch, and nothing should fail until a button is pressed.
+ */
+export const appWindow = {
+  minimise: () => getCurrentWindow().minimize(),
+  toggleMaximise: () => getCurrentWindow().toggleMaximize(),
+  close: () => getCurrentWindow().close(),
 };
 
 /**
