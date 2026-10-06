@@ -4,6 +4,9 @@ import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.fps.FpsReadout;
+import com.ashlauncher.client.freelook.BlockList;
+import com.ashlauncher.client.freelook.Freelook;
+import com.ashlauncher.client.freelook.FreelookHook;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hud.Marker;
@@ -34,11 +37,15 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModOrigin;
+import net.minecraft.client.Camera;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.KeyboardInput;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,6 +81,10 @@ public final class AshClient implements ClientModInitializer {
 
     private static final String HIT_INDICATOR_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.ClientPacketListenerMixin";
 
+    private static final String FREELOOK_CAMERA_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.CameraMixin";
+
+    private static final String FREELOOK_MOUSE_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.MouseHandlerMixin";
+
     /**
      * The FPS readout this session draws, so the real-game test can ask it -
      * not the screenshot - whether it draws. Package-private and set once.
@@ -82,6 +93,11 @@ public final class AshClient implements ClientModInitializer {
 
     /** The hit indicator this session draws, if its mixin landed, for the real-game test to ask. */
     static HitIndicator hitIndicator;
+
+    /** Freelook and its key, if its mixins landed, for the real-game test to drive and ask. */
+    static Freelook<CameraType> freelook;
+
+    static KeyMapping freelookKey;
 
     @Override
     public void onInitializeClient() {
@@ -158,8 +174,47 @@ public final class AshClient implements ClientModInitializer {
                     () -> settings.get(Settings.TOGGLE_SPRINT)));
         }
 
+        // Freelook: the mouse's turn diverted from the player, and the camera's
+        // angles answered from freelook, while its key is held. Both mixins or
+        // neither: a camera that turns with nothing turning it, or a mouse that
+        // turns nothing, is not freelook.
+        boolean freelookLanded = MixinFeature.landed(() -> Camera.class, FREELOOK_CAMERA_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.FREELOOK.displayName(), why)))
+                && MixinFeature.landed(() -> MouseHandler.class, FREELOOK_MOUSE_MIXIN,
+                        why -> LOG.warn(MixinFeature.didNotLoad(Feature.FREELOOK.displayName(), why)));
+        CurrentServer currentServer = new CurrentServer(LOG::info);
+        if (freelookLanded) {
+            // Left Alt, which the game binds to nothing. Under Misc, beside
+            // ash's settings key; rebindable in Controls.
+            KeyMapping freelookKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                    Freelook.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_ALT,
+                    KeyMapping.Category.MISC));
+            Freelook<CameraType> freelook = new Freelook<>(new OptionsCameraModes(),
+                    () -> settings.get(Settings.FREELOOK), CurrentServer::blockedHere,
+                    why -> Minecraft.getInstance().gui.setOverlayMessage(Component.literal(why), false));
+            FreelookHook.install(freelook);
+            AshClient.freelook = freelook;
+            AshClient.freelookKey = freelookKey;
+            ClientTickEvents.END_CLIENT_TICK.register(client -> {
+                if (client.player != null) {
+                    freelook.tick(freelookKey.isDown(), client.screen != null, client.player.getYRot(),
+                            client.player.getXRot());
+                }
+            });
+        } else {
+            landed.remove(Feature.FREELOOK);
+        }
+        ClientTickEvents.END_CLIENT_TICK.register(client -> currentServer.tick());
+
         Runnable writeReport = () -> writeLoadReport(settings, landed);
-        SettingsScreen settingsScreen = new SettingsScreen(settings, landed::contains, writeReport);
+        // Freelook's row says why it is off on a listed server, and cannot be
+        // switched there, as the spec's settings screen asks.
+        SettingsScreen settingsScreen = new SettingsScreen(settings, feature -> true, landed::contains,
+                feature -> {
+                    BlockList.Server here = feature == Feature.FREELOOK ? CurrentServer.blockedHere() : null;
+                    return here == null ? "" : here.whyOff();
+                },
+                writeReport);
 
         // Right Shift, which neither target binds by default. Polled on Fabric
         // API's client tick, which is inside the Fabric API ash already ships.

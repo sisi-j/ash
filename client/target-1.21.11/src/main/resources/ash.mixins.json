@@ -5,9 +5,11 @@
   "plugin": "com.ashlauncher.client.mixin.AshMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "CameraMixin",
     "ClientPacketListenerMixin",
     "GuiCrosshairMixin",
-    "KeyboardInputMixin"
+    "KeyboardInputMixin",
+    "MouseHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 0

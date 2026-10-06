@@ -123,3 +123,10 @@ So wrapping those two calls turns the camera, and the third-person orbit follows
   - 1.8.9: `MinecraftClient`, `ConnectScreen`, `ClientPlayNetworkHandler`, `ClientPlayerEntity`, `ServerInfo`, `GameOptions`.
 - DNS lookups and the status request, sent with a small Node script on 2026-10-06.
 - The three rules pages in §3, as cited by `docs/research/0006`.
+
+## Addendum: freelook's default key
+
+- Left Alt (GLFW key 342). 1.21.11's `Options` builds every default `KeyMapping` with its key code as a constant. Across `Options` and `ToggleKeyMapping`:
+  - Left Shift (340, Sneak) and Left Control (341, Sprint) each appear once;
+  - Left Alt never does **[PRACTICE]**.
+- Players can rebind it in Controls, under Misc.
