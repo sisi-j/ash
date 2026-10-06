@@ -28,11 +28,24 @@ class ResultTest {
     }
 
     private static Result result(List<long[]> passes) {
+        return result(passes, true);
+    }
+
+    private static Result result(List<long[]> passes, boolean settled) {
         Map<String, String> machine = new LinkedHashMap<>();
         machine.put("gpu", "Test \"GPU\"");
         Map<String, String> settings = Collections.singletonMap("fps-readout.enabled", "true");
-        return new Result("1.8.9", "baseline", "2026-10-06T15:42:10Z", machine, settings, passes,
+        return new Result("1.8.9", "baseline", "2026-10-06T15:42:10Z", machine, settings, passes, 42.5, settled,
                 Collections.singletonList(new Result.Section("root.gameRenderer.level", 61.5)));
+    }
+
+    @Test
+    void a_run_whose_world_never_settled_is_not_comparable_however_close_its_passes() {
+        Result result = result(Arrays.asList(steady(1000, 4), steady(1000, 4)), false);
+
+        assertFalse(result.comparable());
+        assertTrue(result.oneLine().contains("never settled"), result.oneLine());
+        assertTrue(result.json().contains("\"warmedUpSeconds\": 42.50, \"settled\": false"), result.json());
     }
 
     @Test
@@ -42,20 +55,40 @@ class ResultTest {
                 steady(1000, 1000.0 / 252.5)));
 
         assertEquals(1.0, result.averageSpreadPercent(), 0.01);
+        assertEquals(1.0 / Math.sqrt(3), result.uncertaintyPercent(), 0.01, "the spread over the root of the passes");
         assertTrue(result.comparable());
     }
 
     @Test
-    void passes_that_disagree_by_more_than_3_percent_are_not() {
-        Result result = result(Arrays.asList(steady(1000, 4), steady(1000, 5)));
+    void passes_that_swing_but_pin_the_average_down_are_comparable() {
+        // The 1.21.11 trial's eight passes: a 4.4% spread, a 1.6% uncertainty.
+        double[] fps = {566.07, 594.29, 614.05, 567.44, 634.64, 579.30, 624.03, 579.67};
+        java.util.List<long[]> passes = new java.util.ArrayList<>();
+        for (double rate : fps) {
+            passes.add(steady((int) Math.round(rate * 30), 1000.0 / rate));
+        }
 
-        assertFalse(result.comparable());
-        assertTrue(result.oneLine().contains("too far apart to compare"), result.oneLine());
+        Result result = result(passes);
+
+        assertEquals(4.4, result.averageSpreadPercent(), 0.1);
+        assertEquals(1.6, result.uncertaintyPercent(), 0.1);
+        assertTrue(result.comparable());
     }
 
     @Test
-    void one_pass_has_no_spread() {
-        assertEquals(0.0, result(Collections.singletonList(steady(100, 4))).averageSpreadPercent());
+    void an_average_more_uncertain_than_2_percent_is_not_comparable() {
+        Result result = result(Arrays.asList(steady(1000, 4), steady(1000, 5)));
+
+        assertFalse(result.comparable());
+        assertTrue(result.oneLine().contains("too uncertain to compare"), result.oneLine());
+    }
+
+    @Test
+    void one_pass_has_no_spread_and_says_nothing_about_its_average() {
+        Result result = result(Collections.singletonList(steady(100, 4)));
+
+        assertEquals(0.0, result.averageSpreadPercent());
+        assertFalse(result.comparable());
     }
 
     @Test

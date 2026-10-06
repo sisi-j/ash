@@ -144,8 +144,11 @@ exist, whether Lithium earns its place, and what each feature costs.
 
 **Run it by hand, on a real machine.** CI has no GPU, and its software
 renderer's numbers mean nothing for a player, so CI only compiles it. Plug a
-laptop in, close what you can, start the command, and leave the window alone
-until it closes itself: about two and a half minutes.
+laptop in and set Windows to the **Best performance** power mode. On Balanced,
+a laptop's clocks drift: in trials, 1.21.11 rose 18% within one run. Close
+what you can, start the command, and leave the window alone
+until it closes itself: about four minutes on 1.8.9, and up to five on
+1.21.11, whose world takes longer to generate.
 
 **The scene** is in `bench/.../Scene.java`, the same numbers on both targets:
 
@@ -158,8 +161,13 @@ until it closes itself: about two and a half minutes.
 
 **What happens:**
 
-1. 20 seconds of warm-up, while the world loads and the JIT settles.
-2. Three measured passes of 30 seconds each.
+1. A warm-up of at least 40 seconds, more than a full turn, while every chunk
+   in view is built once and the JIT settles. On 1.21.11 it lasts until the
+   world has also *settled* for 5 seconds: no chunk work waiting on the
+   server, every section in view built. That took 61 to 92 seconds in
+   trials. If the world hasn't settled by 3 minutes, the passes start anyway
+   and the result says `"settled": false`.
+2. Five measured passes of 30 seconds each.
 3. On 1.8.9 only, 15 seconds with the game's own profiler on: the F3 pie
    chart's data. Those frames are not counted, because profiling costs time.
 
@@ -173,7 +181,8 @@ keeps them. Each run writes two files:
   - each pass, and all passes together, as average FPS, average frame time,
     **1% low** (the frame rate of the slowest hundredth of frames) and worst
     frame;
-  - the **spread** between passes;
+  - the **spread** between passes, and the **uncertainty** of the average;
+  - how long the warm-up took, and whether the world had settled;
   - on 1.8.9, the **profile**: each section of the game's frame worth at least
     1% of it, three levels deep.
 - `...-frames.csv`, with every frame's time.
@@ -182,13 +191,18 @@ The log's last lines say the same in one sentence.
 
 **Comparing two runs:**
 
-- The spread is how far a run's passes disagree, as the standard deviation of
-  their average frame rates over the mean.
-- A run whose passes disagree by more than 3% is marked `"comparable": false`.
-  Something else was using the machine, so run it again.
-- A change has only been shown to move the frame rate if it moves the average
-  by more than the spread of both runs. Run the baseline twice first, to see
-  how far this machine disagrees with itself.
+- A single pass varies. In trials on a laptop, 1.21.11 at around 600 FPS
+  swung between 566 and 635 from one half-minute to the next. So compare runs
+  by their averages, not by single passes.
+- The **spread** is the standard deviation of the passes' average frame rates
+  over their mean. The **uncertainty** is the spread over the square root of
+  the number of passes: the standard error of the run's average.
+- A run whose uncertainty is over 2%, or whose world never settled, is marked
+  `"comparable": false`. Run it again.
+- Two runs differ only when their averages are further apart than twice
+  their combined uncertainty, √(u₁² + u₂²). Anything less has not been shown
+  to move the frame rate. Run the baseline twice first, to see how far this
+  machine disagrees with itself.
 
 **Features on and off:** before a run, edit
 `target-<version>/build/run/benchmark/config/ash.properties`. It is the run's

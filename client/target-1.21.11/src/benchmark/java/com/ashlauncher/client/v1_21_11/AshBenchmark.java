@@ -114,7 +114,7 @@ public final class AshBenchmark implements ClientModInitializer {
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
                     "tp @a " + Scene.X + " " + Scene.Y + " " + Scene.Z + " 0 " + Scene.PITCH);
         });
-        say("in the world; warming up for " + Scene.WARM_UP_SECONDS + " s, then " + Scene.PASSES + " passes of "
+        say("in the world; warming up for at least " + Scene.WARM_UP_SECONDS + " s, until the world settles, then " + Scene.PASSES + " passes of "
                 + Scene.PASS_SECONDS + " s. Leave the window alone.");
         run = Benchmark.ofScene(0);
     }
@@ -126,7 +126,7 @@ public final class AshBenchmark implements ClientModInitializer {
             return;
         }
         long now = System.nanoTime();
-        Benchmark.Phase phase = current.frame(now);
+        Benchmark.Phase phase = current.frame(now, settled(client));
 
         // The camera, by the clock: the old rotation as well, so the game
         // does not interpolate back towards where the last tick had it.
@@ -138,10 +138,25 @@ public final class AshBenchmark implements ClientModInitializer {
 
         if (phase == Benchmark.Phase.MEASURING && current.pass() != announcedPass) {
             announcedPass = current.pass();
+            if (announcedPass == 1) {
+                say(String.format(java.util.Locale.ROOT, "warmed up in %.0f s", current.warmedUpSeconds()));
+            }
             say("pass " + announcedPass + " of " + current.passes());
         } else if (phase == Benchmark.Phase.DONE) {
             finish(client, current);
         }
+    }
+
+    /**
+     * Whether the world has finished being made round the camera: the
+     * server has no chunk work waiting, and every section in view is built.
+     * A first trial without this measured its passes at 511, 607 and 661
+     * frames a second as the server went on generating.
+     */
+    private static boolean settled(Minecraft client) {
+        IntegratedServer server = client.getSingleplayerServer();
+        return server != null && server.overworld().getChunkSource().getPendingTasksCount() == 0
+                && client.levelRenderer.hasRenderedAllSections();
     }
 
     private static void finish(Minecraft client, Benchmark current) {
@@ -150,6 +165,7 @@ public final class AshBenchmark implements ClientModInitializer {
         Result result = new Result("1.21.11", Runs.label(), Runs.instant(nowMillis),
                 Runs.machine(GLX._getCpuInfo(), device.getRenderer(), device.getVendor(), device.getVersion()),
                 Runs.ashSettings(FabricLoader.getInstance().getConfigDir()), current.measured(),
+                current.warmedUpSeconds(), current.settledAtStart(),
                 Collections.<Result.Section>emptyList());
         try {
             Path written = result.write(Runs.outputDirectory(client.gameDirectory.toPath()), Runs.stamp(nowMillis));

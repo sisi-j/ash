@@ -17,17 +17,20 @@ import java.util.Map;
  * and the profile, and a CSV beside it with every frame's time.
  *
  * <p>The spread is how far the passes disagree, as a percentage of their
- * mean. Two runs can only be told apart by more than that: a change that
- * moves the average by less than the spread has not been shown to move it
- * at all.
+ * mean. A single pass varies - a laptop's clocks move from one half-minute to
+ * the next - so what is compared is the run's average, and its
+ * <b>uncertainty</b> is the spread over the square root of the passes: the
+ * standard error of that average. Two runs differ only when their averages
+ * are further apart than twice their combined uncertainty; less, and the
+ * change has not been shown to move the frame rate at all.
  */
 public final class Result {
 
     /**
-     * How far a run's passes may disagree, in per cent, for the run to be
+     * How uncertain a run's average may be, in per cent, for the run to be
      * compared with another. Past it, something else was using the machine.
      */
-    public static final double COMPARABLE_SPREAD_PERCENT = 3.0;
+    public static final double COMPARABLE_UNCERTAINTY_PERCENT = 2.0;
 
     /** One part of a frame, from the game's own profiler: its path and its share of the frame. */
     public static final class Section {
@@ -55,6 +58,8 @@ public final class Result {
     private final Map<String, String> settings;
     private final List<long[]> passes;
     private final List<Section> profile;
+    private final double warmedUpSeconds;
+    private final boolean settled;
 
     /**
      * @param target the version target, such as {@code 1.8.9}
@@ -65,11 +70,16 @@ public final class Result {
      * @param settings ash's settings for the run, key by key, so a run with a
      *     feature off is never mistaken for one with it on
      * @param passes each pass's frame times, in nanoseconds
+     * @param warmedUpSeconds how long the warm-up took, waiting for the world
+     * @param settled whether the world had settled when the passes started;
+     *     false when the warm-up ran out of time, and the passes measured a
+     *     world still being built
      * @param profile where the frame went, or empty for a target with no
      *     profiler to read
      */
     public Result(String target, String label, String recorded, Map<String, String> machine,
-            Map<String, String> settings, List<long[]> passes, List<Section> profile) {
+            Map<String, String> settings, List<long[]> passes, double warmedUpSeconds, boolean settled,
+            List<Section> profile) {
         this.target = target;
         this.label = label;
         this.recorded = recorded;
@@ -77,6 +87,8 @@ public final class Result {
         this.settings = Collections.unmodifiableMap(new LinkedHashMap<>(settings));
         this.passes = Collections.unmodifiableList(new ArrayList<>(passes));
         this.profile = Collections.unmodifiableList(new ArrayList<>(profile));
+        this.warmedUpSeconds = warmedUpSeconds;
+        this.settled = settled;
     }
 
     public Summary overall() {
@@ -101,9 +113,21 @@ public final class Result {
         return spreadPercent(lows);
     }
 
-    /** Whether the passes agree closely enough for this run to be compared with another. */
+    /**
+     * How sure the run's average frame rate is, as a percentage of it: the
+     * spread over the square root of the passes. 0 for one pass, which says
+     * nothing about it.
+     */
+    public double uncertaintyPercent() {
+        return averageSpreadPercent() / Math.sqrt(passes.size());
+    }
+
+    /**
+     * Whether this run can be compared with another: the world had settled
+     * before the passes, and its average is known closely enough.
+     */
     public boolean comparable() {
-        return averageSpreadPercent() <= COMPARABLE_SPREAD_PERCENT;
+        return settled && passes.size() > 1 && uncertaintyPercent() <= COMPARABLE_UNCERTAINTY_PERCENT;
     }
 
     /**
@@ -129,10 +153,11 @@ public final class Result {
     /** One line for the log: what a developer reads first. */
     public String oneLine() {
         Summary overall = overall();
-        return String.format(Locale.ROOT, "%s %s: %.1f FPS average, %.1f FPS 1%% low, over %d passes"
-                + " that agree within %.1f%%%s", target, label, overall.averageFps(), overall.onePercentLowFps(),
-                passes.size(), averageSpreadPercent(),
-                comparable() ? "" : " - too far apart to compare; something else was using the machine");
+        String verdict = !settled ? " - the world never settled, so the passes measured it being built; run again"
+                : comparable() ? "" : " - too uncertain to compare; something else was using the machine";
+        return String.format(Locale.ROOT, "%s %s: %.1f FPS average (+/- %.1f%%), %.1f FPS 1%% low, over %d"
+                + " passes after %.0f s of warm-up%s", target, label, overall.averageFps(), uncertaintyPercent(),
+                overall.onePercentLowFps(), passes.size(), warmedUpSeconds, verdict);
     }
 
     public String json() {
@@ -151,6 +176,8 @@ public final class Result {
                 .append(", \"height\": ").append(Scene.HEIGHT)
                 .append(", \"guiScale\": ").append(Scene.GUI_SCALE)
                 .append(", \"warmUpSeconds\": ").append(Scene.WARM_UP_SECONDS)
+                .append(", \"warmedUpSeconds\": ").append(number(warmedUpSeconds))
+                .append(", \"settled\": ").append(settled)
                 .append(", \"passSeconds\": ").append(Scene.PASS_SECONDS)
                 .append("},\n");
         out.append("  \"machine\": ").append(object(machine)).append(",\n");
@@ -158,6 +185,7 @@ public final class Result {
         out.append("  \"overall\": ").append(summary(overall())).append(",\n");
         out.append("  \"spread\": {\"averageFpsPercent\": ").append(number(averageSpreadPercent()))
                 .append(", \"onePercentLowFpsPercent\": ").append(number(onePercentLowSpreadPercent()))
+                .append(", \"uncertaintyPercent\": ").append(number(uncertaintyPercent()))
                 .append(", \"comparable\": ").append(comparable()).append("},\n");
         out.append("  \"passes\": [\n");
         for (int i = 0; i < passes.size(); i++) {

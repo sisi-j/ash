@@ -19,6 +19,7 @@ import net.minecraft.util.profiler.Profiler;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.LevelGeneratorType;
 import net.minecraft.world.level.LevelInfo;
+import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 
 /**
@@ -74,6 +75,10 @@ public final class AshBenchmark implements ClientModInitializer {
             options.viewDistance = Scene.RENDER_DISTANCE;
             options.maxFramerate = UNLIMITED;
             options.vsync = false;
+            // The field alone is only read when the menu changes it; the
+            // first trial run sat at the screen's 144 Hz, waiting on vsync
+            // in `display_update` for 59% of every frame.
+            Display.setVSyncEnabled(false);
             options.guiScale = Scene.GUI_SCALE;
             options.fullscreen = false;
             options.save();
@@ -121,6 +126,9 @@ public final class AshBenchmark implements ClientModInitializer {
 
         if (phase == Benchmark.Phase.MEASURING && current.pass() != announcedPass) {
             announcedPass = current.pass();
+            if (announcedPass == 1) {
+                say(String.format(java.util.Locale.ROOT, "warmed up in %.0f s", current.warmedUpSeconds()));
+            }
             say("pass " + announcedPass + " of " + current.passes());
         } else if (phase == Benchmark.Phase.PROFILING && !client.options.debugProfilerEnabled) {
             // The game profiles only while its debug screen shows the
@@ -146,7 +154,8 @@ public final class AshBenchmark implements ClientModInitializer {
         Result result = new Result("1.8.9", Runs.label(), Runs.instant(nowMillis),
                 Runs.machine(GLX.getProcessor(), GL11.glGetString(GL11.GL_RENDERER),
                         GL11.glGetString(GL11.GL_VENDOR), GL11.glGetString(GL11.GL_VERSION)),
-                Runs.ashSettings(FabricLoader.getInstance().getConfigDir()), current.measured(), profile);
+                Runs.ashSettings(FabricLoader.getInstance().getConfigDir()), current.measured(),
+                current.warmedUpSeconds(), current.settledAtStart(), profile);
         try {
             Path written = result.write(Runs.outputDirectory(client.runDirectory.toPath()), Runs.stamp(nowMillis));
             say(result.oneLine());

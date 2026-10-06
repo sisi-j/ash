@@ -39,14 +39,23 @@ public final class Scene {
     public static final int HEIGHT = 720;
     public static final int GUI_SCALE = 2;
 
-    /** Before measuring: the world loads round the camera and the JIT settles. */
-    public static final int WARM_UP_SECONDS = 20;
+    /**
+     * Before measuring: the world loads round the camera and the JIT settles.
+     * More than a full turn, so every chunk the passes look at has been built
+     * once - a first trial with less had its first pass building them.
+     */
+    public static final int WARM_UP_SECONDS = 40;
 
     /** Each pass is one full turn. */
     public static final int PASS_SECONDS = 30;
 
-    /** Passes per run: enough to see how far a run disagrees with itself. */
-    public static final int PASSES = 3;
+    /**
+     * Passes per run. Five, because a pass on its own varies: on a laptop at
+     * 600 frames a second, 1.21.11 swung 566 to 635 from one half-minute to
+     * the next. The run's average is what is compared, and five passes pin it
+     * down to its uncertainty - see {@code Result}.
+     */
+    public static final int PASSES = 5;
 
     private Scene() {
     }

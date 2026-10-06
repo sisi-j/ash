@@ -2,6 +2,8 @@ package com.ashlauncher.client.bench;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,46 @@ class BenchmarkTest {
 
         assertEquals(Benchmark.Phase.WARMING_UP, run.phase());
         assertEquals(0, run.measured().size());
+    }
+
+    @Test
+    void the_warm_up_waits_for_the_world_to_settle_and_stay_settled() {
+        Benchmark run = new Benchmark(1, 1, 1, 0);
+        run.frame(0, false);
+
+        // Past the warm-up's own second, but still generating.
+        for (long now = 10 * MS; now <= 3 * SECOND; now += 10 * MS) {
+            run.frame(now, false);
+        }
+        assertEquals(Benchmark.Phase.WARMING_UP, run.phase());
+
+        // Settled, unsettled again, then settled for good.
+        for (long now = 3 * SECOND + 10 * MS; now <= 5 * SECOND; now += 10 * MS) {
+            run.frame(now, true);
+        }
+        run.frame(5 * SECOND + 10 * MS, false);
+        long now = 5 * SECOND + 20 * MS;
+        for (; run.phase() == Benchmark.Phase.WARMING_UP; now += 10 * MS) {
+            run.frame(now, true);
+        }
+
+        assertEquals(Benchmark.Phase.MEASURING, run.phase());
+        assertEquals(5 * SECOND + 20 * MS + Benchmark.SETTLED_SECONDS * SECOND, now - 10 * MS,
+                "the passes started the moment the world had been settled long enough");
+        assertTrue(run.settledAtStart());
+    }
+
+    @Test
+    void a_world_that_never_settles_is_measured_anyway_and_says_so() {
+        Benchmark run = new Benchmark(1, 1, 1, 0);
+        run.frame(0, false);
+
+        for (long now = 10 * MS; run.phase() == Benchmark.Phase.WARMING_UP; now += 10 * MS) {
+            run.frame(now, false);
+        }
+
+        assertEquals(Benchmark.MAX_WARM_UP_SECONDS, run.warmedUpSeconds(), 0.02);
+        assertFalse(run.settledAtStart());
     }
 
     @Test
