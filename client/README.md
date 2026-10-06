@@ -8,6 +8,7 @@ module that cannot see the game.
 | `shared/` | Pure logic and the version seam. Cannot name a Minecraft type or a Fabric API type, and `checkNoGameTypes` fails the build if it does. Java 8 bytecode, because the 1.8.9 module consumes it. |
 | `target-1.21.11/` | The 1.21.11 adapter. Loom 1.18, Mojang mappings, Fabric Loader, Fabric API. Produces `ash-client-1.21.11.jar`. |
 | `target-1.8.9/` | The 1.8.9 adapter. Loom 1.16 plus `legacy-looming`, Legacy Yarn, Legacy Fabric API. Produces `ash-client-1.8.9.jar`. |
+| `bench/` | The frame-time measurement's own logic: the scene, the camera's path, the summaries and the result file. A developer tool; only each target's `benchmark` source set uses it, and no player's jar holds any of it. See *Measuring frame time*. |
 
 The modules are named for the version target rather than "modern" and
 "legacy", because those words rot — 1.21.11 is the *last obfuscated* release
@@ -40,8 +41,9 @@ comes out, so one modern JDK builds both targets.
 The first build downloads Minecraft and Mojang's mappings and takes a couple
 of minutes; later ones are seconds.
 
-`build` compiles all three modules, runs their tests, and runs
-`checkNoGameTypes`. CI runs exactly this on every push.
+`build` compiles every module, runs their tests, and runs
+`checkNoGameTypes`, and `checkJarHasNoBenchmark` on each target. CI runs this,
+and also compiles the frame-time measurement, on every push.
 
 ## The rule, and what enforces it
 
@@ -128,6 +130,70 @@ never be the thing that noticed.
 Both run in CI on Linux only, and that is a capability rather than a
 preference - see `docs/adr/0016-ci-accepts-the-minecraft-eula.md`, which also
 records what they cost and what a headless runner does and does not provide.
+
+## Measuring frame time
+
+The frame-time measurement runs one fixed scene in a real game and records
+every frame's time. Phase 3 uses it to decide which 1.8.9 optimisations
+exist, whether Lithium earns its place, and what each feature costs.
+
+```
+./gradlew :target-1.8.9:runBenchmark -Pbench.label=baseline
+./gradlew :target-1.21.11:runBenchmark -Pbench.label=baseline
+```
+
+**Run it by hand, on a real machine.** CI has no GPU, and its software
+renderer's numbers mean nothing for a player, so CI only compiles it. Plug a
+laptop in, close what you can, start the command, and leave the window alone
+until it closes itself: about two and a half minutes.
+
+**The scene** is in `bench/.../Scene.java`, the same numbers on both targets:
+
+- a world from one seed, made afresh each run;
+- a spectator 110 blocks up, turning a full circle every 30 seconds, by the
+  clock rather than by the frame;
+- noon, clear weather, no mobs;
+- render distance 8, a 1280 by 720 window, GUI scale 2, no frame-rate cap,
+  no vsync.
+
+**What happens:**
+
+1. 20 seconds of warm-up, while the world loads and the JIT settles.
+2. Three measured passes of 30 seconds each.
+3. On 1.8.9 only, 15 seconds with the game's own profiler on: the F3 pie
+   chart's data. Those frames are not counted, because profiling costs time.
+
+**Results** go to `client/benchmark-results/`, outside `build` so a clean
+keeps them. Each run writes two files:
+
+- `<target>-<label>-<time>.json`, which has:
+  - the scene;
+  - the machine (processor, graphics card, driver, OS, Java);
+  - ash's settings for the run;
+  - each pass, and all passes together, as average FPS, average frame time,
+    **1% low** (the frame rate of the slowest hundredth of frames) and worst
+    frame;
+  - the **spread** between passes;
+  - on 1.8.9, the **profile**: each section of the game's frame worth at least
+    1% of it, three levels deep.
+- `...-frames.csv`, with every frame's time.
+
+The log's last lines say the same in one sentence.
+
+**Comparing two runs:**
+
+- The spread is how far a run's passes disagree, as the standard deviation of
+  their average frame rates over the mean.
+- A run whose passes disagree by more than 3% is marked `"comparable": false`.
+  Something else was using the machine, so run it again.
+- A change has only been shown to move the frame rate if it moves the average
+  by more than the spread of both runs. Run the baseline twice first, to see
+  how far this machine disagrees with itself.
+
+**Features on and off:** before a run, edit
+`target-<version>/build/run/benchmark/config/ash.properties`. It is the run's
+own settings file, written on the first run. The result records every setting,
+so a run with a feature off is never mistaken for one with it on.
 
 ## Mixins, and what happens when one stops matching
 

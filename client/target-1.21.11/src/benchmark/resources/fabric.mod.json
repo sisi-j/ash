@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "ash-benchmark",
+  "version": "1.0.0",
+  "name": "ash frame-time measurement (1.21.11)",
+  "description": "Runs a fixed scene and records every frame's time. A developer tool; never shipped.",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.ashlauncher.client.v1_21_11.AshBenchmark"
+    ]
+  }
+}
