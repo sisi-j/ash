@@ -130,3 +130,30 @@ So wrapping those two calls turns the camera, and the third-person orbit follows
   - Left Shift (340, Sneak) and Left Control (341, Sprint) each appear once;
   - Left Alt never does **[PRACTICE]**.
 - Players can rebind it in Controls, under Misc.
+
+## 6. Freelook on 1.8.9 (#39)
+
+**The mouse.**
+- `GameRenderer.render(float, long)` turns the player with `ClientPlayerEntity.increaseTransforms(float, float)` at two sites: the smooth-camera branch and the normal one **[PRACTICE]**.
+- `Entity.increaseTransforms` adds `yaw * 0.15` to yaw, **subtracts** `pitch * 0.15` from pitch, and clamps pitch to ±90 **[PRACTICE]**.
+- So freelook takes the call at both sites and negates the pitch, and the mouse turns the same way on both targets.
+
+**The view.**
+- `GameRenderer.renderWorld(float, long)` first calls `updateTargetedEntity(float)`, then draws the world through `renderWorld(int, float, long)` **[PRACTICE]**.
+- Everything that decides the view reads the camera entity's own `yaw`, `pitch`, `prevYaw` and `prevPitch` fields (`docs/research/0004`, section 5):
+  - the view transform;
+  - which chunks are visible (`WorldRenderer.setupTerrain`);
+  - particle facing.
+- So for 1.8.9, freelook swaps freelook's angles into those four fields right after `updateTargetedEntity`, and puts the entity's own values back when `renderWorld` returns. Two consequences:
+  - **Targeting is untouched.** It runs before the swap, so a click still hits where the player faces.
+  - **No tick ever sees the swap.** The swap is undone before any tick, where movement packets are sent. The start of every client tick also puts the fields back, in case a frame ever ended early.
+- **Judgement:** swapping the fields is simpler and safer than wrapping each read, and it brings the chunk check along for free. Wrapping `getfield` sites would also depend on MixinExtras supporting field access, which `docs/research/0004` left unchecked.
+- **The one visible difference from 1.21.11:** in the third-person view the player's own model tilts its head with the camera's pitch, because the model is drawn inside the swap. It is local to the player's own screen.
+
+**Camera mode.**
+- `GameOptions.perspective`: 0 is first person, 1 behind **[PRACTICE]**.
+- Setting it also calls `WorldRenderer.scheduleTerrainUpdate()`, as the game's own F5 does.
+
+**Key.** Left Alt, `Keyboard.KEY_LMENU` (56). 1.8.9's `GameOptions` builds every default binding with a `bipush` of its key code:
+- Left Shift (42, Sneak) and Left Control (29) appear among them;
+- 56 never does **[PRACTICE]**.

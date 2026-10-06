@@ -25,6 +25,11 @@ public final class FreelookHook {
         return freelook != null && freelook.turn(dx, dy);
     }
 
+    /** Whether freelook is held right now. */
+    public static boolean active() {
+        return freelook != null && freelook.active();
+    }
+
     /** The camera's yaw: freelook's while it is held, otherwise the player's. */
     public static float yaw(float players) {
         return freelook != null && freelook.active() ? freelook.yaw() : players;

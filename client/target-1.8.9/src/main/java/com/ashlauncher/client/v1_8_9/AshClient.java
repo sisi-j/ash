@@ -4,6 +4,9 @@ import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.fps.FpsReadout;
+import com.ashlauncher.client.freelook.BlockList;
+import com.ashlauncher.client.freelook.Freelook;
+import com.ashlauncher.client.freelook.FreelookHook;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hit.RecentAttacks;
@@ -38,6 +41,7 @@ import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.render.GameRenderer;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -65,6 +69,10 @@ public final class AshClient implements ClientModInitializer {
     private static final String TOGGLE_SPRINT_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerEntityMixin";
 
     private static final String SETTINGS_KEY_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientMixin";
+
+    private static final String FREELOOK_RENDER_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.GameRendererFreelookMixin";
+
+    private static final String FREELOOK_TICK_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientFreelookMixin";
 
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
@@ -164,10 +172,37 @@ public final class AshClient implements ClientModInitializer {
             landed.remove(Feature.SETTINGS_SCREEN);
         }
 
+        // Freelook: the mouse diverted and the view turned in the game
+        // renderer, and its key read on the client's tick. Both mixins or
+        // neither, as on 1.21.11.
+        boolean freelookLanded = MixinFeature.landed(() -> GameRenderer.class, FREELOOK_RENDER_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.FREELOOK.displayName(), why)))
+                && MixinFeature.landed(() -> MinecraftClient.class, FREELOOK_TICK_MIXIN,
+                        why -> LOG.warn(MixinFeature.didNotLoad(Feature.FREELOOK.displayName(), why)));
+        if (freelookLanded) {
+            // Left Alt, which the game binds to nothing. Under Misc, beside
+            // ash's settings key; rebindable in Controls.
+            KeyBinding freelookKey = KeyBindingHelper.registerKeyBinding(
+                    new KeyBinding(Freelook.BINDING_NAME, Keyboard.KEY_LMENU, "key.categories.misc"));
+            Freelook<Integer> freelook = new Freelook<>(new FreelookKey.Perspective(),
+                    () -> settings.get(Settings.FREELOOK), CurrentServer::blockedHere,
+                    why -> MinecraftClient.getInstance().inGameHud.setOverlayMessage(why, false));
+            FreelookHook.install(freelook);
+            FreelookKey.install(freelookKey, freelook);
+        } else {
+            landed.remove(Feature.FREELOOK);
+        }
+
         Runnable writeReport = () -> writeLoadReport(settings, landed);
         if (settingsKeyLanded) {
-            SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
-                    feature -> "", writeReport);
+            // Freelook's row says why it is off on a listed server, and cannot
+            // be switched there, as on 1.21.11.
+            SettingsScreen settingsScreen = new SettingsScreen(settings, feature -> true, landed::contains,
+                    feature -> {
+                        BlockList.Server here = feature == Feature.FREELOOK ? CurrentServer.blockedHere() : null;
+                        return here == null ? "" : here.whyOff();
+                    },
+                    writeReport);
             KeyBinding settingsKey = KeyBindingHelper.registerKeyBinding(
                     new KeyBinding(SettingsScreen.BINDING_NAME, Keyboard.KEY_RSHIFT, "key.categories.misc"));
             SettingsKey.install(settingsKey, settingsScreen);
@@ -183,7 +218,7 @@ public final class AshClient implements ClientModInitializer {
      */
     private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
-            LoadReport.forSession(clientVersion(), AshClient::present, landed::contains, settings::on)
+            LoadReport.forSession(clientVersion(), landed::contains, settings::on)
                     .withOrigins(modOrigins(), BUNDLED)
                     .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {
@@ -229,15 +264,6 @@ public final class AshClient implements ClientModInitializer {
                     .orElse(Collections.<Path>emptyList());
         }
         return Collections.emptyList();
-    }
-
-    /**
-     * Whether this target has a feature at all. Freelook is 1.21.11's until
-     * #39 brings it here, so on 1.8.9 it has no row and no line in the load
-     * report, rather than one saying it did not load.
-     */
-    private static boolean present(Feature feature) {
-        return feature != Feature.FREELOOK;
     }
 
     private static String clientVersion() {

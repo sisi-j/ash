@@ -9,9 +9,11 @@
     "ClientPlayerEntityMixin",
     "ClientPlayerInteractionManagerMixin",
     "GameRendererAccess",
+    "GameRendererFreelookMixin",
     "InGameHudMixin",
     "InGameHudPanelMixin",
     "MinecraftClientAccess",
+    "MinecraftClientFreelookMixin",
     "MinecraftClientMixin",
     "MinecraftClientServerMixin"
   ],
