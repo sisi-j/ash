@@ -56,6 +56,15 @@ public final class AshSettingsScreen extends Screen {
         return panel;
     }
 
+    /**
+     * Whether the game's HUD is hidden under this screen: always under the
+     * panel, so 1.8.9 looks as 1.21.11 does, and never in Edit HUD, which is
+     * there to show the HUD as it will be.
+     */
+    public boolean hidesHud() {
+        return !panel.editingHud();
+    }
+
     /** Called on opening and again on every window resize. */
     @Override
     public void init() {
