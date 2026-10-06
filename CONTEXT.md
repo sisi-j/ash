@@ -75,7 +75,7 @@ One ash capability that loads, or degrades, on its own, such as toggle sprint or
 _Avoid_: mod, module, tweak, hack
 
 **Load report**:
-The record the client writes saying which features loaded, which degraded, and which the player switched off - `ash/load-report.json` in the game directory, replaced each time the client starts and again whenever the player changes a setting in game, so it says what the session ended with. Written by the client, read by the launcher before the next play and into ash's own log, never the other way.
+The record the client writes saying which features loaded, which degraded, and which the player switched off, whether any of the player's own mods loaded, and whose copy of each bundled mod ran (ADR-0018) - `ash/load-report.json` in the game directory, replaced each time the client starts and again whenever the player changes a setting in game, so it says what the session ended with. Written by the client, read by the launcher before the next play and into ash's own log, never the other way.
 _Avoid_: health check, status file, diagnostics
 
 **Bundled mod**:

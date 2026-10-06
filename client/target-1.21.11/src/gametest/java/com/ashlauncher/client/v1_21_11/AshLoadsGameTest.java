@@ -88,6 +88,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         }) {
             assertReportSays(feature);
         }
+        // Read from the real loader's mod origins: nothing of a player's is in
+        // this game's mods folder, and Fabric API came from where the build put
+        // it, so the copy that ran is ash's.
+        assertReportSays("\"third_party_mods\": false");
+        assertReportSays("{ \"id\": \"fabric-api\", \"copy\": \"ash\" }");
 
         context.takeScreenshot("ash-loaded");
 
