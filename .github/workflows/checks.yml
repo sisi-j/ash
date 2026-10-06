@@ -128,6 +128,15 @@ jobs:
       - run: ./gradlew :target-1.21.11:runClientGameTest
         working-directory: client
 
+      # The same test again with Sodium in the mods folder, as a player would
+      # add it (#48). Its mixins are required, so a clash with ash's is a
+      # crash at launch, found here instead of in a player's game. The jar is
+      # pinned by version and SHA-512 in `client/gradle.properties`, tested
+      # against and never shipped (ADR-0013).
+      - if: ${{ !cancelled() }}
+        run: ./gradlew :target-1.21.11:runClientGameTestSodium
+        working-directory: client
+
       # LWJGL 2 looks for an `xrandr` executable on PATH and gives up on
       # display modes when it finds none, so without this the 1.8.9 client
       # crashes on a runner that has Xvfb but not `x11-xserver-utils`. Why
@@ -163,6 +172,8 @@ jobs:
           path: |
             client/target-1.21.11/build/run/clientGameTest/screenshots/
             client/target-1.21.11/build/run/clientGameTest/logs/
+            client/target-1.21.11/build/run/clientGameTestSodium/screenshots/
+            client/target-1.21.11/build/run/clientGameTestSodium/logs/
             client/target-1.8.9/build/run/smoketest/logs/
             client/target-1.8.9/build/run/smoketest/screenshots/
           if-no-files-found: ignore
