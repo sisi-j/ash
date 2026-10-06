@@ -217,8 +217,8 @@ tasks.register('prepareSodiumGameTest') {
         }
         // Accepted for this run as for the game test without Sodium, by the
         // same decision: docs/adr/0016-ci-accepts-the-minecraft-eula.md.
-        new File(sodiumRunDir, 'eula.txt').text = '# Accepted by ash\'s build, as for the game test without Sodium:'
-                + ' docs/adr/0016-ci-accepts-the-minecraft-eula.md\neula=true\n'
+        new File(sodiumRunDir, 'eula.txt').text = '# Accepted by ash\'s build, as for the game test without Sodium:' +
+                ' docs/adr/0016-ci-accepts-the-minecraft-eula.md\neula=true\n'
     }
 }
 
