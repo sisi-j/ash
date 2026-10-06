@@ -8,6 +8,7 @@ use std::fs;
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::FakeHttp;
 use ash_core::process::FakeProcessPort;
+use ash_core::servers::FakeServerPort;
 use ash_core::{Ash, Config, Loader, MachineOverrides};
 
 fn ash() -> (Ash, tempfile::TempDir) {
@@ -17,6 +18,7 @@ fn ash() -> (Ash, tempfile::TempDir) {
         FakeHttp::new(),
         InMemoryCredentialStore::new(),
         FakeProcessPort::new(),
+        FakeServerPort::new(),
         "test-client",
     );
     (ash, tmp)
@@ -155,6 +157,7 @@ fn deleting_an_instance_leaves_the_depot_and_other_instances_alone() {
         FakeHttp::new(),
         InMemoryCredentialStore::new(),
         FakeProcessPort::new(),
+        FakeServerPort::new(),
         "test-client",
     );
 

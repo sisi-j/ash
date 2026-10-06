@@ -31,6 +31,7 @@ use std::time::Duration;
 use ash_core::credentials::OsCredentialStore;
 use ash_core::http::{HttpPort, ReqwestHttp};
 use ash_core::process::{GameStatus, OsProcessPort};
+use ash_core::servers::OsServerPort;
 use ash_core::{
     Ash, Cancel, Config, Loader, PrepareEvent, ProgressSink, SignInStatus, VersionKind,
 };
@@ -85,6 +86,7 @@ async fn main() {
         Arc::new(ReqwestHttp::new()) as Arc<dyn HttpPort>,
         Arc::new(OsCredentialStore::new()),
         Arc::new(OsProcessPort::new()),
+        Arc::new(OsServerPort::new()),
         client_id,
     );
 

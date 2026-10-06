@@ -11,6 +11,7 @@ use std::sync::Arc;
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
+use ash_core::servers::FakeServerPort;
 use ash_core::{Ash, Cancel, Config, InstanceId, Loader, NullSink, VERSION_MANIFEST_URL};
 
 mod common;
@@ -87,6 +88,7 @@ fn fixture_at(http: Arc<FakeHttp>, folder: &str) -> Fixture {
         http as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
         Arc::clone(&process) as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     );
     Fixture { ash, process, root, _tmp: tmp }
@@ -333,6 +335,7 @@ fn gone_offline(f: &Fixture) -> Ash {
         FakeHttp::offline() as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
         FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     )
 }

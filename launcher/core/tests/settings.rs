@@ -13,6 +13,7 @@ use std::sync::Arc;
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
+use ash_core::servers::FakeServerPort;
 use ash_core::{
     Ash, Cancel, Config, InstanceId, Loader, MachineDefaults, MachineOverrides, NullSink,
     Resolution, DEFAULT_MEMORY_MB, VERSION_MANIFEST_URL,
@@ -73,6 +74,7 @@ fn fixture() -> Fixture {
         http as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
         Arc::clone(&process) as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     );
     Fixture { ash, process, tmp }

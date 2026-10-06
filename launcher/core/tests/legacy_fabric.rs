@@ -17,6 +17,7 @@ use std::sync::{Arc, OnceLock};
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
+use ash_core::servers::FakeServerPort;
 use ash_core::{
     Ash, Cancel, Config, InstanceId, Loader, LoaderPin, NullSink, PinnedFile, PinnedLibrary,
     PinnedNative, VERSION_MANIFEST_URL,
@@ -370,6 +371,7 @@ fn fixture_with(http: Arc<FakeHttp>) -> Fixture {
         Arc::clone(&http) as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
         FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     );
     Fixture { ash, http, tmp }
@@ -556,6 +558,7 @@ async fn a_prepared_legacy_instance_plans_with_no_network() {
         FakeHttp::offline() as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
         FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     );
 

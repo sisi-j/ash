@@ -139,6 +139,15 @@ pub enum AshError {
 
     #[error("instance {id} is already running")]
     AlreadyRunning { id: String },
+
+    // ---- servers ----
+    /// Asked about a server the instance's own list does not have. ash pings
+    /// and joins only servers the player has listed in the game.
+    #[error("{address} is not in this instance's server list")]
+    ServerNotListed { address: String },
+
+    #[error("{address} is not a server address the game can connect to")]
+    InvalidServerAddress { address: String },
 }
 
 /// Windows and Unix both have a distinct error for "the volume is full", and
@@ -208,6 +217,8 @@ impl AshError {
             AshError::LaunchUnsupported { .. } => "launch_unsupported",
             AshError::LaunchFailed { .. } => "launch_failed",
             AshError::AlreadyRunning { .. } => "already_running",
+            AshError::ServerNotListed { .. } => "server_not_listed",
+            AshError::InvalidServerAddress { .. } => "invalid_server_address",
         }
     }
 
@@ -346,6 +357,16 @@ impl AshError {
                     .into()
             }
             AshError::AlreadyRunning { .. } => "That instance is already running.".into(),
+            AshError::ServerNotListed { .. } => {
+                "That server isn't in this instance's server list. Add it in the game's Multiplayer \
+                 screen."
+                    .into()
+            }
+            AshError::InvalidServerAddress { .. } => {
+                "That server's address isn't one the game can connect to. Fix it in the game's \
+                 Multiplayer screen."
+                    .into()
+            }
         }
     }
 
@@ -484,6 +505,8 @@ mod tests {
             AshError::LaunchUnsupported { version_id: s.clone(), detail: s.clone() },
             AshError::LaunchFailed { detail: s.clone() },
             AshError::AlreadyRunning { id: s.clone() },
+            AshError::ServerNotListed { address: s.clone() },
+            AshError::InvalidServerAddress { address: s.clone() },
         ];
 
         // This says the list has no variant in it twice. It cannot say the
@@ -547,7 +570,9 @@ mod tests {
             | AshError::ClientMissing { .. }
             | AshError::LaunchUnsupported { .. }
             | AshError::LaunchFailed { .. }
-            | AshError::AlreadyRunning { .. } => {}
+            | AshError::AlreadyRunning { .. }
+            | AshError::ServerNotListed { .. }
+            | AshError::InvalidServerAddress { .. } => {}
         }
     }
 }

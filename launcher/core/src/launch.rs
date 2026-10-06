@@ -37,6 +37,35 @@ pub(crate) struct LaunchContext<'a> {
     pub overrides: &'a MachineOverrides,
     /// This machine's defaults, for whatever the overrides leave unsaid.
     pub defaults: &'a MachineDefaults,
+    /// A server to go straight into, for this launch only. Never stored.
+    pub join: Option<&'a Join>,
+}
+
+/// Where a launch goes once the game is up, in the form its version takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Join {
+    /// `--quickPlayMultiplayer`, given the address as the player wrote it:
+    /// the game resolves it, SRV record included.
+    QuickPlay(String),
+    /// `--server` and `--port`, for a version that connects to exactly the
+    /// host and port it is given, so ash has resolved them first.
+    Direct { host: String, port: u16 },
+}
+
+/// Whether this version takes `--quickPlayMultiplayer`.
+///
+/// Its own metadata says so, by declaring the argument behind Mojang's
+/// `is_quick_play_multiplayer` feature. No version number is compared.
+pub(crate) fn takes_quick_play(metadata: &VersionMetadata) -> bool {
+    metadata.arguments.game.iter().any(|entry| match entry {
+        version::ArgEntry::Literal(arg) => arg.contains("${quickPlayMultiplayer}"),
+        version::ArgEntry::Conditional { value, .. } => match value {
+            version::ArgValue::One(arg) => arg.contains("${quickPlayMultiplayer}"),
+            version::ArgValue::Many(args) => {
+                args.iter().any(|arg| arg.contains("${quickPlayMultiplayer}"))
+            }
+        },
+    })
 }
 
 /// Build the command that starts the game.
@@ -83,6 +112,23 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
             "--height".to_owned(),
             resolution.height.to_string(),
         ]);
+    }
+
+    // Appended the same way, rather than by enabling the feature: 1.8.9's
+    // `--server` has no feature to enable.
+    match context.join {
+        Some(Join::QuickPlay(address)) => {
+            game.extend(["--quickPlayMultiplayer".to_owned(), address.clone()]);
+        }
+        Some(Join::Direct { host, port }) => {
+            game.extend([
+                "--server".to_owned(),
+                host.clone(),
+                "--port".to_owned(),
+                port.to_string(),
+            ]);
+        }
+        None => {}
     }
 
     let mut args = jvm;

@@ -19,6 +19,8 @@ import type {
   LaunchOutcome,
   PrepareEvent,
   PrepareOutcome,
+  ServerEntry,
+  ServerStatus,
 } from "../src/api.ts";
 
 export * from "../src/api.ts";
@@ -137,6 +139,45 @@ function glance(id: string): InstanceGlance {
     last_session: running ? { started_ms: now - 12 * MINUTE, ended_ms: null } : instance.last_session,
     mods: id === "a" ? ["Sodium"] : [],
   };
+}
+
+// ---- servers ----------------------------------------------------------------
+
+/** A server icon drawn here, in the base64 PNG form the game saves one in. */
+function serverIcon(colour: string): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 8;
+  canvas.height = 8;
+  const pen = canvas.getContext("2d");
+  if (!pen) return "";
+  pen.fillStyle = colour;
+  pen.fillRect(0, 0, 8, 8);
+  pen.fillStyle = "#ffffff";
+  pen.fillRect(2, 2, 4, 4);
+  return canvas.toDataURL().replace("data:image/png;base64,", "");
+}
+
+/** Each instance's list as its game wrote it. The vanilla one has never opened Multiplayer. */
+const SERVERS: Record<string, ServerEntry[]> = {
+  a: [
+    { name: "Hypixel", address: "mc.hypixel.net", icon: serverIcon("#e0a526") },
+    { name: "Bedwars Practice", address: "bedwarspractice.club", icon: null },
+    { name: "Old SMP", address: "smp.example.net:25570", icon: null },
+  ],
+  b: [{ name: "Hypixel", address: "mc.hypixel.net", icon: serverIcon("#e0a526") }],
+  c: [],
+};
+
+const STATUSES: Record<string, ServerStatus> = {
+  "mc.hypixel.net": { state: "online", players_online: 31_542, players_max: 200_000, version: "Requires MC 1.8 / 1.21", motd: "Hypixel Network", icon: null },
+  "bedwarspractice.club": { state: "online", players_online: 312, players_max: 1000, version: "1.8.9", motd: "Practice", icon: null },
+  "smp.example.net:25570": { state: "offline" },
+};
+
+/** Where the last Join went, for the check to read back. */
+function joined(address: string) {
+  (window as unknown as { joined?: string }).joined = address;
+  launch();
 }
 
 /** States where clicking LAUNCH GAME starts a download, so the click has steps to show. */
@@ -268,6 +309,9 @@ export const api: typeof real.api = {
   cancelPreparation: nothing,
 
   launch: async () => launch(),
+  join: async (_id, address) => joined(address),
+  servers: (id) => resolve(SERVERS[id] ?? []),
+  serverStatus: (_id, address) => resolve(STATUSES[address] ?? { state: "offline" }),
   previewLaunch: () => resolve({ program: "java", args: [], working_directory: "" }),
   gameStatus: () => resolve(status()),
   gameLog: () => resolve(state === "crashed" ? CRASH_LOG : []),

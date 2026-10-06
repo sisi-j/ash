@@ -10,6 +10,7 @@ use std::sync::Arc;
 use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort};
 use ash_core::process::{FakeProcessPort, ProcessPort};
+use ash_core::servers::FakeServerPort;
 use ash_core::{Ash, Config, LauncherPreferences, MachineDefaults, OnGameStart, DEFAULT_MEMORY_MB};
 
 fn ash_at(base: &Path) -> Ash {
@@ -18,6 +19,7 @@ fn ash_at(base: &Path) -> Ash {
         FakeHttp::new() as Arc<dyn HttpPort>,
         InMemoryCredentialStore::new(),
         FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     )
 }

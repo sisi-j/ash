@@ -9,11 +9,12 @@ use std::sync::{Arc, Mutex};
 use ash_core::credentials::OsCredentialStore;
 use ash_core::http::ReqwestHttp;
 use ash_core::process::OsProcessPort;
+use ash_core::servers::OsServerPort;
 use ash_core::{
     Account, Accounts, Ash, Cancel, Catalogue, Config, DegradationNotice, DeletionPreview,
     GameStatus, Instance, InstanceGlance, InstanceId, InvocationView, LauncherPreferences, Loader,
     MachineDefaults, MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime,
-    SignInStatus,
+    ServerEntry, ServerStatus, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -326,6 +327,19 @@ fn set_launcher_preferences(
 /// arrives as `prepare-progress` and the outcome as `launch-finished`.
 #[tauri::command]
 fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
+    start(app, id, None);
+    Ok(())
+}
+
+/// Start the game straight into one of the instance's servers, reported on
+/// the same events as `launch`.
+#[tauri::command]
+fn join(app: tauri::AppHandle, id: InstanceId, address: String) -> Result<(), UiError> {
+    start(app, id, Some(address));
+    Ok(())
+}
+
+fn start(app: tauri::AppHandle, id: InstanceId, address: Option<String>) {
     tauri::async_runtime::spawn(async move {
         let cancel = Cancel::new();
         let ash = {
@@ -335,7 +349,10 @@ fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
         };
 
         let sink = WindowSink(app.clone());
-        let outcome = ash.launch(&id, &sink, &cancel).await;
+        let outcome = match &address {
+            Some(address) => ash.join(&id, address, &sink, &cancel).await,
+            None => ash.launch(&id, &sink, &cancel).await,
+        };
 
         {
             let state = app.state::<AppState>();
@@ -354,7 +371,26 @@ fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
             },
         );
     });
-    Ok(())
+}
+
+// ---- servers ----
+
+#[tauri::command]
+async fn servers(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<ServerEntry>, UiError> {
+    state.ash.servers(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn server_status(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    address: String,
+) -> Result<ServerStatus, UiError> {
+    let ash = Arc::clone(&state.ash);
+    ash.server_status(&id, &address).await.map_err(UiError::from)
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -470,6 +506,7 @@ fn ash_state(client_root: std::path::PathBuf) -> Ash {
         Arc::new(ReqwestHttp::new()),
         Arc::new(OsCredentialStore::new()),
         Arc::new(OsProcessPort::new()),
+        Arc::new(OsServerPort::new()),
         CLIENT_ID,
     )
 }
@@ -481,6 +518,10 @@ fn ash_state(client_root: std::path::PathBuf) -> Ash {
 /// installer so that the launcher and the client can never be version-skewed.
 /// Resolving it is the adapter's job, like every other path.
 fn client_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    #[cfg(debug_assertions)]
+    if let Some(dir) = dev_client_dir() {
+        return dir;
+    }
     app.path()
         .resource_dir()
         // Resolving the resource directory only fails on a broken
@@ -496,6 +537,44 @@ fn client_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
         // is prepared, which is a better moment to tell the player than a
         // panic before the window opens.
         .unwrap_or_default()
+}
+
+/// The client jars `./gradlew build` made, for `npm run tauri dev`.
+///
+/// A dev build has no installation: only `build:installer` copies the jars
+/// into `client/` beside the executable, so without this every ash-client
+/// instance in dev stopped at "ash's own client is missing". Each target's
+/// jar is copied into one directory, the shape an installation has, as the
+/// real-launch example does.
+///
+/// Debug builds only, and found from where this crate was compiled, never
+/// from the working directory. An installed ash never looks here.
+#[cfg(debug_assertions)]
+fn dev_client_dir() -> Option<std::path::PathBuf> {
+    let client = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../client");
+    let staged = client.join("build").join("dev-run");
+    std::fs::create_dir_all(&staged).ok()?;
+
+    let mut staged_any = false;
+    for module in std::fs::read_dir(&client).ok()?.flatten() {
+        let Ok(jars) = std::fs::read_dir(module.path().join("build").join("libs")) else {
+            continue;
+        };
+        for jar in jars.flatten() {
+            let name = jar.file_name().to_string_lossy().into_owned();
+            if name.starts_with("ash-client-") && name.ends_with(".jar") {
+                staged_any |= std::fs::copy(jar.path(), staged.join(&name)).is_ok();
+            }
+        }
+    }
+
+    if !staged_any {
+        eprintln!(
+            "ash: no ash-client-*.jar under client/*/build/libs; run ./gradlew build in client/"
+        );
+        return None;
+    }
+    Some(staged)
 }
 
 /// Resolving this is the adapter's job, not the library's - `ash-core` never
@@ -545,6 +624,9 @@ pub fn run() {
             ensure_runtime,
             cancel_preparation,
             launch,
+            join,
+            servers,
+            server_status,
             preview_launch,
             game_status,
             game_log,
