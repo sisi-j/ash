@@ -37,6 +37,16 @@ final class Palette {
     static final int UNAVAILABLE = 0x59A7ADA6;
     /** A message over the panel. */
     static final int TOAST = 0xEB141416;
+    /** Over the game in Edit HUD: light enough that the readouts read as they will. */
+    static final int HUD_EDIT_SCRIM = 0x610E0E0F;
+    /** A readout's box in Edit HUD: a faint white. */
+    static final int HUD_BOX = 0x0FFAFAFA;
+    /** The same, under the mouse or being dragged. */
+    static final int HUD_BOX_HOVER = 0x29FAFAFA;
+    /** Behind Edit HUD's hint and each box's tag. */
+    static final int SCRIM = 0xC70E0E0F;
+    /** A primary button - Edit HUD's Done - is white with dark text. */
+    static final int PRIMARY_TEXT = 0xFF0E0E0F;
     /** The panel's soft shadow, and a tile's, at their darkest. */
     static final int PANEL_SHADOW_ALPHA = 0x59;
     static final int TILE_SHADOW_ALPHA = 0x1F;

@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ashlauncher.client.hud.Anchor;
+import com.ashlauncher.client.hud.Placement;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -148,7 +150,8 @@ class SettingsTest {
                 Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
                 Settings.CROSSHAIR_OUTLINE, Settings.HIT_INDICATOR, Settings.HIT_INDICATOR_COLOUR,
                 Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT,
-                Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH), Settings.declared());
+                Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH,
+                Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION), Settings.declared());
 
         Settings.load(configDir);
 
@@ -197,7 +200,15 @@ class SettingsTest {
                         + "hit-colour.colour=#FF0000\n"
                         + "# How strongly the flash colours the entity, in per cent: a whole number from 0 to 100. 30 is"
                         + " the game's.\n"
-                        + "hit-colour.strength=30\n",
+                        + "hit-colour.strength=30\n"
+                        + "# Where the frame rate sits: an anchor - top-left, top, top-right, left, centre, right,"
+                        + " bottom-left, bottom or bottom-right - then how far from it, across and down, in GUI units."
+                        + " Easiest set with Edit HUD in ash's settings.\n"
+                        + "fps-readout.position=top-left 4 4\n"
+                        + "# Where your ping sits, written as fps-readout.position is. Left here, it takes the frame"
+                        + " rate's place whenever the frame rate is not there. Easiest set with Edit HUD in ash's"
+                        + " settings.\n"
+                        + "ping-readout.position=top-left 4 15\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 
@@ -468,6 +479,11 @@ class SettingsTest {
             // A colour with no opacity of its own is always kept opaque.
             int value = ((Colour) setting).withOpacity() ? 0xC04DC3FF : 0xFF4DC3FF;
             settings.set((Colour) setting, value);
+            return value;
+        }
+        if (setting instanceof Position) {
+            Placement value = new Placement(Anchor.BOTTOM_RIGHT, 7, 11);
+            settings.set((Position) setting, value);
             return value;
         }
         throw new AssertionError("a kind of setting this test does not know: " + setting);

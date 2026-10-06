@@ -1,7 +1,7 @@
 package com.ashlauncher.client.fps;
 
+import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.HudSurface;
-import java.util.function.BooleanSupplier;
 
 /**
  * The frame rate, on screen, without the debug screen.
@@ -19,39 +19,35 @@ import java.util.function.BooleanSupplier;
 public final class FpsReadout {
 
     /**
-     * Top-left, a margin in. Everything vanilla anchors lives at the bottom or
-     * the centre - hotbar, status bars, chat, crosshair - and the top-left is
-     * empty on both targets until the debug screen opens, which it is the
-     * readout's job to make unnecessary.
-     */
-    public static final int MARGIN = 4;
-
-    /**
      * Opaque white, as the marker is, and for the same reason: an unset alpha
      * draws nothing on 1.21.11 and opaque on 1.8.9. See {@link HudSurface#drawText}.
      */
     public static final int COLOUR = 0xFFFFFFFF;
 
     private final FrameRate frameRate;
-    private final BooleanSupplier on;
+    private final HudLayout layout;
 
     /**
-     * @param on whether the player wants it, from their settings. Asked every
-     *     frame, so switching it on the settings screen shows at once.
+     * @param layout where it sits, and whether the player wants it - both
+     *     from their settings, and asked every frame, so a change on the
+     *     settings screen shows at once
      */
-    public FpsReadout(FrameRate frameRate, BooleanSupplier on) {
+    public FpsReadout(FrameRate frameRate, HudLayout layout) {
         this.frameRate = frameRate;
-        this.on = on;
+        this.layout = layout;
     }
 
     /**
      * Draws the readout, unless the player has hidden the HUD or opened the
-     * debug screen - which draws its own frame rate from this same corner.
+     * debug screen - which draws its own frame rate.
      */
     public void draw(HudSurface surface) {
-        if (!on.getAsBoolean() || surface.hudHidden() || surface.debugScreenShown()) {
+        if (!layout.shown(HudLayout.Readout.FPS) || surface.hudHidden() || surface.debugScreenShown()) {
             return;
         }
-        surface.drawText(frameRate.perSecond() + " FPS", MARGIN, MARGIN, COLOUR);
+        String text = frameRate.perSecond() + " FPS";
+        int[] at = layout.place(HudLayout.Readout.FPS, surface.textWidth(text), surface.lineHeight(),
+                surface.width(), surface.height());
+        surface.drawText(text, at[0], at[1], COLOUR);
     }
 }

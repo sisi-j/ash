@@ -1,5 +1,6 @@
 package com.ashlauncher.client.settings;
 
+import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.report.Feature;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,6 +33,7 @@ public final class SettingsScreen {
     private final Predicate<Feature> landed;
     private final Function<Feature, String> offHere;
     private final Runnable changed;
+    private final HudLayout hudLayout;
     private final List<Row> rows;
     private String saveProblem = "";
 
@@ -54,10 +56,20 @@ public final class SettingsScreen {
      */
     public SettingsScreen(Settings settings, Predicate<Feature> present, Predicate<Feature> landed,
             Function<Feature, String> offHere, Runnable changed) {
+        this(settings, present, landed, offHere, changed, new HudLayout(settings));
+    }
+
+    /**
+     * @param hudLayout where the readouts are, shared with the readouts
+     *     themselves, so that Edit HUD moves what the game draws
+     */
+    public SettingsScreen(Settings settings, Predicate<Feature> present, Predicate<Feature> landed,
+            Function<Feature, String> offHere, Runnable changed, HudLayout hudLayout) {
         this.settings = settings;
         this.landed = landed;
         this.offHere = offHere;
         this.changed = changed;
+        this.hudLayout = hudLayout;
         List<Row> rows = new ArrayList<>();
         for (OnOff setting : Settings.switches()) {
             if (present.test(setting.feature())) {
@@ -74,6 +86,11 @@ public final class SettingsScreen {
     /** The settings behind the screen, for what is drawn from them - the crosshair's preview. */
     public Settings settings() {
         return settings;
+    }
+
+    /** Where the readouts are, for Edit HUD. */
+    public HudLayout hudLayout() {
+        return hudLayout;
     }
 
     /** A feature's options, in the order its page shows them. */
@@ -106,6 +123,13 @@ public final class SettingsScreen {
         }
         for (Setting<?> option : optionsOf(feature)) {
             resetOne(option);
+        }
+    }
+
+    /** Puts every readout back where it started, as Edit HUD's Reset asks. */
+    public void resetReadouts() {
+        for (HudLayout.Readout readout : HudLayout.Readout.values()) {
+            resetOne(readout.position());
         }
     }
 

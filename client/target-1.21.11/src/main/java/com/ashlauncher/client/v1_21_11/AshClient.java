@@ -10,6 +10,7 @@ import com.ashlauncher.client.freelook.FreelookHook;
 import com.ashlauncher.client.hit.HitColour;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
+import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
 import com.ashlauncher.client.ping.PingReadout;
@@ -125,11 +126,12 @@ public final class AshClient implements ClientModInitializer {
         settings.problems().forEach(LOG::warn);
 
         Marker marker = new Marker();
-        FpsReadout fpsReadout = new FpsReadout(
-                () -> Minecraft.getInstance().getFps(), () -> settings.get(Settings.FPS_READOUT));
+        // One layout for the readouts and the settings screen's Edit HUD, so
+        // the box the player drags is where the readout draws.
+        HudLayout hudLayout = new HudLayout(settings);
+        FpsReadout fpsReadout = new FpsReadout(() -> Minecraft.getInstance().getFps(), hudLayout);
         AshClient.fpsReadout = fpsReadout;
-        PingReadout pingReadout = new PingReadout(AshClient::latency, () -> settings.get(Settings.PING_READOUT),
-                () -> settings.get(Settings.FPS_READOUT));
+        PingReadout pingReadout = new PingReadout(AshClient::latency, hudLayout);
         AshClient.pingReadout = pingReadout;
 
         // Last, so nothing vanilla draws over them. That is a decision about
@@ -259,7 +261,7 @@ public final class AshClient implements ClientModInitializer {
                     BlockList.Server here = feature == Feature.FREELOOK ? CurrentServer.blockedHere() : null;
                     return here == null ? "" : here.whyOff();
                 },
-                writeReport);
+                writeReport, hudLayout);
 
         // Right Shift, which neither target binds by default. Polled on Fabric
         // API's client tick, which is inside the Fabric API ash already ships.

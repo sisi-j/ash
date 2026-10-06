@@ -93,9 +93,15 @@ public final class FakeHudSurface implements HudSurface {
         return drawn.get(0);
     }
 
-    /** Not part of {@link HudSurface}: only tests need to know how wide the screen is. */
+    @Override
     public int width() {
         return width;
+    }
+
+    /** Six units a character: the game's font's width for most of a readout's characters. */
+    @Override
+    public int textWidth(String text) {
+        return text.length() * 6;
     }
 
     @Override

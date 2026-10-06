@@ -1,12 +1,13 @@
 package com.ashlauncher.client.ping;
 
 import com.ashlauncher.client.fps.FpsReadout;
+import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.HudSurface;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
- * The player's latency to the server, on screen, beneath the FPS readout.
+ * The player's latency to the server, on screen, beneath the FPS readout
+ * unless moved.
  *
  * <p>The number is the server's: the latency it reports for the player's own
  * tab-list entry, the number behind the tab list's signal bars. ash never
@@ -21,42 +22,40 @@ import java.util.function.Supplier;
  */
 public final class PingReadout {
 
-    /** The same corner and colour as the FPS readout, so the two read as one block. */
-    static final int MARGIN = FpsReadout.MARGIN;
-
+    /** The FPS readout's colour, so the two read as one block. */
     static final int COLOUR = FpsReadout.COLOUR;
 
-    /** Between the FPS line and this one, so the two never touch. */
-    static final int GAP = 2;
+    /** What it shows in Edit HUD when there is no number, so it can still be found and moved. */
+    static final String NO_NUMBER = "-- ms";
 
     private final Supplier<Integer> latency;
-    private final BooleanSupplier on;
-    private final BooleanSupplier fpsShown;
+    private final HudLayout layout;
 
     /**
      * @param latency the server's latency for the player, in milliseconds;
      *     null while the player hosts the world or before the server has
      *     listed them
-     * @param on whether the player wants it, asked every frame
-     * @param fpsShown whether the FPS readout is switched on, so this sits
-     *     beneath it, or in its place when it is off
+     * @param layout where it sits, and whether the player wants it, asked
+     *     every frame
      */
-    public PingReadout(Supplier<Integer> latency, BooleanSupplier on, BooleanSupplier fpsShown) {
+    public PingReadout(Supplier<Integer> latency, HudLayout layout) {
         this.latency = latency;
-        this.on = on;
-        this.fpsShown = fpsShown;
+        this.layout = layout;
     }
 
     public void draw(HudSurface surface) {
-        if (!on.getAsBoolean() || surface.hudHidden() || surface.debugScreenShown()) {
+        if (!layout.shown(HudLayout.Readout.PING) || surface.hudHidden() || surface.debugScreenShown()) {
             return;
         }
         Integer ms = latency.get();
-        if (ms == null || ms < 0) {
+        boolean known = ms != null && ms >= 0;
+        if (!known && !layout.editing()) {
             return;
         }
-        int y = fpsShown.getAsBoolean() ? MARGIN + surface.lineHeight() + GAP : MARGIN;
-        surface.drawText(text(ms), MARGIN, y, COLOUR);
+        String text = known ? text(ms) : NO_NUMBER;
+        int[] at = layout.place(HudLayout.Readout.PING, surface.textWidth(text), surface.lineHeight(),
+                surface.width(), surface.height());
+        surface.drawText(text, at[0], at[1], COLOUR);
     }
 
     /** What it says: the server's number, in milliseconds. */

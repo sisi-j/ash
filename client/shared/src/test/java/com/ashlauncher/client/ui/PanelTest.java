@@ -6,6 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ashlauncher.client.fps.FpsReadout;
+import com.ashlauncher.client.hud.Anchor;
+import com.ashlauncher.client.hud.FakeHudSurface;
+import com.ashlauncher.client.hud.HudLayout;
+import com.ashlauncher.client.hud.Placement;
+import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
@@ -38,11 +44,13 @@ class PanelTest {
     private final List<String> reported = new ArrayList<>();
     private final AtomicLong now = new AtomicLong();
     private Settings settings;
+    /** The panel's model, for the readouts that draw from the same layout. */
+    private SettingsScreen model;
 
     private Panel panel(Predicate<Feature> landed, int width, int height) {
         settings = Settings.load(configDir);
-        Panel panel = new Panel(new SettingsScreen(settings, landed, () -> reported.add("report")),
-                () -> closed.add("closed"), now::get);
+        model = new SettingsScreen(settings, landed, () -> reported.add("report"));
+        Panel panel = new Panel(model, () -> closed.add("closed"), now::get);
         panel.resize(width, height);
         return panel;
     }
@@ -165,16 +173,151 @@ class PanelTest {
         assertEquals(List.of("closed"), closed, "Escape on the tiles did not close the panel");
     }
 
-    @Test
-    void edit_hud_says_it_is_coming_soon_for_a_moment() {
+    /**
+     * Both readouts drawn once on a HUD the size this screen is at GUI scale
+     * 2, as the game draws them beneath the screen, so the layout knows how
+     * big each is.
+     */
+    private void drawReadouts() {
+        HudLayout layout = model.hudLayout();
+        FakeHudSurface hud = new FakeHudSurface(WIDTH / 2, HEIGHT / 2, 9);
+        new FpsReadout(() -> 144, layout).draw(hud);
+        new PingReadout(() -> 42, layout).draw(hud);
+    }
+
+    /** Where the FPS readout draws now, on the same HUD. */
+    private FakeHudSurface.Text fpsDrawn() {
+        FakeHudSurface hud = new FakeHudSurface(WIDTH / 2, HEIGHT / 2, 9);
+        new FpsReadout(() -> 144, model.hudLayout()).draw(hud);
+        return hud.onlyText();
+    }
+
+    private Panel editingHud() {
         Panel panel = panel();
+        panel.setGuiScale(2);
+        drawReadouts();
         render(panel);
+        click(panel, panel.editHudButton());
+        assertTrue(panel.editingHud());
+        return panel;
+    }
+
+    @Test
+    void edit_hud_puts_the_panel_away_and_outlines_each_readout_with_the_anchor_it_keeps() throws Exception {
+        Panel panel = editingHud();
+
+        FakeCanvas canvas = render(panel);
+        canvas.save(new File("build/ui/edit-hud.png"));
+
+        assertTrue(canvas.drew("FPS readout · Top left"), "drew " + canvas.texts());
+        assertTrue(canvas.drew("Ping readout · Top left"), "drew " + canvas.texts());
+        assertTrue(canvas.drew("Done") && canvas.drew("Reset"), "drew " + canvas.texts());
+        assertFalse(canvas.drew("Crosshair"), "the panel's tiles are still up");
+        // "144 FPS" at 4,4 in GUI units, six a character, a unit of room round
+        // it, in real pixels at GUI scale 2.
+        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+        assertEquals((4 - 1) * 2, box.x);
+        assertEquals((4 - 1) * 2, box.y);
+        assertEquals((42 + 1) * 2, box.width);
+        assertEquals((9 + 1) * 2, box.height);
+        assertTrue(model.hudLayout().editing(), "the ping would not show in singleplayer to be moved");
+    }
+
+    @Test
+    void a_dragged_readout_moves_with_the_mouse_and_is_saved_where_it_is_dropped() throws Exception {
+        Panel panel = editingHud();
+        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+
+        assertTrue(panel.mouseClicked(box.centreX(), box.centreY()));
+        panel.mouseDragged(WIDTH - 50, HEIGHT - 30);
+        FakeCanvas dragging = render(panel);
+        dragging.save(new File("build/ui/edit-hud-dragging.png"));
+        assertTrue(dragging.drew("FPS readout · Bottom right"), "the tag does not follow the drag");
+        assertEquals(new Placement(Anchor.TOP_LEFT, 4, 4), settings.get(Settings.FPS_READOUT_POSITION),
+                "saved on every move of the mouse, not once on the drop");
+        panel.mouseReleased();
+
+        // Taken by its middle, which stays under the mouse: 49,16 in real
+        // pixels is 20.5,4 into it in GUI units, and 1870,1050 is 935,525.
+        assertEquals(915, fpsDrawn().x());
+        assertEquals(521, fpsDrawn().y());
+        assertTrue(Files.readAllLines(configDir.resolve("ash.properties")).contains(
+                "fps-readout.position=bottom-right 3 10"));
+        assertTrue(reported.contains("report"), "the load report was not rewritten");
+    }
+
+    @Test
+    void a_readout_cannot_be_dragged_off_screen() {
+        Panel panel = editingHud();
+        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+
+        panel.mouseClicked(box.centreX(), box.centreY());
+        panel.mouseDragged(WIDTH * 3, HEIGHT * 3);
+        panel.mouseReleased();
+
+        assertEquals(WIDTH / 2 - 42, fpsDrawn().x());
+        assertEquals(HEIGHT / 2 - 9, fpsDrawn().y());
+
+        Rect moved = panel.readoutBox(HudLayout.Readout.FPS);
+        panel.mouseClicked(moved.centreX(), moved.centreY());
+        panel.mouseDragged(-500, -500);
+        panel.mouseReleased();
+
+        assertEquals(0, fpsDrawn().x());
+        assertEquals(0, fpsDrawn().y());
+    }
+
+    @Test
+    void reset_puts_both_readouts_back() {
+        Panel panel = editingHud();
+        settings.set(Settings.FPS_READOUT_POSITION, new Placement(Anchor.BOTTOM_RIGHT, 4, 4));
+        settings.set(Settings.PING_READOUT_POSITION, new Placement(Anchor.TOP_RIGHT, 4, 4));
+
+        click(panel, panel.resetReadoutsButton());
+
+        assertEquals(Settings.FPS_READOUT_POSITION.fallback(), settings.get(Settings.FPS_READOUT_POSITION));
+        assertEquals(Settings.PING_READOUT_POSITION.fallback(), settings.get(Settings.PING_READOUT_POSITION));
+        assertTrue(panel.editingHud(), "Reset is not Done");
+    }
+
+    @Test
+    void done_or_escape_goes_back_to_the_panel() {
+        Panel panel = editingHud();
+        click(panel, panel.doneButton());
+        assertFalse(panel.editingHud());
+        assertFalse(model.hudLayout().editing());
+        assertTrue(render(panel).drew("Crosshair"), "the tiles did not come back");
 
         click(panel, panel.editHudButton());
-        assertTrue(render(panel).drew("Edit HUD is coming soon."));
+        panel.keyPressed(Key.ESCAPE);
+        assertFalse(panel.editingHud());
+        assertTrue(closed.isEmpty(), "Escape in Edit HUD closed the whole screen");
+    }
 
-        now.addAndGet(3_000_000_000L);
-        assertFalse(render(panel).drew("Edit HUD is coming soon."), "the message never went away");
+    @Test
+    void closing_the_screen_mid_drag_leaves_the_readout_where_it_was() {
+        Panel panel = editingHud();
+        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+        panel.mouseClicked(box.centreX(), box.centreY());
+        panel.mouseDragged(WIDTH / 2, HEIGHT / 2);
+
+        panel.closed();
+
+        assertFalse(model.hudLayout().editing());
+        assertEquals(4, fpsDrawn().x());
+        assertEquals(4, fpsDrawn().y());
+    }
+
+    @Test
+    void with_both_readouts_off_edit_hud_says_how_to_have_one_to_move() {
+        Panel panel = editingHud();
+        settings.set(Settings.FPS_READOUT, false);
+        settings.set(Settings.PING_READOUT, false);
+
+        FakeCanvas canvas = render(panel);
+
+        assertNull(panel.readoutBox(HudLayout.Readout.FPS));
+        assertTrue(canvas.drew("Switch the FPS or ping readout on to move it here."), "drew " + canvas.texts());
     }
 
     @Test

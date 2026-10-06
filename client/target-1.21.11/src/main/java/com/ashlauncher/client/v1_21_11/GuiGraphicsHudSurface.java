@@ -23,8 +23,18 @@ public final class GuiGraphicsHudSurface implements HudSurface {
     }
 
     @Override
+    public int width() {
+        return graphics.guiWidth();
+    }
+
+    @Override
     public int height() {
         return graphics.guiHeight();
+    }
+
+    @Override
+    public int textWidth(String text) {
+        return Minecraft.getInstance().font.width(text);
     }
 
     @Override

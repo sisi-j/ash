@@ -2,6 +2,7 @@ package com.ashlauncher.client.v1_21_11;
 
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.freelook.Freelook;
+import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
@@ -142,6 +143,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             crosshairWorks(context);
             hitIndicatorWorks(context, server);
             hitColourWorks(context, server);
+            moveReadoutsWorks(context);
             panelIsCrispAtEveryGuiScale(context);
         }
     }
@@ -681,6 +683,59 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         }
     }
 
+    /**
+     * Edit HUD, as a player uses it: opened from the panel, the FPS readout
+     * taken by the real cursor and dragged to the bottom-right of the window,
+     * saved there and drawn there; then Reset puts it back and Done returns
+     * to the panel.
+     */
+    private static void moveReadoutsWorks(ClientGameTestContext context) {
+        int left = org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT;
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickOn(context, "Edit HUD", Panel::editHudButton);
+        // A frame or two for the readouts, drawn beneath, to say how big they are.
+        context.waitTicks(3);
+
+        double[] from = cursorAt(context, "the FPS readout's box", panel -> panel.readoutBox(HudLayout.Readout.FPS));
+        double[] window = context.computeOnClient(client ->
+                new double[] {client.getWindow().getScreenWidth(), client.getWindow().getScreenHeight()});
+        context.getInput().setCursorPos(from[0], from[1]);
+        context.getInput().holdMouse(left);
+        context.waitTicks(2);
+        context.getInput().setCursorPos(window[0] * 0.6, window[1] * 0.6);
+        context.waitTicks(2);
+        context.getInput().setCursorPos(window[0] * 0.95, window[1] * 0.95);
+        context.waitTicks(3);
+        // By eye: the box in the bottom-right, its tag saying so.
+        context.takeScreenshot("ash-edit-hud");
+        context.getInput().releaseMouse(left);
+        context.waitTicks(3);
+
+        assertFileHasLineStarting("fps-readout.position=bottom-right ");
+        int[] drawnAt = context.computeOnClient(client -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.fpsReadout.draw(surface);
+            return new int[] {surface.lastX, surface.lastY};
+        });
+        if (drawnAt[0] < 427 / 2 || drawnAt[1] < 240 / 2) {
+            throw new AssertionError("the FPS readout was dropped bottom-right but draws at " + drawnAt[0] + ","
+                    + drawnAt[1] + " of 427 by 240");
+        }
+
+        clickOn(context, "Edit HUD's Reset", Panel::resetReadoutsButton);
+        assertFileSays("fps-readout.position=top-left 4 4");
+        clickOn(context, "Edit HUD's Done", Panel::doneButton);
+        boolean stillEditing = context.computeOnClient(client ->
+                client.screen instanceof AshSettingsScreen screen && screen.panel().editingHud());
+        if (stillEditing) {
+            throw new AssertionError("Done did not go back to the panel");
+        }
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+    }
+
     private static void clickSwitch(ClientGameTestContext context, Feature feature) {
         clickOn(context, feature + "'s switch", panel -> panel.switchOf(feature));
     }
@@ -692,7 +747,16 @@ public class AshLoadsGameTest implements FabricClientGameTest {
      */
     private static void clickOn(ClientGameTestContext context, String what,
             java.util.function.Function<Panel, Rect> where) {
-        double[] at = context.computeOnClient(client -> {
+        double[] at = cursorAt(context, what, where);
+        context.getInput().setCursorPos(at[0], at[1]);
+        context.getInput().pressMouse(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT);
+        context.waitTicks(3);
+    }
+
+    /** Where the cursor goes to be over something on ash's panel, in window coordinates. */
+    private static double[] cursorAt(ClientGameTestContext context, String what,
+            java.util.function.Function<Panel, Rect> where) {
+        return context.computeOnClient(client -> {
             if (!(client.screen instanceof AshSettingsScreen screen)) {
                 throw new AssertionError("ash's settings are not open");
             }
@@ -706,9 +770,6 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             return new double[] {(target.centreX() + 0.5) * window.getScreenWidth() / window.getWidth(),
                 (target.centreY() + 0.5) * window.getScreenHeight() / window.getHeight()};
         });
-        context.getInput().setCursorPos(at[0], at[1]);
-        context.getInput().pressMouse(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT);
-        context.waitTicks(3);
     }
 
     /**
@@ -750,6 +811,21 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             if (!written.contains("\n" + line + "\n")) {
                 throw new AssertionError("ash.properties does not say " + line + ":\n" + written);
             }
+        } catch (IOException unreadable) {
+            throw new AssertionError("ash.properties could not be read", unreadable);
+        }
+    }
+
+    private static void assertFileHasLineStarting(String start) {
+        Path settings = FabricLoader.getInstance().getConfigDir().resolve("ash.properties");
+        try {
+            for (String line : Files.readAllLines(settings)) {
+                if (line.startsWith(start)) {
+                    return;
+                }
+            }
+            throw new AssertionError("ash.properties has no line starting " + start + ":\n"
+                    + Files.readString(settings));
         } catch (IOException unreadable) {
             throw new AssertionError("ash.properties could not be read", unreadable);
         }
@@ -843,7 +919,20 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
+        /** Where the last text drew, in GUI units. */
+        int lastX = -1;
+        int lastY = -1;
         int fills;
+
+        @Override
+        public int width() {
+            return 427;
+        }
+
+        @Override
+        public int textWidth(String text) {
+            return text.length() * 6;
+        }
 
         @Override
         public int height() {
@@ -858,6 +947,8 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         @Override
         public void drawText(String text, int x, int y, int colour) {
             drawn.add(text);
+            lastX = x;
+            lastY = y;
         }
 
         @Override

@@ -75,6 +75,7 @@ public final class AshSettingsScreen extends Screen {
 
     @Override
     public void removed() {
+        panel.closed();
         if (blurring) {
             GameRendererAccess renderer = (GameRendererAccess) client.gameRenderer;
             if (shaderBefore == null) {
@@ -96,6 +97,13 @@ public final class AshSettingsScreen extends Screen {
     @Override
     public void render(int mouseX, int mouseY, float tickDelta) {
         int scale = new Window(client).getScaleFactor();
+        panel.setGuiScale(scale);
+        if (blurring) {
+            // No blur in Edit HUD, where the readouts have to be seen as they
+            // will be: the shader is switched off, not unloaded, so leaving
+            // Edit HUD has it back on the next frame.
+            ((GameRendererAccess) client.gameRenderer).ash$setShadersEnabled(!panel.editingHud());
+        }
         GlStateManager.pushMatrix();
         GlStateManager.scale(1.0F / scale, 1.0F / scale, 1.0F);
         GlStateManager.disableAlphaTest();

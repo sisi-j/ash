@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import com.ashlauncher.client.hud.Anchor;
+import com.ashlauncher.client.hud.Placement;
 import com.ashlauncher.client.report.Feature;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -131,6 +133,24 @@ public final class Settings {
             "Strength", 30, 0, 100, 5, "%",
             "How strongly the flash colours the entity, in per cent: a whole number from 0 to 100. 30 is the game's.");
 
+    // Where the readouts sit, set by dragging them in the panel's Edit HUD
+    // mode. The frame rate four in from the top-left corner, as it always
+    // has been: everything vanilla anchors lives at the bottom or the centre
+    // - hotbar, status bars, chat, crosshair - and the top-left is empty on
+    // both targets until the debug screen opens. The ping on the line
+    // beneath it: four, then the game's nine-unit line, then a gap of two.
+
+    public static final Position FPS_READOUT_POSITION = new Position(Feature.FPS_READOUT, "fps-readout.position",
+            "Position", new Placement(Anchor.TOP_LEFT, 4, 4),
+            "Where the frame rate sits: an anchor - top-left, top, top-right, left, centre, right, bottom-left,"
+                    + " bottom or bottom-right - then how far from it, across and down, in GUI units."
+                    + " Easiest set with Edit HUD in ash's settings.");
+
+    public static final Position PING_READOUT_POSITION = new Position(Feature.PING_READOUT, "ping-readout.position",
+            "Position", new Placement(Anchor.TOP_LEFT, 4, 15),
+            "Where your ping sits, written as fps-readout.position is. Left here, it takes the frame rate's place"
+                    + " whenever the frame rate is not there. Easiest set with Edit HUD in ash's settings.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
@@ -142,7 +162,7 @@ public final class Settings {
             FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
             HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
-            HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH));
+            HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;
@@ -186,12 +206,16 @@ public final class Settings {
         return !(dot && (option == CROSSHAIR_GAP || option == CROSSHAIR_THICKNESS));
     }
 
-    /** A feature's options, in the order the file lists them: everything that belongs to it but its switch. */
+    /**
+     * A feature's options, in the order the file lists them: everything that
+     * belongs to it but its switch and its position, which is set by dragging
+     * in Edit HUD rather than on a page.
+     */
     public static List<Setting<?>> optionsOf(Feature feature) {
         List<Setting<?>> options = new ArrayList<>();
         for (Setting<?> setting : DECLARED) {
             boolean isSwitch = setting instanceof OnOff && ((OnOff) setting).isSwitch();
-            if (setting.feature() == feature && !isSwitch) {
+            if (setting.feature() == feature && !isSwitch && !(setting instanceof Position)) {
                 options.add(setting);
             }
         }

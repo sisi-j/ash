@@ -19,6 +19,7 @@ import javax.imageio.ImageIO;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
+import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
@@ -139,6 +140,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         crosshairOptionsWork(client);
         crosshairWorks(client);
         hitIndicatorWorks(client);
+        moveReadoutsWorks(client);
         panelIsCrispAtEveryGuiScale(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
@@ -681,6 +683,73 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
     }
 
+    /**
+     * Edit HUD, opened from the panel: the ping readout - which this
+     * singleplayer world would otherwise hide, and which Edit HUD shows so it
+     * can be moved - taken by the mouse and dragged to the bottom-right,
+     * saved there and drawn there; then Reset puts it back and Done returns
+     * to the panel.
+     */
+    private static void moveReadoutsWorks(MinecraftClient client) {
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings for Edit HUD", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        clickOn(client, screen, "Edit HUD", Panel::editHudButton);
+
+        // The HUD, drawn beneath, says how big each readout is.
+        Rect box = await("see the ping readout to move", () ->
+                onClient(client, () -> screen.panel().readoutBox(HudLayout.Readout.PING)));
+        onClient(client, () -> {
+            screen.clickAt(box.centreX(), box.centreY());
+            screen.dragAt(client.width * 3 / 5, client.height * 3 / 5);
+            screen.dragAt(client.width - 30, client.height - 30);
+            return Boolean.TRUE;
+        });
+        pause(300L);
+        // By eye: the box in the bottom-right, "-- ms" in it, its tag saying so.
+        screenshot(client, "ash-edit-hud.png");
+        onClient(client, () -> {
+            screen.mouseReleased(client.width - 30, client.height - 30, 0);
+            return Boolean.TRUE;
+        });
+
+        expectFileHasLineStarting("ping-readout.position=bottom-right ");
+        int[] drawnAt = onClient(client, () -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.pingReadout.draw(surface);
+            return new int[] {surface.lastX, surface.lastY};
+        });
+        if (drawnAt[0] < 427 / 2 || drawnAt[1] < 240 / 2) {
+            fail("the ping readout was dropped bottom-right but draws at " + drawnAt[0] + "," + drawnAt[1]
+                    + " of 427 by 240");
+        }
+
+        clickOn(client, screen, "Edit HUD's Reset", Panel::resetReadoutsButton);
+        expectFileSays("ping-readout.position=top-left 4 15");
+        clickOn(client, screen, "Edit HUD's Done", Panel::doneButton);
+        if (onClient(client, () -> screen.panel().editingHud())) {
+            fail("Done did not go back to the panel");
+        }
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings after Edit HUD", () -> client.currentScreen == null ? client : null);
+    }
+
+    private static void expectFileHasLineStarting(String start) {
+        Path settings = FabricLoader.getInstance().getConfigDir().resolve("ash.properties");
+        try {
+            for (String line : Files.readAllLines(settings, StandardCharsets.UTF_8)) {
+                if (line.startsWith(start)) {
+                    return;
+                }
+            }
+            fail("ash.properties has no line starting " + start + ": "
+                    + new String(Files.readAllBytes(settings), StandardCharsets.UTF_8));
+        } catch (IOException unreadable) {
+            fail("ash.properties could not be read (" + unreadable + ")");
+        }
+    }
+
     private static void expectFileSays(String line) {
         Path settings = FabricLoader.getInstance().getConfigDir().resolve("ash.properties");
         try {
@@ -1003,7 +1072,20 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static final class RecordingSurface implements HudSurface {
 
         final List<String> drawn = new ArrayList<>();
+        /** Where the last text drew, in GUI units. */
+        int lastX = -1;
+        int lastY = -1;
         int fills;
+
+        @Override
+        public int width() {
+            return 427;
+        }
+
+        @Override
+        public int textWidth(String text) {
+            return text.length() * 6;
+        }
 
         @Override
         public int height() {
@@ -1018,6 +1100,8 @@ public final class AshSmokeTest implements ClientModInitializer {
         @Override
         public void drawText(String text, int x, int y, int colour) {
             drawn.add(text);
+            lastX = x;
+            lastY = y;
         }
 
         @Override
