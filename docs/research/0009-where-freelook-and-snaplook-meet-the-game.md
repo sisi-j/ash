@@ -157,3 +157,12 @@ So wrapping those two calls turns the camera, and the third-person orbit follows
 **Key.** Left Alt, `Keyboard.KEY_LMENU` (56). 1.8.9's `GameOptions` builds every default binding with a `bipush` of its key code:
 - Left Shift (42, Sneak) and Left Control (29) appear among them;
 - 56 never does **[PRACTICE]**.
+
+## 7. Snaplook (#40)
+
+- **Camera modes.** Snaplook uses only the game's own modes, as found in section 4: `CameraType.THIRD_PERSON_FRONT` on 1.21.11, and `GameOptions.perspective = 2` on 1.8.9.
+- **No mixin on 1.21.11.** The key is read on Fabric API's client tick, and the mode is set through `Options.setCameraType`, both public.
+- **1.8.9** reads the key in its own client-tick mixin, as freelook and the settings key do.
+- **Default key: Z** (GLFW 90 on 1.21.11, LWJGL 44 on 1.8.9). Searched the same way as freelook's key:
+  - on 1.21.11, X (88) is found once, for the hotbar activator, which shows the search finds real bindings, and Z (90) never is;
+  - on 1.8.9, neither 44 nor 45 appears **[PRACTICE]**.

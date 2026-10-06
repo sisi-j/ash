@@ -17,6 +17,7 @@ import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.snaplook.Snaplook;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.sprint.ToggleSprintHook;
 import com.ashlauncher.client.ui.draw.Ink;
@@ -73,6 +74,8 @@ public final class AshClient implements ClientModInitializer {
     private static final String FREELOOK_RENDER_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.GameRendererFreelookMixin";
 
     private static final String FREELOOK_TICK_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientFreelookMixin";
+
+    private static final String SNAPLOOK_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientSnaplookMixin";
 
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
@@ -184,13 +187,26 @@ public final class AshClient implements ClientModInitializer {
             // ash's settings key; rebindable in Controls.
             KeyBinding freelookKey = KeyBindingHelper.registerKeyBinding(
                     new KeyBinding(Freelook.BINDING_NAME, Keyboard.KEY_LMENU, "key.categories.misc"));
-            Freelook<Integer> freelook = new Freelook<>(new FreelookKey.Perspective(),
+            Freelook<Integer> freelook = new Freelook<>(new Perspective(),
                     () -> settings.get(Settings.FREELOOK), CurrentServer::blockedHere,
                     why -> MinecraftClient.getInstance().inGameHud.setOverlayMessage(why, false));
             FreelookHook.install(freelook);
             FreelookKey.install(freelookKey, freelook);
         } else {
             landed.remove(Feature.FREELOOK);
+        }
+
+        // Snaplook: the game's own front view while Z is held, Z being a key
+        // the game binds to nothing; read on the client tick by its own mixin.
+        boolean snaplookLanded = MixinFeature.landed(() -> MinecraftClient.class, SNAPLOOK_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.SNAPLOOK.displayName(), why)));
+        if (snaplookLanded) {
+            KeyBinding snaplookKey = KeyBindingHelper.registerKeyBinding(
+                    new KeyBinding(Snaplook.BINDING_NAME, Keyboard.KEY_Z, "key.categories.misc"));
+            SnaplookKey.install(snaplookKey,
+                    new Snaplook<>(new Perspective(), () -> settings.get(Settings.SNAPLOOK)));
+        } else {
+            landed.remove(Feature.SNAPLOOK);
         }
 
         Runnable writeReport = () -> writeLoadReport(settings, landed);

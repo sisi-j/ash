@@ -15,6 +15,9 @@ public interface CameraModes<M> {
 
     boolean isFirstPerson(M mode);
 
+    /** The game's own third-person view from in front: what F5 shows second. */
+    M front();
+
     /** The game's own third-person view from behind. */
     M behind();
 }

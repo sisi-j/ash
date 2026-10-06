@@ -16,6 +16,7 @@ import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.snaplook.Snaplook;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.sprint.ToggleSprintHook;
 import com.ashlauncher.client.ui.draw.Ink;
@@ -98,6 +99,11 @@ public final class AshClient implements ClientModInitializer {
     static Freelook<CameraType> freelook;
 
     static KeyMapping freelookKey;
+
+    /** Snaplook and its key, for the real-game test to drive and ask. */
+    static Snaplook<CameraType> snaplook;
+
+    static KeyMapping snaplookKey;
 
     @Override
     public void onInitializeClient() {
@@ -205,6 +211,18 @@ public final class AshClient implements ClientModInitializer {
             landed.remove(Feature.FREELOOK);
         }
         ClientTickEvents.END_CLIENT_TICK.register(client -> currentServer.tick());
+
+        // Snaplook: the game's own front view while Z is held, Z being a key
+        // the game binds to nothing. No mixin, so nothing to land: the key
+        // and the camera mode are both the game's public API.
+        snaplookKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                Snaplook.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, KeyMapping.Category.MISC));
+        snaplook = new Snaplook<>(new OptionsCameraModes(), () -> settings.get(Settings.SNAPLOOK));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.player != null) {
+                snaplook.tick(snaplookKey.isDown(), client.screen != null);
+            }
+        });
 
         Runnable writeReport = () -> writeLoadReport(settings, landed);
         // Freelook's row says why it is off on a listed server, and cannot be

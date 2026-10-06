@@ -30,6 +30,11 @@ class FreelookTest {
         }
 
         @Override
+        public Integer front() {
+            return 2;
+        }
+
+        @Override
         public Integer behind() {
             return 1;
         }

@@ -23,6 +23,7 @@ import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.snaplook.Snaplook;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.ui.Panel;
@@ -132,6 +133,7 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         toggleSprintWorks(client);
         freelookWorks(client);
+        snaplookWorks(client);
         settingsScreenWorks(client);
         crosshairOptionsWork(client);
         crosshairWorks(client);
@@ -139,8 +141,8 @@ public final class AshSmokeTest implements ClientModInitializer {
         panelIsCrispAtEveryGuiScale(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
-                + " drew its HUD in a world, toggle sprint started and stopped a sprint, freelook turned the view and drew the terrain behind"
-                + " without turning the player, and ash's settings"
+                + " drew its HUD in a world, toggle sprint started and stopped a sprint, freelook turned the view and drew the terrain behind,"
+                + " without turning the player, snaplook showed the front view and put the view back, and ash's settings"
                 + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
                 + " of the game's and gave way to it when switched off, and its options changed what it drew, and"
                 + " the hit indicator marked the player's own hit on a pig and not a hurt the player had not attacked it for,"
@@ -198,6 +200,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
             "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
+            "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -464,6 +467,33 @@ public final class AshSmokeTest implements ClientModInitializer {
         if (onClient(client, () -> client.options.perspective) != 0) {
             fail("ending freelook did not put the first-person view back");
         }
+    }
+
+    /**
+     * Snaplook, held with its key through the same statics a keyboard drives:
+     * the game's own front view while it is down, and back to the view the
+     * player had - first person, and third person from behind - on letting go.
+     */
+    private static void snaplookWorks(MinecraftClient client) {
+        int code = binding(client, Snaplook.BINDING_NAME).getCode();
+        for (int had : new int[] {0, 1}) {
+            onClient(client, () -> client.options.perspective = had);
+            hold(client, code, true);
+            pause(300L);
+            if (onClient(client, () -> client.options.perspective) != 2) {
+                fail("holding the snaplook key in view " + had + " did not show the front view");
+            }
+            if (had == 0) {
+                screenshot(client, "ash-snaplook.png");
+            }
+            hold(client, code, false);
+            pause(300L);
+            int back = onClient(client, () -> client.options.perspective);
+            if (back != had) {
+                fail("letting go of snaplook left view " + back + ", not the " + had + " it had");
+            }
+        }
+        onClient(client, () -> client.options.perspective = 0);
     }
 
     /** How many chunks the world renderer drew last frame: its own debug line, "C: drawn/total ...". */
