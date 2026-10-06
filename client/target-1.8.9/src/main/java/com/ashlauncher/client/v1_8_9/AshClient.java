@@ -166,7 +166,8 @@ public final class AshClient implements ClientModInitializer {
 
         Runnable writeReport = () -> writeLoadReport(settings, landed);
         if (settingsKeyLanded) {
-            SettingsScreen settingsScreen = new SettingsScreen(settings, landed::contains, writeReport);
+            SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
+                    feature -> "", writeReport);
             KeyBinding settingsKey = KeyBindingHelper.registerKeyBinding(
                     new KeyBinding(SettingsScreen.BINDING_NAME, Keyboard.KEY_RSHIFT, "key.categories.misc"));
             SettingsKey.install(settingsKey, settingsScreen);
@@ -182,7 +183,7 @@ public final class AshClient implements ClientModInitializer {
      */
     private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
-            LoadReport.forSession(clientVersion(), landed::contains, settings::on)
+            LoadReport.forSession(clientVersion(), AshClient::present, landed::contains, settings::on)
                     .withOrigins(modOrigins(), BUNDLED)
                     .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {
@@ -228,6 +229,15 @@ public final class AshClient implements ClientModInitializer {
                     .orElse(Collections.<Path>emptyList());
         }
         return Collections.emptyList();
+    }
+
+    /**
+     * Whether this target has a feature at all. Freelook is 1.21.11's until
+     * #39 brings it here, so on 1.8.9 it has no row and no line in the load
+     * report, rather than one saying it did not load.
+     */
+    private static boolean present(Feature feature) {
+        return feature != Feature.FREELOOK;
     }
 
     private static String clientVersion() {

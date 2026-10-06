@@ -11,7 +11,9 @@
     "GameRendererAccess",
     "InGameHudMixin",
     "InGameHudPanelMixin",
-    "MinecraftClientMixin"
+    "MinecraftClientAccess",
+    "MinecraftClientMixin",
+    "MinecraftClientServerMixin"
   ],
   "injectors": {
     "defaultRequire": 0

@@ -1,6 +1,7 @@
 package com.ashlauncher.client.v1_21_11;
 
 import com.ashlauncher.client.crosshair.CrosshairHook;
+import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
@@ -11,6 +12,8 @@ import com.ashlauncher.client.ui.Panel;
 import com.ashlauncher.client.ui.Rect;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -21,8 +24,10 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.world.phys.EntityHitResult;
 
@@ -84,6 +89,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
             "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
+            "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             assertReportSays(feature);
@@ -121,6 +127,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             context.takeScreenshot("ash-in-world");
 
             toggleSprintWorks(context, server);
+            freelookWorks(context, server);
             settingsScreenWorks(context);
             crosshairOptionsWork(context);
             crosshairWorks(context);
@@ -425,6 +432,91 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     }
 
     /** A binding by name, checked against every other binding's default key. */
+    /**
+     * Freelook, held with its key, with the real mixins and the real server:
+     * the camera turns, the player does not - on the client or as the server
+     * was told - and a screen opening mid-hold ends it cleanly.
+     *
+     * <p>The mouse is moved through the game's own {@code turnPlayer}, the
+     * method freelook's mixin wraps, with the movement set where the game's
+     * cursor callback leaves it. The framework's {@code moveCursor} cannot be
+     * relied on here: the game turns on a mouse move only while its window is
+     * active, and under Xvfb it never is - so a test that moved the cursor
+     * could pass by nothing turning at all.
+     */
+    private static void freelookWorks(ClientGameTestContext context, TestDedicatedServerContext server) {
+        KeyMapping key = binding(context, Freelook.BINDING_NAME);
+        float[] before = context.computeOnClient(c -> new float[] {c.player.getYRot(), c.player.getXRot()});
+
+        context.getInput().holdKey(key);
+        context.waitTicks(2);
+        if (!context.computeOnClient(c -> AshClient.freelook.active())) {
+            throw new AssertionError("holding the freelook key did not start freelook");
+        }
+        if (context.computeOnClient(c -> c.options.getCameraType()) != CameraType.THIRD_PERSON_BACK) {
+            throw new AssertionError("freelook held in first person did not move the view behind the player");
+        }
+
+        context.runOnClient(AshLoadsGameTest::turnTheMouse);
+        context.waitTicks(5);
+
+        float[] after = context.computeOnClient(c -> new float[] {c.player.getYRot(), c.player.getXRot(),
+                c.gameRenderer.getMainCamera().yRot(), AshClient.freelook.yaw()});
+        if (after[0] != before[0] || after[1] != before[1]) {
+            throw new AssertionError("freelook turned the player: " + before[0] + "," + before[1] + " became "
+                    + after[0] + "," + after[1]);
+        }
+        if (Math.abs(after[3] - before[0]) < 10) {
+            throw new AssertionError("the mouse did not turn freelook's camera: yaw " + after[3]);
+        }
+        if (Math.abs(after[2] - after[3]) > 0.5) {
+            throw new AssertionError("the camera is not at freelook's angle: " + after[2] + " against " + after[3]);
+        }
+        float seenByServer = server.computeOnServer(s -> s.getPlayerList().getPlayers().get(0).getYRot());
+        if (Math.abs(seenByServer - before[0]) > 0.01) {
+            throw new AssertionError("the server was told the camera's turn: it has the player at " + seenByServer
+                    + ", not " + before[0]);
+        }
+        context.takeScreenshot("ash-freelook");
+
+        // A screen opening mid-hold ends it and puts the view back, while the
+        // screen is open. (The game releases every key for a screen and reads
+        // the keyboard again when it closes, so a key still held then is a new
+        // press, as it is for sneak; the test lets go first.)
+        context.setScreen(() -> new InventoryScreen(Minecraft.getInstance().player));
+        context.waitTicks(2);
+        if (context.computeOnClient(c -> AshClient.freelook.active())) {
+            throw new AssertionError("freelook outlived a screen opening mid-hold");
+        }
+        if (context.computeOnClient(c -> c.options.getCameraType()) != CameraType.FIRST_PERSON) {
+            throw new AssertionError("ending freelook did not put the first-person view back");
+        }
+        context.getInput().releaseKey(key);
+        context.setScreen(() -> null);
+        context.waitTicks(2);
+        if (context.computeOnClient(c -> AshClient.freelook.active())) {
+            throw new AssertionError("freelook came back with its key let go");
+        }
+        float cameraYaw = context.computeOnClient(c -> c.gameRenderer.getMainCamera().yRot());
+        if (Math.abs(cameraYaw - before[0]) > 0.5) {
+            throw new AssertionError("the camera did not return to where the player looks: " + cameraYaw);
+        }
+    }
+
+    /** A mouse move, as the cursor callback would leave it, handed to the game's own turn. */
+    private static void turnTheMouse(Minecraft client) {
+        try {
+            Field dx = MouseHandler.class.getDeclaredField("accumulatedDX");
+            dx.setAccessible(true);
+            dx.setDouble(client.mouseHandler, 400);
+            Method turn = MouseHandler.class.getDeclaredMethod("turnPlayer", double.class);
+            turn.setAccessible(true);
+            turn.invoke(client.mouseHandler, 1.0);
+        } catch (ReflectiveOperationException unreachable) {
+            throw new AssertionError("the game's mouse handler is not as research 0009 read it", unreachable);
+        }
+    }
+
     private static KeyMapping binding(ClientGameTestContext context, String name) {
         return context.computeOnClient(client -> {
             KeyMapping found = null;
