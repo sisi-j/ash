@@ -334,6 +334,124 @@ class PanelTest {
         assertNotNull(panel.tileOf(Feature.CROSSHAIR));
     }
 
+    // ---- icons, search and tabs (#65) ----
+
+    private static void type(Panel panel, String text) {
+        text.codePoints().forEach(panel::charTyped);
+    }
+
+    @Test
+    void every_tile_shows_its_features_icon_under_its_name() throws Exception {
+        Panel panel = panel();
+        FakeCanvas canvas = render(panel);
+        canvas.save(new File("build/ui/tiles-with-icons.png"));
+
+        for (SettingsScreen.Row row : model.rows()) {
+            assertNotNull(Panel.iconOf(row.feature()), row.name() + " has no icon");
+            Rect glyph = panel.glyphIn(panel.tileOf(row.feature()));
+            assertTrue(canvas.drawn.stream().anyMatch(d -> d.x() == glyph.x && d.y() == glyph.y
+                    && d.width() == glyph.width && d.height() == glyph.height),
+                    row.name() + "'s icon is not where its tile puts it");
+        }
+    }
+
+    @Test
+    void typing_on_the_tiles_searches_them_as_you_type() throws Exception {
+        Panel panel = panel();
+        render(panel);
+
+        type(panel, "cr");
+        FakeCanvas canvas = render(panel);
+        canvas.save(new File("build/ui/tiles-searching.png"));
+
+        assertEquals("cr", panel.query());
+        assertNotNull(panel.tileOf(Feature.CROSSHAIR));
+        assertNull(panel.tileOf(Feature.FPS_READOUT), "a tile whose name does not match is still up");
+        assertTrue(canvas.drew("cr"), "the search box does not show what was typed: " + canvas.texts());
+
+        panel.keyPressed(Key.BACKSPACE);
+        assertEquals("c", panel.query());
+        assertNotNull(panel.tileOf(Feature.HIT_COLOUR), "\"c\" is in Hit colour");
+    }
+
+    @Test
+    void escape_clears_a_search_before_it_closes_anything() {
+        Panel panel = panel();
+        type(panel, "ping");
+
+        panel.keyPressed(Key.ESCAPE);
+        assertEquals("", panel.query());
+        assertTrue(closed.isEmpty(), "Escape closed the panel on a player who was searching");
+
+        panel.keyPressed(Key.ESCAPE);
+        assertEquals(List.of("closed"), closed);
+    }
+
+    @Test
+    void when_nothing_matches_it_says_so() {
+        Panel panel = panel();
+        type(panel, "zzz");
+
+        FakeCanvas canvas = render(panel);
+
+        assertTrue(canvas.drew("No feature matches “zzz”."), "drew " + canvas.texts());
+        assertNull(panel.tileOf(Feature.CROSSHAIR));
+    }
+
+    @Test
+    void the_search_box_shows_its_placeholder_until_something_is_typed() {
+        Panel panel = panel();
+
+        assertTrue(render(panel).drew("Search features"));
+    }
+
+    @Test
+    void the_tabs_are_all_then_each_category_in_use_and_filter_the_tiles() throws Exception {
+        Panel panel = panel();
+        FakeCanvas canvas = render(panel);
+        for (String tab : new String[] {"All", "PvP", "HUD", "Movement"}) {
+            assertTrue(canvas.drew(tab), "no " + tab + " tab: " + canvas.texts());
+        }
+
+        click(panel, panel.tabOf(com.ashlauncher.client.settings.Category.HUD));
+        render(panel).save(new File("build/ui/tiles-hud-tab.png"));
+
+        assertNotNull(panel.tileOf(Feature.FPS_READOUT));
+        assertNotNull(panel.tileOf(Feature.PING_READOUT));
+        assertNull(panel.tileOf(Feature.CROSSHAIR), "a PvP tile is up on the HUD tab");
+
+        click(panel, panel.tabOf(null));
+        assertNotNull(panel.tileOf(Feature.CROSSHAIR), "All did not bring every tile back");
+    }
+
+    @Test
+    void a_search_and_a_tab_together_both_have_to_match() {
+        Panel panel = panel();
+        click(panel, panel.tabOf(com.ashlauncher.client.settings.Category.PVP));
+        type(panel, "hit");
+
+        assertEquals(2, panel.visibleRows().size(), "Hit indicator and Hit colour, both PvP");
+        assertNull(panel.tileOf(Feature.CROSSHAIR));
+    }
+
+    @Test
+    void the_tiles_scroll_by_mouse_wheel_when_they_overflow_and_a_search_starts_at_the_top() {
+        // Short enough that two rows of tiles do not fit.
+        Panel panel = panel(feature -> true, 1920, 640);
+        render(panel, 1920, 640);
+        assertTrue(panel.maxScroll() > 0, "the test proves nothing if every tile fits");
+        assertNotNull(panel.tileOf(Feature.FPS_READOUT));
+
+        panel.mouseScrolled(-1);
+        assertNull(panel.tileOf(Feature.FPS_READOUT), "the wheel did not scroll the first row away");
+        panel.mouseScrolled(1);
+        assertNotNull(panel.tileOf(Feature.FPS_READOUT), "the wheel did not scroll back");
+
+        panel.mouseScrolled(-1);
+        type(panel, "s");
+        assertNotNull(panel.tileOf(panel.visibleRows().get(0).feature()), "a new search did not start at the top");
+    }
+
     @Test
     void a_click_outside_the_panel_lands_on_nothing() {
         Panel panel = panel();

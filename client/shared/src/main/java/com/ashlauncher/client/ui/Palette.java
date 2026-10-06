@@ -27,6 +27,10 @@ final class Palette {
     static final int TEXT = 0xFFFFFFFF;
     /** Secondary text. */
     static final int MUTED = 0xA3FFFFFF;
+    /** A placeholder, such as the search box's when it is empty: white at 40%. */
+    static final int PLACEHOLDER = 0x66FFFFFF;
+    /** The ring round a field being typed in: white at 70%. */
+    static final int FOCUS = 0xB3FFFFFF;
     /** Icons: white at 80%. */
     static final int ICON = 0xCCFFFFFF;
     /** On, or faster. */

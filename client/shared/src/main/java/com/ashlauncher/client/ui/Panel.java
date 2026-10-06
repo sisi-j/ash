@@ -3,6 +3,7 @@ package com.ashlauncher.client.ui;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Placement;
 import com.ashlauncher.client.report.Feature;
+import com.ashlauncher.client.settings.Category;
 import com.ashlauncher.client.settings.Choice;
 import com.ashlauncher.client.settings.Colour;
 import com.ashlauncher.client.settings.OnOff;
@@ -12,7 +13,9 @@ import com.ashlauncher.client.ui.draw.Canvas;
 import com.ashlauncher.client.ui.draw.Ink;
 import com.ashlauncher.client.ui.draw.Paint;
 import com.ashlauncher.client.ui.draw.Raster;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.LongSupplier;
 
 /**
@@ -54,6 +57,10 @@ public final class Panel {
     private CanvasScreenSurface pageSurface;
     /** Whether the gear's page - ash's own settings - is open in place of the tiles. */
     private boolean ashSettings;
+    /** What has been typed to search the tiles; on the tiles, every key typed goes here. */
+    private String query = "";
+    /** The selected tab's category, or {@code null} for All. */
+    private Category tab;
     private String toast;
     private long toastAt;
     /** Whether the game is blurring what is behind the panel; where it cannot, the panel darkens it more. */
@@ -145,7 +152,18 @@ public final class Panel {
         if (ashSettings) {
             return panel().contains(x, y);
         }
-        List<SettingsScreen.Row> rows = model.rows();
+        for (Tab tabHere : tabs()) {
+            if (tabHere.at.contains(x, y)) {
+                tab = tabHere.category;
+                filtered();
+                return true;
+            }
+        }
+        if (searchBox().contains(x, y)) {
+            // Typing on the tiles always searches; the box is where it shows.
+            return true;
+        }
+        List<SettingsScreen.Row> rows = visibleRows();
         for (int i = 0; i < rows.size(); i++) {
             SettingsScreen.Row row = rows.get(i);
             Rect tile = tileAt(i);
@@ -255,15 +273,37 @@ public final class Panel {
         if (onAPage && (key == Key.ESCAPE || key == Key.BACKSPACE)) {
             page = null;
             ashSettings = false;
+        } else if (!onAPage && key == Key.BACKSPACE && !query.isEmpty()) {
+            query = query.substring(0, query.offsetByCodePoints(query.length(), -1));
+            filtered();
+        } else if (!onAPage && key == Key.ESCAPE && !query.isEmpty()) {
+            // A search is cleared first, so Escape never closes on a player
+            // who was only looking for something.
+            query = "";
+            filtered();
         } else if (key == Key.ESCAPE) {
             close.run();
         }
     }
 
-    /** A character typed while the panel is open: only a colour's box takes typing until search arrives (#65). */
+    /** The longest search, in characters: longer than any feature's name. */
+    private static final int MAX_QUERY = 40;
+
+    /**
+     * A character typed while the panel is open. On the tiles it searches
+     * them, with no box to click first; on a page, a colour's box takes it.
+     */
     public void charTyped(int codePoint) {
-        if (page != null && page.typing()) {
-            page.charTyped(codePoint);
+        if (editingHud) {
+            return;
+        }
+        if (page != null) {
+            if (page.typing()) {
+                page.charTyped(codePoint);
+            }
+        } else if (!ashSettings && !Character.isISOControl(codePoint) && query.length() < MAX_QUERY) {
+            query += new String(Character.toChars(codePoint));
+            filtered();
         }
     }
 
@@ -366,6 +406,98 @@ public final class Panel {
         return units(1);
     }
 
+    /** The search box, at the start of the bar above the tiles. Public so that the real-game tests can find it. */
+    public Rect searchBox() {
+        Rect main = main();
+        return new Rect(main.x, main.y, Math.min(units(19), main.width / 2), units(2.5));
+    }
+
+    /** The tabs above the tiles - All, then each category a feature here is filed under - right to left from the bar's end. */
+    private List<Tab> tabs() {
+        List<Tab> tabs = new ArrayList<>();
+        tabs.add(new Tab(null));
+        for (Category category : Category.values()) {
+            for (SettingsScreen.Row row : model.rows()) {
+                if (row.category() == category) {
+                    tabs.add(new Tab(category));
+                    break;
+                }
+            }
+        }
+        Rect main = main();
+        Rect search = searchBox();
+        float size = textSize(0.88f);
+        int padX = units(0.95);
+        int x = main.x + main.width;
+        for (int i = tabs.size() - 1; i >= 0; i--) {
+            Tab tab = tabs.get(i);
+            int width = Ink.width(tab.label(), Ink.Weight.SEMIBOLD, size) + 2 * padX;
+            x -= width;
+            tab.at = new Rect(x, search.y, width, search.height);
+            x -= units(0.35);
+        }
+        return tabs;
+    }
+
+    /** One tab: a category, or {@code null} for All, and where it is drawn. */
+    private static final class Tab {
+        final Category category;
+        Rect at;
+
+        Tab(Category category) {
+            this.category = category;
+        }
+
+        String label() {
+            return category == null ? "All" : category.displayName();
+        }
+    }
+
+    /** A category's tab, or All's for {@code null}; {@code null} when there is no such tab or a page is open. */
+    public Rect tabOf(Category category) {
+        if (page != null || ashSettings) {
+            return null;
+        }
+        for (Tab tab : tabs()) {
+            if (tab.category == category) {
+                return tab.at;
+            }
+        }
+        return null;
+    }
+
+    /** Where the tiles go: the main area, below the bar with the search box and tabs. */
+    Rect grid() {
+        Rect main = main();
+        int top = searchBox().height + units(1.2);
+        return new Rect(main.x, main.y + top, main.width, main.height - top);
+    }
+
+    /**
+     * The tiles on view: those in the selected tab whose name has what has
+     * been typed in it, in the order the file lists them.
+     */
+    List<SettingsScreen.Row> visibleRows() {
+        String wanted = query.trim().toLowerCase(Locale.ROOT);
+        List<SettingsScreen.Row> rows = new ArrayList<>();
+        for (SettingsScreen.Row row : model.rows()) {
+            boolean inTab = tab == null || row.category() == tab;
+            if (inTab && (wanted.isEmpty() || row.name().toLowerCase(Locale.ROOT).contains(wanted))) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    /** What has been typed into the search box. */
+    public String query() {
+        return query;
+    }
+
+    private void filtered() {
+        scroll = 0;
+    }
+
     private int columns() {
         return Math.max(1, Math.round(main().width / (15.36f * unit())));
     }
@@ -379,17 +511,17 @@ public final class Panel {
     }
 
     private int rowsOnView() {
-        return Math.max(1, (main().height + gap()) / (tileHeight() + gap()));
+        return Math.max(1, (grid().height + gap()) / (tileHeight() + gap()));
     }
 
     int maxScroll() {
-        int rows = (model.rows().size() + columns() - 1) / columns();
+        int rows = (visibleRows().size() + columns() - 1) / columns();
         return Math.max(0, rows - rowsOnView());
     }
 
-    /** Where a feature's tile is, or {@code null} when it is scrolled out of view or a page is open. */
+    /** Where a feature's tile is, or {@code null} when it is filtered out, scrolled out of view or a page is open. */
     Rect tileOf(Feature feature) {
-        List<SettingsScreen.Row> rows = model.rows();
+        List<SettingsScreen.Row> rows = visibleRows();
         for (int i = 0; i < rows.size(); i++) {
             if (rows.get(i).feature() == feature) {
                 return tileAt(i);
@@ -407,9 +539,9 @@ public final class Panel {
         if (row < scroll || row >= scroll + rowsOnView()) {
             return null;
         }
-        Rect main = main();
-        return new Rect(main.x + (index % columns()) * (tileWidth() + gap()),
-                main.y + (row - scroll) * (tileHeight() + gap()), tileWidth(), tileHeight());
+        Rect grid = grid();
+        return new Rect(grid.x + (index % columns()) * (tileWidth() + gap()),
+                grid.y + (row - scroll) * (tileHeight() + gap()), tileWidth(), tileHeight());
     }
 
     /** The ENABLED / DISABLED button: beside the gear, or the tile's whole width when there is no gear (yet: #67). */
@@ -418,6 +550,22 @@ public final class Panel {
         int side = units(2.3);
         int x = besideGear ? tile.x + pad + side + units(0.45) : tile.x + pad;
         return new Rect(x, tile.y + tile.height - units(0.85) - side, tile.x + tile.width - pad - x, side);
+    }
+
+    /** A feature's icon on its tile, or {@code null} when the tile is not on view: for the real-game tests to compare across GUI scales. */
+    public Rect tileIconOf(Feature feature) {
+        Rect tile = tileOf(feature);
+        return tile == null ? null : glyphIn(tile);
+    }
+
+    /**
+     * Where a tile's icon goes: 3.2 units square, centred, below the name as
+     * the mockup spaces them. Package-private for the tests.
+     */
+    Rect glyphIn(Rect tile) {
+        int side = units(3.2);
+        int nameBottom = tile.y + units(0.95) + Ink.lineHeight(Ink.Weight.SEMIBOLD, textSize(0.95f));
+        return new Rect(tile.x + (tile.width - side) / 2, nameBottom + units(0.55 + 0.35), side, side);
     }
 
     private Rect gearIn(Rect tile) {
@@ -583,9 +731,21 @@ public final class Panel {
     }
 
     private void drawTiles(Canvas canvas, int mouseX, int mouseY) {
-        Rect main = main();
-        canvas.clip(main.x, main.y, main.width, main.height);
-        List<SettingsScreen.Row> rows = model.rows();
+        drawSearch(canvas);
+        drawTabs(canvas, mouseX, mouseY);
+
+        Rect grid = grid();
+        List<SettingsScreen.Row> rows = visibleRows();
+        if (rows.isEmpty()) {
+            float size = textSize(0.92f);
+            String none = fit("No feature matches “" + query.trim() + "”.", Ink.Weight.REGULAR, size,
+                    grid.width);
+            int width = Ink.width(none, Ink.Weight.REGULAR, size);
+            Ink.text(none, Ink.Weight.REGULAR, size, Palette.MUTED)
+                    .drawAt(canvas, grid.x + (grid.width - width) / 2, grid.y + units(4), 1f);
+            return;
+        }
+        canvas.clip(grid.x, grid.y, grid.width, grid.height);
         for (int i = 0; i < rows.size(); i++) {
             Rect tile = tileAt(i);
             if (tile != null) {
@@ -593,7 +753,87 @@ public final class Panel {
             }
         }
         canvas.unclip();
-        drawScrollBar(canvas, main);
+        drawScrollBar(canvas, grid);
+    }
+
+    /**
+     * The search box: the search icon, then what has been typed and a caret,
+     * or the placeholder. Outlined while it holds a search, as a focused
+     * field is in the mockup - on the tiles, typing always goes to it.
+     */
+    private void drawSearch(Canvas canvas) {
+        Rect box = searchBox();
+        int radius = units(0.7);
+        boolean searching = !query.isEmpty();
+        Paint.roundRect(canvas, box.x, box.y, box.width, box.height, radius,
+                searching ? Palette.RAISED_HOVER : Palette.RAISED, 1f);
+        if (searching) {
+            Paint.outline(canvas, box.x, box.y, box.width, box.height, radius, Palette.FOCUS);
+        }
+        int pad = units(0.85);
+        int iconSize = units(1.05);
+        canvas.draw(Ink.icon(Ink.Icon.SEARCH, iconSize, Palette.ICON), box.x + pad,
+                box.y + (box.height - iconSize) / 2, 1f);
+
+        float size = textSize(0.92f);
+        int textX = box.x + pad + iconSize + units(0.55);
+        int room = box.x + box.width - pad - textX;
+        int lineHeight = Ink.lineHeight(Ink.Weight.REGULAR, size);
+        int textY = box.y + (box.height - lineHeight) / 2;
+        if (!searching) {
+            Ink.text(fit("Search features", Ink.Weight.REGULAR, size, room), Ink.Weight.REGULAR, size,
+                    Palette.PLACEHOLDER).drawAt(canvas, textX, textY, 1f);
+            return;
+        }
+        // The end of a long search, so what is being typed is what shows.
+        String shown = query;
+        while (shown.length() > 1 && Ink.width(shown, Ink.Weight.REGULAR, size) > room - units(0.3)) {
+            shown = shown.substring(shown.offsetByCodePoints(0, 1));
+        }
+        Ink.text(shown, Ink.Weight.REGULAR, size, Palette.TEXT).drawAt(canvas, textX, textY, 1f);
+        int caretX = textX + Ink.width(shown, Ink.Weight.REGULAR, size) + Math.max(1, units(0.08));
+        canvas.fill(caretX, textY + lineHeight / 8, Math.max(1, units(0.08)), lineHeight * 3 / 4, Palette.TEXT);
+    }
+
+    /** All, then each category in use: the selected one raised and white, the rest quieter until the mouse is on them. */
+    private void drawTabs(Canvas canvas, int mouseX, int mouseY) {
+        float size = textSize(0.88f);
+        int lineHeight = Ink.lineHeight(Ink.Weight.SEMIBOLD, size);
+        for (Tab each : tabs()) {
+            Rect at = each.at;
+            boolean selected = each.category == tab;
+            if (selected) {
+                Paint.roundRect(canvas, at.x, at.y, at.width, at.height, units(0.6), Palette.RAISED_HOVER, 1f);
+            }
+            int colour = selected || at.contains(mouseX, mouseY) ? Palette.TEXT : Palette.MUTED;
+            int width = Ink.width(each.label(), Ink.Weight.SEMIBOLD, size);
+            Ink.text(each.label(), Ink.Weight.SEMIBOLD, size, colour)
+                    .drawAt(canvas, at.x + (at.width - width) / 2, at.y + (at.height - lineHeight) / 2, 1f);
+        }
+    }
+
+    /** Each feature's icon, from Lucide, as the approved mockup chose them; {@code null} for one with none yet. */
+    static Ink.Icon iconOf(Feature feature) {
+        switch (feature) {
+            case FPS_READOUT:
+                return Ink.Icon.GAUGE;
+            case TOGGLE_SPRINT:
+                return Ink.Icon.SPRINT;
+            case CROSSHAIR:
+                return Ink.Icon.CROSSHAIR;
+            case HIT_INDICATOR:
+                return Ink.Icon.HIT;
+            case FREELOOK:
+                return Ink.Icon.EYE;
+            case SNAPLOOK:
+                return Ink.Icon.ROTATE;
+            case PING_READOUT:
+                return Ink.Icon.SIGNAL;
+            case HIT_COLOUR:
+                return Ink.Icon.DROPLET;
+            default:
+                return null;
+        }
     }
 
     private void drawTile(Canvas canvas, SettingsScreen.Row row, Rect tile, int mouseX, int mouseY) {
@@ -607,8 +847,15 @@ public final class Panel {
         float nameSize = textSize(0.95f);
         String name = fit(row.name(), Ink.Weight.SEMIBOLD, nameSize, tile.width - 2 * units(0.9));
         int nameWidth = Ink.width(name, Ink.Weight.SEMIBOLD, nameSize);
+        int nameTop = tile.y + units(0.95);
         Ink.text(name, Ink.Weight.SEMIBOLD, nameSize, Palette.TEXT)
-                .drawAt(canvas, tile.x + (tile.width - nameWidth) / 2, tile.y + units(0.95), opacity);
+                .drawAt(canvas, tile.x + (tile.width - nameWidth) / 2, nameTop, opacity);
+
+        Ink.Icon icon = iconOf(row.feature());
+        if (icon != null) {
+            Rect glyph = glyphIn(tile);
+            canvas.draw(Ink.icon(icon, glyph.width, Palette.ICON), glyph.x, glyph.y, opacity);
+        }
 
         if (hasGear(row)) {
             drawIconButton(canvas, gearIn(tile), Ink.Icon.GEAR, units(0.55), 0.55f, 1f, mouseX, mouseY);

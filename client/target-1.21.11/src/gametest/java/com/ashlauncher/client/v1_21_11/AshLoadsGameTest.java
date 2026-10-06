@@ -311,8 +311,9 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
     /**
      * ash's panel draws in the screen's real pixels, so it looks exactly the
-     * same at every GUI scale: the white pixels of its SETTINGS letters are
-     * the same pixels at scales 1, 2, 3 and Auto. The window is made 1280 by
+     * same at every GUI scale: the white pixels of its SETTINGS letters, and
+     * the bright pixels of the Crosshair tile's icon, are the same
+     * pixels at scales 1, 2, 3 and Auto. The window is made 1280 by
      * 720 first, the smallest at which the game offers scale 3.
      */
     private static void panelIsCrispAtEveryGuiScale(ClientGameTestContext context) {
@@ -322,6 +323,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.waitTicks(5);
         KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
         java.util.Set<Long> first = null;
+        java.util.Set<Long> firstIcon = null;
         for (int scale : new int[] {1, 2, 3, 0}) {
             context.runOnClient(client -> {
                 client.options.guiScale().set(scale);
@@ -330,16 +332,28 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             context.waitTicks(3);
             context.getInput().pressKey(settingsKey);
             context.waitTicks(5);
-            Rect letters = context.computeOnClient(client -> {
+            Rect[] areas = context.computeOnClient(client -> {
                 if (!(client.screen instanceof AshSettingsScreen screen)) {
                     throw new AssertionError("ash's settings did not open at GUI scale " + scale);
                 }
-                return screen.panel().lettersArea();
+                return new Rect[] {screen.panel().lettersArea(), screen.panel().tileIconOf(Feature.CROSSHAIR)};
             });
             Path shot = context.takeScreenshot("ash-panel-gui-scale-" + (scale == 0 ? "auto" : scale));
             context.getInput().pressKey(settingsKey);
             context.waitTicks(5);
-            java.util.Set<Long> white = whitePixels(shot, letters);
+            Rect letters = areas[0];
+            java.util.Set<Long> white = whitePixels(shot, letters, 240);
+            java.util.Set<Long> icon = whitePixels(shot, areas[1], 170);
+            if (icon.size() < 30) {
+                throw new AssertionError("the Crosshair tile has no icon at GUI scale " + scale + ": " + icon.size()
+                        + " bright pixels in " + areas[1]);
+            }
+            if (firstIcon == null) {
+                firstIcon = icon;
+            } else if (!firstIcon.equals(icon)) {
+                throw new AssertionError("at GUI scale " + (scale == 0 ? "Auto" : scale)
+                        + " the Crosshair icon is not the same pixels as at GUI scale 1");
+            }
             if (white.size() < 50) {
                 throw new AssertionError("SETTINGS is not on the panel at GUI scale " + scale + ": " + white.size()
                         + " white pixels in " + letters);
@@ -359,8 +373,8 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.waitTicks(5);
     }
 
-    /** Where a screenshot is white, inside a rectangle of real pixels, as points relative to it. */
-    private static java.util.Set<Long> whitePixels(Path shot, Rect area) {
+    /** Where a screenshot is at least {@code level} in every channel, inside a rectangle of real pixels, as points relative to it. */
+    private static java.util.Set<Long> whitePixels(Path shot, Rect area, int level) {
         BufferedImage image;
         try {
             image = ImageIO.read(shot.toFile());
@@ -371,7 +385,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         for (int y = area.y; y < area.y + area.height; y++) {
             for (int x = area.x; x < area.x + area.width; x++) {
                 int rgb = image.getRGB(x, y);
-                if (((rgb >> 16) & 0xFF) >= 240 && ((rgb >> 8) & 0xFF) >= 240 && (rgb & 0xFF) >= 240) {
+                if (((rgb >> 16) & 0xFF) >= level && ((rgb >> 8) & 0xFF) >= level && (rgb & 0xFF) >= level) {
                     white.add(((long) (x - area.x) << 32) | (y - area.y));
                 }
             }

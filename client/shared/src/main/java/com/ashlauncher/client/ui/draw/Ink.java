@@ -9,10 +9,6 @@ import java.awt.Shape;
 import java.awt.font.FontRenderContext;
 import java.awt.font.LineMetrics;
 import java.awt.font.TextAttribute;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Path2D;
-import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.io.InputStream;
@@ -20,6 +16,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -88,10 +85,34 @@ public final class Ink {
         }
     }
 
-    /** The stand-in icons, until #65 brings Lucide's set. */
+    /** The icons ash draws: each one of Lucide's, by its Lucide name. */
     public enum Icon {
-        GEAR, LAYOUT
+        GEAR("settings"),
+        LAYOUT("layout-dashboard"),
+        SEARCH("search"),
+        CROSSHAIR("crosshair"),
+        HIT("zap"),
+        DROPLET("droplet"),
+        GAUGE("gauge"),
+        SIGNAL("signal"),
+        SPRINT("chevrons-right"),
+        EYE("eye"),
+        ROTATE("rotate-ccw");
+
+        private final String lucideName;
+
+        Icon(String lucideName) {
+            this.lucideName = lucideName;
+        }
+
+        /** Its file under {@code assets/ash/icons}, without the {@code .svg}. */
+        public String lucideName() {
+            return lucideName;
+        }
     }
+
+    /** Each icon's shapes, read once. */
+    private static final Map<Icon, List<Shape>> ICON_SHAPES = new EnumMap<>(Icon.class);
 
     /** At most this many pixels are kept across every cached raster: 32 MB of ARGB. */
     private static final long MAX_CACHED_PIXELS = 8L * 1024 * 1024;
@@ -350,7 +371,11 @@ public final class Ink {
 
     // ---- icons ----
 
-    /** A stand-in outline icon, drawn on a 24-unit grid with round strokes, until #65 brings Lucide's set. */
+    /**
+     * One of Lucide's icons, square, {@code size} pixels across: its 24-unit
+     * outlines scaled to fit and stroked as Lucide draws them - 2 units wide,
+     * round caps and joins - at this exact size, so it is crisp at any.
+     */
     public static synchronized Raster icon(Icon icon, int size, int argb) {
         return cached("icon/" + icon + "/" + size + "/" + Integer.toHexString(argb), () -> {
             BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
@@ -358,39 +383,21 @@ public final class Ink {
             g.setColor(new Color(argb, true));
             g.scale(size / 24.0, size / 24.0);
             g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            if (icon == Icon.GEAR) {
-                g.draw(gear());
-                g.draw(new Ellipse2D.Double(9, 9, 6, 6));
-            } else {
-                g.draw(new RoundRectangle2D.Double(3, 3, 7, 9, 3, 3));
-                g.draw(new RoundRectangle2D.Double(14, 3, 7, 5, 3, 3));
-                g.draw(new RoundRectangle2D.Double(14, 12, 7, 9, 3, 3));
-                g.draw(new RoundRectangle2D.Double(3, 16, 7, 5, 3, 3));
+            for (Shape shape : shapesOf(icon)) {
+                g.draw(shape);
             }
             g.dispose();
             return raster(image, 0, 0, null);
         });
     }
 
-    /** A cog of eight rounded teeth about the grid's centre. */
-    private static Shape gear() {
-        Path2D.Double path = new Path2D.Double();
-        int teeth = 8;
-        for (int i = 0; i < teeth * 2; i++) {
-            double angle = Math.PI * i / teeth;
-            double outer = i % 2 == 0 ? 10 : 7.6;
-            double half = Math.PI / teeth * 0.42;
-            double x0 = 12 + outer * Math.cos(angle - half);
-            double y0 = 12 + outer * Math.sin(angle - half);
-            if (i == 0) {
-                path.moveTo(x0, y0);
-            } else {
-                path.lineTo(x0, y0);
-            }
-            path.lineTo(12 + outer * Math.cos(angle + half), 12 + outer * Math.sin(angle + half));
+    private static List<Shape> shapesOf(Icon icon) {
+        List<Shape> shapes = ICON_SHAPES.get(icon);
+        if (shapes == null) {
+            shapes = LucideIcon.shapes(icon.lucideName());
+            ICON_SHAPES.put(icon, shapes);
         }
-        path.closePath();
-        return AffineTransform.getRotateInstance(Math.PI / 16, 12, 12).createTransformedShape(path);
+        return shapes;
     }
 
     // ---- the cache ----
