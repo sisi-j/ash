@@ -143,7 +143,7 @@ A field deliberately excluded from sync because it only makes sense on one machi
 _Avoid_: local config, machine settings, device settings
 
 **Server entry**:
-A saved Minecraft server address available for quick-connect. On the launcher's Play page, an instance's server entries are the game's own list from `servers.dat`, in the player's order. ash asks only these servers for their status, and Join only goes to one of them.
+A saved Minecraft server address available for quick-connect. On the launcher's Play page, an instance's server entries are the servers it joined most recently first, from the client's own record in `ash/recent-servers.json` (addresses and times only, written by the client and only read by the launcher), then the rest of the game's own list from `servers.dat`, in the player's order. ash asks only these servers for their status, and Join only goes to one of them: never a server the player has neither listed nor joined.
 _Avoid_: favourite, bookmark, saved server
 
 **News post**:

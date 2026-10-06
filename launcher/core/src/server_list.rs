@@ -32,6 +32,9 @@ pub struct ServerEntry {
     pub address: String,
     /// The server's icon as the game saved it: a base64 PNG.
     pub icon: Option<String>,
+    /// When the player last joined it, from ash's own record. `None` for a
+    /// server they have not joined since ash began keeping one.
+    pub last_joined_ms: Option<u64>,
 }
 
 /// What a server said when asked.
@@ -200,6 +203,7 @@ impl Nbt<'_> {
             name: name.unwrap_or_default(),
             address,
             icon: icon.filter(|i| !i.is_empty()),
+            last_joined_ms: None,
         }))
     }
 

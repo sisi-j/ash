@@ -96,6 +96,19 @@ const STATES: State[] = [
     },
   },
   {
+    name: "servers-recent",
+    shows: "Recent servers",
+    verify: async (page) =>
+      (await page.locator(".servers-card .server-row").first().innerText()).includes("Hypixel") ? null : "the most recent server is not first",
+  },
+  {
+    name: "servers-not-joined",
+    shows: "Join starts 1.8.9 PvP",
+    reach: (page) => page.getByRole("option", { name: /1.8.9 PvP/ }).click(),
+    verify: async (page) =>
+      (await page.locator(".servers-card h3").innerText()).startsWith("Servers") ? null : "an instance that has joined nothing is titled as if it had",
+  },
+  {
     name: "servers-join",
     shows: "DOWNLOADING",
     reach: (page) => page.getByRole("button", { name: "Join Hypixel" }).click(),

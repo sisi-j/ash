@@ -98,6 +98,8 @@ export type ServerEntry = {
   address: string;
   /** A base64 PNG, as the game saved it. */
   icon: string | null;
+  /** When the player last joined it, from ash's own record; null if not since ash began keeping one. */
+  last_joined_ms: number | null;
 };
 
 /** Mirrors `ash_core::ServerStatus`, an internally tagged enum. */

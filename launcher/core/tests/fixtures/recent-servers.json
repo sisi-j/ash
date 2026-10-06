@@ -1,0 +1,6 @@
+{
+  "servers": [
+    { "address": "mc.hypixel.net", "joined_ms": 1791300000000 },
+    { "address": "localhost:25570", "joined_ms": 1791200000000 }
+  ]
+}
