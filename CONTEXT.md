@@ -111,7 +111,7 @@ The feature that draws a **mark** at the crosshair when the server confirms one 
 _Avoid_: hit marker (in docs), hitmarker, damage indicator
 
 **Third-party mod**:
-A mod the player supplies themselves, loaded only when they opt in.
+A mod the player supplies themselves, loaded only when they opt in. It lives in the instance's `mods` folder, which is the player's alone: ash hands its own client and bundled mods to the loader by path and never puts anything there. While third-party mods are off, the loader is pointed at an empty folder of ash's instead.
 _Avoid_: mod (unqualified), external mod, custom mod
 
 ### Cosmetics

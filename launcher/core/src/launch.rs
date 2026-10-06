@@ -39,6 +39,19 @@ pub(crate) struct LaunchContext<'a> {
     pub defaults: &'a MachineDefaults,
     /// A server to go straight into, for this launch only. Never stored.
     pub join: Option<&'a Join>,
+    /// What a modded instance's loader is told about mods. `None` for
+    /// vanilla, which loads none.
+    pub mods: Option<&'a Mods>,
+}
+
+/// Where a modded instance's loader finds its mods.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Mods {
+    /// ash's own jars, by absolute path: `fabric.addMods`.
+    pub add: Vec<PathBuf>,
+    /// Where the loader reads the player's mods instead of `mods`:
+    /// `fabric.modsFolder`. `None` leaves it at the instance's own folder.
+    pub folder: Option<PathBuf>,
 }
 
 /// Where a launch goes once the game is up, in the form its version takes.
@@ -94,6 +107,17 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
 
     // Mojang's metadata never states a heap size, so this is ash's to add.
     jvm.insert(0, format!("-Xmx{}M", context.overrides.memory_mb_or(context.defaults)));
+
+    // Beside the heap size, never in the loader pin's own arguments: on
+    // 1.8.9 any JVM argument there switches off the fallback that supplies
+    // the classpath, and the game would not start (`docs/research/0005`).
+    if let Some(mods) = context.mods {
+        let paths: Vec<String> = mods.add.iter().map(|p| p.display().to_string()).collect();
+        jvm.insert(0, format!("-Dfabric.addMods={}", paths.join(separator)));
+        if let Some(folder) = &mods.folder {
+            jvm.insert(0, format!("-Dfabric.modsFolder={}", folder.display()));
+        }
+    }
 
     // First, so it is in force before anything else the JVM is told. For
     // 1.7 to 1.11 this argument is the Log4Shell mitigation.

@@ -198,9 +198,13 @@ pub struct LoaderPin {
     /// Third-party mods ash ships inside an instance, unmodified.
     ///
     /// Fetched into the depot and verified like any library - two instances
-    /// on one version target share the bytes - and then copied into the
-    /// instance's own `mods` directory, which is the only place a loader
-    /// looks.
+    /// on one version target share the bytes - and handed to the loader from
+    /// there by path, with `fabric.addMods`. The instance's own `mods` folder
+    /// is the player's, and ash never copies anything into it.
+    ///
+    /// A player's own copy of the same mod is not a crash: the loader keeps
+    /// the newest version whose dependencies are met, wherever it came from,
+    /// and drops the other without a word (`docs/research/0005`, A.4).
     pub bundled_mods: &'static [PinnedLibrary],
 }
 
@@ -749,14 +753,6 @@ impl PinnedLibrary {
         maven_path(&coordinate)
             .map(|path| format!("libraries/{path}"))
             .ok_or_else(|| coordinate_error(self.name))
-    }
-
-    /// The artifact id alone, which every version of this jar shares.
-    ///
-    /// What identifies one bundled mod across a change of pin, so installing
-    /// a new version can take the old one with it.
-    pub(crate) fn artifact(&self) -> Result<&'static str, AshError> {
-        self.name.split(':').nth(1).ok_or_else(|| coordinate_error(self.name))
     }
 }
 

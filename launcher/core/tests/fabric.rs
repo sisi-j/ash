@@ -11,6 +11,7 @@
 //! it has no route for, so a fetch ash was not supposed to make fails loudly
 //! here rather than quietly succeeding against the real one.
 
+use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use ash_core::credentials::InMemoryCredentialStore;
@@ -268,45 +269,114 @@ async fn a_fabric_instance_fetches_the_loader_the_intermediary_and_the_api() {
     assert!(f.tmp.path().join("depot/versions/1.21.11/1.21.11.jar").is_file());
 }
 
+/// The value of a `-Dname=value` JVM argument, if the command line has one.
+fn property<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    let prefix = format!("-D{name}=");
+    args.iter().find_map(|a| a.strip_prefix(&prefix))
+}
+
 #[tokio::test]
-async fn the_api_lands_where_the_loader_looks() {
+async fn the_api_reaches_the_loader_from_the_depot_and_never_the_mods_folder() {
     let f = fixture();
     let id = f.modded().await;
 
-    f.prepare(&id).await;
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
 
-    // A loader reads the instance's own mods directory and nothing else, so
-    // a bundled mod that only reached the depot would not load.
+    let added = property(&view.args, "fabric.addMods").expect("ash's jars were not handed over");
+    let api = f.tmp.path().join("depot").join(depot_relative(API));
+    assert!(added.contains(&api.display().to_string()), "the api is not among them: {added}");
     let mods = f.ash.game_directory(&id).join("mods");
-    assert!(
-        mods.join("fabric-api-0.1.0+1.21.11.jar").is_file(),
-        "the api is not in the instance: {:?}",
-        std::fs::read_dir(&mods).map(|d| d.flatten().map(|e| e.file_name()).collect::<Vec<_>>())
+    assert_eq!(
+        std::fs::read_dir(&mods).unwrap().count(),
+        0,
+        "ash put something in the mods folder"
     );
 }
 
 #[tokio::test]
-async fn a_bundled_mod_replaces_the_version_that_was_there_before() {
+async fn a_players_jar_survives_preparing_and_launching_even_named_like_a_bundled_mod() {
     let f = fixture();
     let id = f.modded().await;
     let mods = f.ash.game_directory(&id).join("mods");
+    // A player's own download of the same mod: an older one, and one with
+    // exactly ash's file name and different bytes. Phase 2 deleted the first
+    // and overwrote the second.
+    let players = [
+        ("fabric-api-0.0.1+1.21.11.jar", &b"the player's older api"[..]),
+        ("fabric-api-0.1.0+1.21.11.jar", &b"the player's own build"[..]),
+        ("sodium-1.2.3.jar", &b"a mod the player chose"[..]),
+    ];
+    for (name, bytes) in players {
+        std::fs::write(mods.join(name), bytes).unwrap();
+    }
 
-    // What an earlier ash release would have left behind, and a mod the
-    // player put there themselves.
-    std::fs::write(mods.join("fabric-api-0.0.1+1.21.11.jar"), b"an older api").unwrap();
+    f.prepare(&id).await;
+    f.prepare(&id).await;
+    f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    for (name, bytes) in players {
+        assert_eq!(
+            std::fs::read(mods.join(name)).ok().as_deref(),
+            Some(bytes),
+            "{name} was touched"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_phase_2_instance_loses_exactly_the_jars_ash_put_in_its_mods_folder() {
+    let f = fixture();
+    let id = f.modded().await;
+    let mods = f.ash.game_directory(&id).join("mods");
+    // What Phase 2's preparation left: the api with its pinned bytes, and
+    // ash's client by its fixed name. And a player's mod beside them.
+    std::fs::write(mods.join("fabric-api-0.1.0+1.21.11.jar"), API_JAR).unwrap();
+    std::fs::write(mods.join(ASH_CLIENT), b"a Phase 2 client").unwrap();
     std::fs::write(mods.join("sodium-1.2.3.jar"), b"a mod the player chose").unwrap();
 
     f.prepare(&id).await;
 
-    // A loader refuses to start when two files claim one mod id, so moving
-    // a pin has to replace the jar rather than sit beside it.
-    assert!(
-        !mods.join("fabric-api-0.0.1+1.21.11.jar").exists(),
-        "the previous api jar is still there, so the loader sees two"
+    let left: Vec<String> = std::fs::read_dir(&mods)
+        .unwrap()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    assert_eq!(left, ["sodium-1.2.3.jar"]);
+}
+
+#[tokio::test]
+async fn the_mods_folder_is_moved_to_an_empty_one_ash_owns() {
+    let f = fixture();
+    let id = f.modded().await;
+    std::fs::write(f.ash.game_directory(&id).join("mods").join("sodium.jar"), b"a mod").unwrap();
+
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
+
+    // The loader cannot be told to read no folder, only another one, so a
+    // player's jar loads only when that folder is the instance's own.
+    let folder = PathBuf::from(property(&view.args, "fabric.modsFolder").expect("not moved"));
+    assert!(folder.is_absolute(), "{folder:?}");
+    assert!(folder.starts_with(&f.ash.config().data_root), "not ash's own: {folder:?}");
+    assert_eq!(
+        std::fs::read_dir(&folder).unwrap().count(),
+        0,
+        "the folder the loader reads has something in it"
     );
-    assert!(mods.join("fabric-api-0.1.0+1.21.11.jar").is_file());
-    // And removal reaches no further than ash's own artifact.
-    assert!(mods.join("sodium-1.2.3.jar").is_file(), "a player's own mod was removed");
+    assert!(!property(&view.args, "fabric.addMods").unwrap().contains("sodium"));
+}
+
+#[tokio::test]
+async fn both_properties_sit_with_the_jvm_arguments_before_the_main_class() {
+    let f = fixture();
+    let id = f.modded().await;
+
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
+
+    let main = view.args.iter().position(|a| a == KNOT).expect("the loader's main class");
+    for name in ["fabric.addMods", "fabric.modsFolder"] {
+        let at = view.args.iter().position(|a| a.starts_with(&format!("-D{name}="))).expect(name);
+        assert!(at < main, "{name} comes after the main class, so the game gets it, not the JVM");
+    }
 }
 
 #[tokio::test]
@@ -371,18 +441,18 @@ async fn the_clients_own_settings_file_is_left_exactly_as_the_client_wrote_it() 
 // ---- ash's own client -------------------------------------------------------
 
 #[tokio::test]
-async fn ashs_own_client_lands_where_the_loader_looks() {
+async fn ashs_own_client_reaches_the_loader_from_the_installation() {
     let f = fixture();
     let id = f.modded().await;
 
-    f.prepare(&id).await;
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
 
-    let installed = f.ash.game_directory(&id).join("mods").join(ASH_CLIENT);
-    assert_eq!(
-        std::fs::read(&installed).ok().as_deref(),
-        Some(ASH_CLIENT_JAR),
-        "ash's client is not in the instance, or is not the one that shipped"
-    );
+    // By path, from where the installer put it: an update to ash is then the
+    // client the game gets, with no copy anywhere to fall out of date.
+    let client = f.ash.config().client_root.join(ASH_CLIENT);
+    let added = property(&view.args, "fabric.addMods").expect("ash's jars were not handed over");
+    assert!(added.contains(&client.display().to_string()), "the client is not among them: {added}");
+    assert!(!f.ash.game_directory(&id).join("mods").join(ASH_CLIENT).exists());
     // It came off disk, not off the network. `serving` has no route for it, so
     // a fetch would have panicked - but saying so here is what stops a route
     // being added later without anyone weighing what it would mean.
@@ -400,45 +470,20 @@ async fn a_vanilla_instance_gets_no_ash_client() {
     let plain = f.ash.create_instance("plain", VERSION, Loader::Vanilla).expect("instance").id;
     // The vanilla library a modded merge would have replaced.
     f.http.route(VANILLA_ASM_URL, HttpResponse::ok(VANILLA_ASM_JAR));
-    // The test proves nothing if there was no client to install in the first
-    // place - it would pass just as well against a fixture that never wrote
-    // one.
+    // The test proves nothing if there was no client to hand over in the
+    // first place - it would pass just as well against a fixture that never
+    // wrote one.
     assert!(f.ash.config().client_root.join(ASH_CLIENT).is_file());
 
-    f.prepare(&plain).await;
-
-    assert!(
-        !f.ash.game_directory(&plain).join("mods").join(ASH_CLIENT).exists(),
-        "a vanilla instance was given the ash client"
-    );
-}
-
-#[tokio::test]
-async fn an_ash_update_replaces_the_client_rather_than_sitting_beside_it() {
-    let f = fixture();
-    let id = f.modded().await;
-    let mods = f.ash.game_directory(&id).join("mods");
-
-    // What the previous ash release left behind.
-    std::fs::create_dir_all(&mods).unwrap();
-    std::fs::write(mods.join(ASH_CLIENT), b"an older ash client").unwrap();
-
-    f.prepare(&id).await;
+    let view = f.ash.preview_launch(&plain, &NullSink, &Cancel::new()).await.expect("previewed");
 
     assert_eq!(
-        std::fs::read(mods.join(ASH_CLIENT)).ok().as_deref(),
-        Some(ASH_CLIENT_JAR),
-        "the previous client is still in place"
+        property(&view.args, "fabric.addMods"),
+        None,
+        "a vanilla instance was given ash's jars"
     );
-    // A loader refuses to start when two files claim one mod id, and the fixed
-    // file name is the whole reason there can only ever be one.
-    let ash_jars: Vec<String> = std::fs::read_dir(&mods)
-        .unwrap()
-        .flatten()
-        .filter_map(|e| e.file_name().into_string().ok())
-        .filter(|name| name.starts_with("ash-client"))
-        .collect();
-    assert_eq!(ash_jars, vec![ASH_CLIENT.to_owned()]);
+    assert_eq!(property(&view.args, "fabric.modsFolder"), None);
+    assert!(!f.ash.game_directory(&plain).join("mods").join(ASH_CLIENT).exists());
 }
 
 #[tokio::test]
@@ -1050,19 +1095,16 @@ fn fabric_mod(name: &str) -> Vec<u8> {
 }
 
 #[tokio::test]
-async fn the_mods_are_the_players_and_never_ashs_own() {
+async fn a_players_mods_are_not_listed_while_they_do_not_load() {
     let f = fixture();
     let id = f.modded().await;
     f.prepare(&id).await;
-    assert!(f.ash.instance_glance(&id).unwrap().mods.is_empty(), "ash's own jars were listed");
-
     let mods = f.ash.game_directory(&id).join("mods");
     std::fs::write(mods.join("sodium-fabric-0.6.13+mc1.21.11.jar"), fabric_mod("Sodium")).unwrap();
-    std::fs::write(mods.join("not-a-zip.jar"), b"whatever this is").unwrap();
-    std::fs::write(mods.join("notes.txt"), b"not a mod").unwrap();
 
-    // By the name a mod gives itself, or by its file name if it gives none.
-    assert_eq!(f.ash.instance_glance(&id).unwrap().mods, ["not-a-zip", "Sodium"]);
+    // The loader reads an empty folder of ash's instead, so listing Sodium
+    // would be telling the player it runs when it does not.
+    assert!(f.ash.instance_glance(&id).unwrap().mods.is_empty());
 }
 
 fn value_of<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
