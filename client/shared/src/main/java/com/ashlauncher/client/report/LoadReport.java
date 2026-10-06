@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -35,6 +36,10 @@ public final class LoadReport {
 
     private final String clientVersion;
     private final Map<Feature, FeatureStatus> states = new EnumMap<>(Feature.class);
+    /** Whether any of the player's own mods loaded this session. */
+    private boolean thirdPartyMods;
+    /** Whose copy of each of ash's bundled mods loaded, by mod id. */
+    private final Map<String, BundledCopy> bundled = new LinkedHashMap<>();
 
     public LoadReport(String clientVersion) {
         this.clientVersion = clientVersion;
@@ -56,6 +61,23 @@ public final class LoadReport {
             report.with(feature, FeatureStatus.of(on.test(feature), landed.test(feature)));
         }
         return report;
+    }
+
+    /** Whether any of the player's own mods loaded, and whose copy of each bundled mod won. */
+    public LoadReport withOrigins(ModOrigins origins, List<String> bundledIds) {
+        thirdPartyMods = origins.thirdPartyModsLoaded();
+        bundled.putAll(origins.bundled(bundledIds));
+        return this;
+    }
+
+    public LoadReport withThirdPartyMods(boolean loaded) {
+        thirdPartyMods = loaded;
+        return this;
+    }
+
+    public LoadReport withBundled(String id, BundledCopy copy) {
+        bundled.put(id, copy);
+        return this;
     }
 
     public LoadReport with(Feature feature, FeatureStatus state) {
@@ -97,6 +119,15 @@ public final class LoadReport {
         StringBuilder json = new StringBuilder();
         json.append("{\n");
         json.append("  \"client\": ").append(quoted(clientVersion)).append(",\n");
+        json.append("  \"third_party_mods\": ").append(thirdPartyMods).append(",\n");
+        json.append("  \"bundled\": [");
+        int listed = 0;
+        for (Map.Entry<String, BundledCopy> mod : bundled.entrySet()) {
+            json.append(listed++ == 0 ? "\n" : ",\n");
+            json.append("    { \"id\": ").append(quoted(mod.getKey()))
+                    .append(", \"copy\": ").append(quoted(mod.getValue().word())).append(" }");
+        }
+        json.append(listed == 0 ? "],\n" : "\n  ],\n");
         json.append("  \"features\": [\n");
         int written = 0;
         for (Map.Entry<Feature, FeatureStatus> entry : states.entrySet()) {

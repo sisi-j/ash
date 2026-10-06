@@ -32,6 +32,8 @@ class LoadReportTest {
     @Test
     void it_writes_exactly_what_the_launcher_reads() throws IOException {
         new LoadReport("0.1.0")
+                .withThirdPartyMods(false)
+                .withBundled("fabric-api", BundledCopy.ASH)
                 .with(Feature.FPS_READOUT, FeatureStatus.LOADED)
                 .with(Feature.TOGGLE_SPRINT, FeatureStatus.DEGRADED)
                 .writeTo(gameDir);

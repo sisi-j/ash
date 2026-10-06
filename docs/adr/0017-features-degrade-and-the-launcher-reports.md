@@ -2,6 +2,8 @@
 
 When one of ash's mixins does not apply, the game still launches and that feature is simply absent. The client records what loaded in a load report; the launcher reads it and shows any degraded feature before the next play.
 
+*Amended by ADR-0018 (2026-10-06): when the player's own mods were loaded, the notice no longer says the fault is ash's, and it says when their copy of a bundled mod ran in place of ash's.*
+
 ## Context
 
 Mixin gives a config three ways to behave when a target is missing. With `"required": true` a failure is terminal and the game does not start. Otherwise the mixin is logged and skipped, and the feature silently does not exist. Injectors that match nothing are governed separately by `require` / `injectors.defaultRequire`.
