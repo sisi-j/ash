@@ -7,6 +7,7 @@ import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.servers.RecentServers;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.snaplook.Snaplook;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.ui.Panel;
@@ -91,6 +92,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
             "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
+            "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             assertReportSays(feature);
@@ -130,6 +132,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             joinIsRecorded(context);
             toggleSprintWorks(context, server);
             freelookWorks(context, server);
+            snaplookWorks(context);
             settingsScreenWorks(context);
             crosshairOptionsWork(context);
             crosshairWorks(context);
@@ -519,6 +522,33 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         if (Math.abs(cameraYaw - before[0]) > 0.5) {
             throw new AssertionError("the camera did not return to where the player looks: " + cameraYaw);
         }
+    }
+
+    /**
+     * Snaplook, held with its key: the game's own front view while it is down,
+     * and back to the view the player had - first person, and third person
+     * from behind - when it is let go.
+     */
+    private static void snaplookWorks(ClientGameTestContext context) {
+        KeyMapping key = binding(context, Snaplook.BINDING_NAME);
+        for (CameraType had : new CameraType[] {CameraType.FIRST_PERSON, CameraType.THIRD_PERSON_BACK}) {
+            context.runOnClient(c -> c.options.setCameraType(had));
+            context.getInput().holdKey(key);
+            context.waitTicks(2);
+            if (context.computeOnClient(c -> c.options.getCameraType()) != CameraType.THIRD_PERSON_FRONT) {
+                throw new AssertionError("holding the snaplook key in " + had + " did not show the front view");
+            }
+            if (had == CameraType.FIRST_PERSON) {
+                context.takeScreenshot("ash-snaplook");
+            }
+            context.getInput().releaseKey(key);
+            context.waitTicks(2);
+            CameraType back = context.computeOnClient(c -> c.options.getCameraType());
+            if (back != had) {
+                throw new AssertionError("letting go of snaplook left " + back + ", not the " + had + " it had");
+            }
+        }
+        context.runOnClient(c -> c.options.setCameraType(CameraType.FIRST_PERSON));
     }
 
     /** A mouse move, as the cursor callback would leave it, handed to the game's own turn. */

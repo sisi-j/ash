@@ -15,6 +15,7 @@
     "MinecraftClientAccess",
     "MinecraftClientFreelookMixin",
     "MinecraftClientMixin",
+    "MinecraftClientSnaplookMixin",
     "MinecraftClientServerMixin"
   ],
   "injectors": {

@@ -107,6 +107,11 @@ public final class Settings {
             true, "Look around without turning while a key is held. The key is in Options, Controls, Misc."
                     + " Off on servers whose published rules ban it, whatever this says. true or false.");
 
+    public static final OnOff SNAPLOOK = new OnOff(Feature.SNAPLOOK, Category.PVP,
+            "Hold a key to see yourself from the front, as F5 does.", "snaplook.enabled", true,
+            "See yourself from the front while a key is held, as the game's own F5 does. The key is in Options,"
+                    + " Controls, Misc. true or false.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
@@ -117,7 +122,7 @@ public final class Settings {
     private static final List<Setting<?>> DECLARED = Collections.unmodifiableList(Arrays.<Setting<?>>asList(
             FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
-            HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK));
+            HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;

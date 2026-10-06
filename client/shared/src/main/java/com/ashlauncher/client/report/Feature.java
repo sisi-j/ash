@@ -13,6 +13,7 @@ public enum Feature {
     CROSSHAIR("crosshair", "Crosshair"),
     HIT_INDICATOR("hit-indicator", "Hit indicator"),
     FREELOOK("freelook", "Freelook"),
+    SNAPLOOK("snaplook", "Snaplook"),
     /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can

@@ -23,6 +23,11 @@ final class OptionsCameraModes implements CameraModes<CameraType> {
     }
 
     @Override
+    public CameraType front() {
+        return CameraType.THIRD_PERSON_FRONT;
+    }
+
+    @Override
     public CameraType behind() {
         return CameraType.THIRD_PERSON_BACK;
     }

@@ -147,7 +147,7 @@ class SettingsTest {
         assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
                 Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
                 Settings.CROSSHAIR_OUTLINE, Settings.HIT_INDICATOR, Settings.HIT_INDICATOR_COLOUR,
-                Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK), Settings.declared());
+                Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK), Settings.declared());
 
         Settings.load(configDir);
 
@@ -182,7 +182,10 @@ class SettingsTest {
                         + "hit-indicator.duration=300\n"
                         + "# Look around without turning while a key is held. The key is in Options, Controls, Misc."
                         + " Off on servers whose published rules ban it, whatever this says. true or false.\n"
-                        + "freelook.enabled=true\n",
+                        + "freelook.enabled=true\n"
+                        + "# See yourself from the front while a key is held, as the game's own F5 does. The key is in Options,"
+                        + " Controls, Misc. true or false.\n"
+                        + "snaplook.enabled=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 
