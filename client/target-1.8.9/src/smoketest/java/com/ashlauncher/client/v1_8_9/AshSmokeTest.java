@@ -17,6 +17,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.imageio.ImageIO;
 import com.ashlauncher.client.crosshair.CrosshairHook;
+import com.ashlauncher.client.freelook.Freelook;
+import com.ashlauncher.client.freelook.FreelookHook;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
@@ -129,6 +131,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         screenshot(client, "ash-in-world.png");
 
         toggleSprintWorks(client);
+        freelookWorks(client);
         settingsScreenWorks(client);
         crosshairOptionsWork(client);
         crosshairWorks(client);
@@ -136,7 +139,8 @@ public final class AshSmokeTest implements ClientModInitializer {
         panelIsCrispAtEveryGuiScale(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
-                + " drew its HUD in a world, toggle sprint started and stopped a sprint, and ash's settings"
+                + " drew its HUD in a world, toggle sprint started and stopped a sprint, freelook turned the view and drew the terrain behind"
+                + " without turning the player, and ash's settings"
                 + " opened on their key and switched the FPS readout off and on, and ash's crosshair drew in place"
                 + " of the game's and gave way to it when switched off, and its options changed what it drew, and"
                 + " the hit indicator marked the player's own hit on a pig and not a hurt the player had not attacked it for,"
@@ -193,6 +197,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"toggle-sprint\", \"name\": \"Toggle sprint\", \"status\": \"loaded\" }",
             "{ \"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
+            "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -398,6 +403,80 @@ public final class AshSmokeTest implements ClientModInitializer {
     }
 
     /** A binding by name, checked against every other binding's default key. */
+    /**
+     * Freelook, held with its key: the view turns all the way round, the
+     * terrain behind the player is drawn, and the player's own rotation - on
+     * the client and as the server holds it - never moves.
+     *
+     * <p>Turned through freelook's own hook rather than the mouse. The game's
+     * mouse is read through LWJGL's {@code Mouse}, which nothing here can feed,
+     * and it turns only while the window is active, which under Xvfb it never
+     * is. That the mouse reaches the hook is the mixin's to show, and its
+     * landing is checked at startup and in the load report.
+     *
+     * <p>The terrain is the point on this target: the check of which chunks are
+     * visible reads the player's rotation, so a view turned without it would
+     * show the world behind with its chunks missing. So the chunks drawn looking
+     * behind are counted against those drawn looking ahead, and the picture is
+     * kept for a person to look at.
+     */
+    private static void freelookWorks(MinecraftClient client) {
+        KeyBinding key = binding(client, Freelook.BINDING_NAME);
+        int code = key.getCode();
+        float[] before = onClient(client, () -> new float[] {client.player.yaw, client.player.pitch});
+        int ahead = chunksDrawn(client);
+
+        hold(client, code, true);
+        pause(300L);
+        if (!onClient(client, () -> FreelookKey.freelook().active())) {
+            fail("holding the freelook key did not start freelook");
+        }
+        if (onClient(client, () -> client.options.perspective) != 1) {
+            fail("freelook held in first person did not move the view behind the player");
+        }
+
+        // Half a turn, at the game's own 0.15 degrees per unit.
+        onClient(client, () -> FreelookHook.turn(180 / 0.15, 0));
+        pause(1_500L);
+        int behind = chunksDrawn(client);
+        screenshot(client, "ash-freelook-behind.png");
+        System.out.println("ash smoke test: freelook drew " + behind + " chunks looking behind, " + ahead + " ahead");
+        if (behind == 0 || behind * 2 < ahead) {
+            fail("looking behind with freelook drew " + behind + " chunks against " + ahead
+                    + " ahead: the terrain behind was not brought into view");
+        }
+
+        float[] after = onClient(client, () -> new float[] {client.player.yaw, client.player.pitch});
+        if (after[0] != before[0] || after[1] != before[1]) {
+            fail("freelook turned the player: " + before[0] + "," + before[1] + " became " + after[0] + "," + after[1]);
+        }
+        IntegratedServer server = client.getServer();
+        float seenByServer = onServer(server, () -> server.worlds[0].playerEntities.get(0).yaw);
+        if (Math.abs(seenByServer - before[0]) > 0.01) {
+            fail("the server was told the camera's turn: it has the player at " + seenByServer + ", not " + before[0]);
+        }
+
+        hold(client, code, false);
+        pause(300L);
+        if (onClient(client, () -> FreelookKey.freelook().active())) {
+            fail("letting go of the freelook key did not end freelook");
+        }
+        if (onClient(client, () -> client.options.perspective) != 0) {
+            fail("ending freelook did not put the first-person view back");
+        }
+    }
+
+    /** How many chunks the world renderer drew last frame: its own debug line, "C: drawn/total ...". */
+    private static int chunksDrawn(MinecraftClient client) {
+        String line = onClient(client, () -> client.worldRenderer.getChunksDebugString());
+        try {
+            return Integer.parseInt(line.substring(line.indexOf("C: ") + 3, line.indexOf('/')));
+        } catch (RuntimeException unreadable) {
+            fail("the world renderer's chunk line is not as expected: " + line);
+            return 0;
+        }
+    }
+
     private static KeyBinding binding(MinecraftClient client, String name) {
         KeyBinding found = onClient(client, () -> {
             for (KeyBinding binding : client.options.allKeys) {
