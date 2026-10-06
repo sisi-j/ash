@@ -158,3 +158,70 @@ tasks.register('checkJarHasNoBenchmark') {
 tasks.named('check') {
     dependsOn 'checkJarHasNoBenchmark'
 }
+
+// ---- the game test again, with Sodium (#48) --------------------------------
+
+// Sodium's mixin configs are required, so a clash with one of ash's is a
+// crash at launch - in a player's game, if nothing finds it first. So the
+// client game test runs a second time with Sodium in the mods folder, as a
+// player would add it. Tested against, never shipped: nothing here reaches
+// the jar (ADR-0013). The pin is in `gradle.properties`.
+def sodiumJar = layout.buildDirectory.file("sodium/sodium-fabric-${sodium_version}.jar")
+
+tasks.register('downloadSodium') {
+    group = 'verification'
+    description = 'Fetches the pinned Sodium jar and refuses it unless its SHA-512 is the pinned one.'
+    inputs.property('url', sodium_url)
+    inputs.property('sha512', sodium_sha512)
+    outputs.file(sodiumJar)
+
+    doLast {
+        def jar = sodiumJar.get().asFile
+        jar.parentFile.mkdirs()
+        new URI(sodium_url).toURL().withInputStream { input -> jar.withOutputStream { it << input } }
+        def digest = java.security.MessageDigest.getInstance('SHA-512').digest(jar.bytes).encodeHex().toString()
+        if (digest != sodium_sha512) {
+            jar.delete()
+            throw new GradleException("Sodium ${sodium_version} from ${sodium_url} is not the jar that was pinned:"
+                    + " its SHA-512 is ${digest}")
+        }
+    }
+}
+
+def sodiumRunDir = file('build/run/clientGameTestSodium')
+
+loom {
+    runs {
+        // Everything the plain game test has, in a run directory of its own
+        // with Sodium in its `mods`. The loader remaps a mod there at launch,
+        // as it would a player's. The test is told, so it can insist Sodium
+        // really loaded - a second run that quietly ran without it would
+        // prove nothing.
+        clientGameTestSodium {
+            inherit(loom.runs.getByName('clientGameTest'))
+            configName = 'ash client game test, with Sodium (1.21.11)'
+            runDir 'build/run/clientGameTestSodium'
+            property 'ash.gametest.sodium', 'true'
+        }
+    }
+}
+
+tasks.register('prepareSodiumGameTest') {
+    description = 'A clean run directory for the game test with Sodium: the pinned jar in its mods, and the EULA.'
+    dependsOn 'downloadSodium'
+    doLast {
+        project.delete(sodiumRunDir)
+        project.copy {
+            from sodiumJar
+            into new File(sodiumRunDir, 'mods')
+        }
+        // Accepted for this run as for the game test without Sodium, by the
+        // same decision: docs/adr/0016-ci-accepts-the-minecraft-eula.md.
+        new File(sodiumRunDir, 'eula.txt').text = '# Accepted by ash\'s build, as for the game test without Sodium:' +
+                ' docs/adr/0016-ci-accepts-the-minecraft-eula.md\neula=true\n'
+    }
+}
+
+tasks.named('runClientGameTestSodium') {
+    dependsOn 'prepareSodiumGameTest'
+}

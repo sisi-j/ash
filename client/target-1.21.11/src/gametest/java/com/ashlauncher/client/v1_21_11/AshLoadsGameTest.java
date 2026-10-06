@@ -59,6 +59,9 @@ import net.minecraft.world.phys.EntityHitResult;
  */
 public class AshLoadsGameTest implements FabricClientGameTest {
 
+    /** Whether this is the run with Sodium in the mods folder: `runClientGameTestSodium` sets it. */
+    private static final boolean WITH_SODIUM = Boolean.getBoolean("ash.gametest.sodium");
+
     @Override
     public void runTest(ClientGameTestContext context) {
         // Far enough in that the vanilla client is ticking rather than merely
@@ -68,6 +71,14 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         if (!FabricLoader.getInstance().isModLoaded("ash")) {
             throw new AssertionError(
                     "the vanilla client started without ash in it, which is the one thing this tier is for");
+        }
+        // The same test runs twice in CI: as it is, and with Sodium in the
+        // mods folder as a player would add it (#48). Each run insists on
+        // the Sodium it was promised: a second run that quietly ran without
+        // it would prove nothing, and the first must not have picked it up.
+        if (FabricLoader.getInstance().isModLoaded("sodium") != WITH_SODIUM) {
+            throw new AssertionError(WITH_SODIUM ? "the run with Sodium started without Sodium in it"
+                    : "Sodium is loaded in the run without it");
         }
 
         // The settings file is written while the client initialises, so by now
@@ -102,9 +113,10 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             assertReportSays(feature);
         }
         // Read from the real loader's mod origins: nothing of a player's is in
-        // this game's mods folder, and Fabric API came from where the build put
-        // it, so the copy that ran is ash's.
-        assertReportSays("\"third_party_mods\": false");
+        // this game's mods folder - except Sodium, in the run with it - and
+        // Fabric API came from where the build put it, so the copy that ran
+        // is ash's.
+        assertReportSays("\"third_party_mods\": " + WITH_SODIUM);
         assertReportSays("{ \"id\": \"fabric-api\", \"copy\": \"ash\" }");
 
         context.takeScreenshot("ash-loaded");

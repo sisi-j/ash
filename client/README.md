@@ -131,6 +131,21 @@ Both run in CI on Linux only, and that is a capability rather than a
 preference - see `docs/adr/0016-ci-accepts-the-minecraft-eula.md`, which also
 records what they cost and what a headless runner does and does not provide.
 
+**The 1.21.11 test runs twice: once as it is, and once with Sodium** (#48),
+as `runClientGameTestSodium`.
+
+- Sodium's mixin configs are required, so a clash with one of ash's is a crash
+  at launch. The second run finds that before a player does, and every later
+  feature is held to it.
+- The jar is pinned by version, URL and SHA-512 in `gradle.properties`. A
+  download whose hash is not the pinned one is refused.
+- It goes into that run's own `mods` folder, where the loader remaps it as it
+  would a player's.
+- The test is told which run it is in. It insists Sodium loaded exactly when
+  promised, and that the load report counts it as a player's mod.
+- Sodium is tested against and never shipped: none of it reaches the jar
+  (ADR-0013).
+
 ## Measuring frame time
 
 The frame-time measurement runs one fixed scene in a real game and records
