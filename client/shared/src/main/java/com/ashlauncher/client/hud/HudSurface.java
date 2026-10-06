@@ -22,8 +22,18 @@ package com.ashlauncher.client.hud;
  */
 public interface HudSurface {
 
+    /** Width of the drawable area, in the game's scaled GUI units. */
+    int width();
+
     /** Height of the drawable area, in the game's scaled GUI units. */
     int height();
+
+    /**
+     * How wide {@code text} draws in the game's own font, in the same units:
+     * what a readout needs to stay on screen at the right edge, and what Edit
+     * HUD outlines.
+     */
+    int textWidth(String text);
 
     /**
      * Height of one line of the game's own font, in the same units.

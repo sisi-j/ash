@@ -42,16 +42,29 @@ final class AshSettingsScreen extends Screen {
         panel.resize(window.getWidth(), window.getHeight());
     }
 
-    /** The game's own blur, and none of its darkening: the panel is the dark part. */
+    /**
+     * The game's own blur, and none of its darkening: the panel is the dark
+     * part. None at all in Edit HUD, where the readouts have to be seen as
+     * they will be.
+     */
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBlurredBackground(graphics);
+        if (!panel.editingHud()) {
+            renderBlurredBackground(graphics);
+        }
+    }
+
+    /** Closed by any means - its key, Escape, another screen - Edit HUD closes with it. */
+    @Override
+    public void removed() {
+        panel.closed();
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         Window window = minecraft.getWindow();
         float scale = window.getGuiScale();
+        panel.setGuiScale(window.getGuiScale());
         graphics.pose().pushMatrix();
         graphics.pose().scale(1 / scale, 1 / scale);
         // The cursor from the mouse handler, not the GUI-unit position the

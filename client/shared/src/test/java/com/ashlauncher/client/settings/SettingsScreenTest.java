@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ashlauncher.client.hud.Placement;
 import com.ashlauncher.client.report.Feature;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,6 +38,29 @@ class SettingsScreenTest {
             }
         }
         throw new AssertionError("no row for " + setting.key());
+    }
+
+    @Test
+    void a_readout_s_place_is_set_in_edit_hud_so_it_gives_the_readout_no_options_page() {
+        SettingsScreen screen = screenWhereEverythingLanded(Settings.load(configDir));
+
+        assertFalse(row(screen, Settings.FPS_READOUT).hasOptions());
+        assertFalse(row(screen, Settings.PING_READOUT).hasOptions());
+    }
+
+    @Test
+    void resetting_the_readouts_puts_both_back_and_says_so() {
+        Settings settings = Settings.load(configDir);
+        settings.set(Settings.FPS_READOUT_POSITION, Placement.parse("bottom-right 4 4"));
+        settings.set(Settings.PING_READOUT_POSITION, Placement.parse("top-right 4 4"));
+        SettingsScreen screen = screenWhereEverythingLanded(settings);
+
+        screen.resetReadouts();
+
+        assertEquals(Settings.FPS_READOUT_POSITION.fallback(), Settings.load(configDir).get(Settings.FPS_READOUT_POSITION));
+        assertEquals(Settings.PING_READOUT_POSITION.fallback(),
+                Settings.load(configDir).get(Settings.PING_READOUT_POSITION));
+        assertFalse(changes.isEmpty(), "the load report was not rewritten");
     }
 
     @Test

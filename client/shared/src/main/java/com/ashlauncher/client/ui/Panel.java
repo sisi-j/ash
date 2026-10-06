@@ -1,5 +1,7 @@
 package com.ashlauncher.client.ui;
 
+import com.ashlauncher.client.hud.HudLayout;
+import com.ashlauncher.client.hud.Placement;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.settings.Choice;
 import com.ashlauncher.client.settings.Colour;
@@ -21,7 +23,9 @@ import java.util.function.LongSupplier;
  * <p>An 85% panel over the blurred game: a strip down its left with SETTINGS,
  * Edit HUD and the gear for ash's own settings, and a tile per feature with
  * its ENABLED or DISABLED button. A tile with options opens its
- * {@link OptionsPage} in place of the tiles. Still to come: icons, search and
+ * {@link OptionsPage} in place of the tiles. Edit HUD puts the panel away and
+ * outlines each readout over the game, to be dragged where the player wants
+ * it (#41). Still to come: icons, search and
  * tabs (#65), motion (#66), the final options pages (#67), ash's own settings
  * (#69) and FPS marks (#70).
  *
@@ -54,6 +58,15 @@ public final class Panel {
     private long toastAt;
     /** Whether the game is blurring what is behind the panel; where it cannot, the panel darkens it more. */
     private boolean blurred = true;
+    /** Real pixels to one of the game's GUI units, which the readouts are placed in. */
+    private int guiScale = 2;
+    /** Whether Edit HUD is open in place of the panel. */
+    private boolean editingHud;
+    /** The readout being dragged in Edit HUD, or {@code null}. */
+    private HudLayout.Readout dragging;
+    /** Where in the dragged readout the mouse took hold of it, in GUI units, so it does not jump to the cursor. */
+    private float grabX;
+    private float grabY;
 
     /** @param close closes the screen the panel is on */
     public Panel(SettingsScreen model, Runnable close) {
@@ -79,17 +92,51 @@ public final class Panel {
         this.blurred = blurred;
     }
 
+    /** The game's GUI scale, which the readouts are laid out in: whenever the screen draws. */
+    public void setGuiScale(int guiScale) {
+        this.guiScale = Math.max(1, guiScale);
+    }
+
+    /**
+     * Whether Edit HUD is open: the panel is put away, and the screen shows
+     * the game as it is, unblurred, so the readouts read as they will.
+     */
+    public boolean editingHud() {
+        return editingHud;
+    }
+
+    /** The screen the panel is on has closed - by its key, perhaps mid-drag - and Edit HUD with it. */
+    public void closed() {
+        stopEditingHud();
+    }
+
+    private void startEditingHud() {
+        editingHud = true;
+        page = null;
+        ashSettings = false;
+        model.hudLayout().setEditing(true);
+    }
+
+    private void stopEditingHud() {
+        editingHud = false;
+        dragging = null;
+        model.hudLayout().setEditing(false);
+    }
+
     // ---- input, in real pixels ----
 
     /** A left click. Returns whether it landed on anything. */
     public boolean mouseClicked(int x, int y) {
+        if (editingHud) {
+            return hudEditClicked(x, y);
+        }
         if (gearButton().contains(x, y)) {
             ashSettings = !ashSettings;
             page = null;
             return true;
         }
         if (editHudButton().contains(x, y)) {
-            say("Edit HUD is coming soon.");
+            startEditingHud();
             return true;
         }
         if (page != null) {
@@ -121,21 +168,69 @@ public final class Panel {
         page = new OptionsPage(model, row, () -> page = null);
     }
 
-    /** The mouse moved with the left button held, as when dragging a slider. */
+    /**
+     * In Edit HUD: Done, Reset, or taking hold of a readout. Every click is
+     * Edit HUD's, so one on the empty game does nothing rather than reach the
+     * panel behind it.
+     */
+    private boolean hudEditClicked(int x, int y) {
+        if (doneButton().contains(x, y)) {
+            stopEditingHud();
+            return true;
+        }
+        if (resetReadoutsButton().contains(x, y)) {
+            model.resetReadouts();
+            return true;
+        }
+        HudLayout layout = model.hudLayout();
+        for (HudLayout.Readout readout : HudLayout.Readout.values()) {
+            Rect box = readoutBox(readout);
+            if (box != null && box.contains(x, y)) {
+                Placement placement = layout.placement(readout);
+                grabX = x / (float) guiScale - placement.x(layout.width(readout), guiWidth());
+                grabY = y / (float) guiScale - placement.y(layout.height(readout), guiHeight());
+                dragging = readout;
+                layout.drag(readout, placement);
+                return true;
+            }
+        }
+        return true;
+    }
+
+    /** The mouse moved with the left button held, as when dragging a slider or a readout. */
     public void mouseDragged(int x, int y) {
-        if (page != null && pageSurface != null) {
+        if (editingHud) {
+            if (dragging != null) {
+                HudLayout layout = model.hudLayout();
+                int left = Math.round(x / (float) guiScale - grabX);
+                int top = Math.round(y / (float) guiScale - grabY);
+                layout.drag(dragging, Placement.nearest(left, top, layout.width(dragging), layout.height(dragging),
+                        guiWidth(), guiHeight()));
+            }
+        } else if (page != null && pageSurface != null) {
             page.drag(pageSurface.toUnitsX(x), pageSurface.toUnitsY(y));
         }
     }
 
+    /** A dragged readout stays where it was let go, and is saved there at once. */
     public void mouseReleased() {
-        if (page != null) {
+        if (dragging != null) {
+            HudLayout layout = model.hudLayout();
+            Placement dropped = layout.placement(dragging);
+            HudLayout.Readout readout = dragging;
+            dragging = null;
+            layout.endDrag();
+            model.change(readout.position(), dropped);
+        } else if (page != null) {
             page.release();
         }
     }
 
     /** The mouse wheel: positive is away from the player, which scrolls up. */
     public void mouseScrolled(double amount) {
+        if (editingHud) {
+            return;
+        }
         if (page != null) {
             page.scroll(amount);
         } else if (amount > 0) {
@@ -145,8 +240,14 @@ public final class Panel {
         }
     }
 
-    /** Escape goes back from a page, and closes the panel from the tiles. */
+    /** Escape goes back from a page or Edit HUD, and closes the panel from the tiles. */
     public void keyPressed(Key key) {
+        if (editingHud) {
+            if (key == Key.ESCAPE || key == Key.BACKSPACE || key == Key.ENTER) {
+                stopEditingHud();
+            }
+            return;
+        }
         if (page != null && page.keyPressed(key)) {
             return;
         }
@@ -210,6 +311,47 @@ public final class Panel {
     public Rect editHudButton() {
         Rect gear = gearButton();
         return new Rect(gear.x, gear.y - units(0.6) - gear.height, gear.width, gear.height);
+    }
+
+    /** The screen's width in GUI units, as the game works it out: a part unit counts as a unit. */
+    private int guiWidth() {
+        return (width + guiScale - 1) / guiScale;
+    }
+
+    private int guiHeight() {
+        return (height + guiScale - 1) / guiScale;
+    }
+
+    /**
+     * Where a readout is outlined in Edit HUD, a GUI unit round its text;
+     * {@code null} when it is switched off, or has not drawn yet to say how
+     * big it is.
+     */
+    public Rect readoutBox(HudLayout.Readout readout) {
+        HudLayout layout = model.hudLayout();
+        int w = layout.width(readout);
+        int h = layout.height(readout);
+        if (!layout.shown(readout) || w == 0 || h == 0) {
+            return null;
+        }
+        Placement placement = layout.placement(readout);
+        int x = placement.x(w, guiWidth());
+        int y = placement.y(h, guiHeight());
+        return new Rect((x - 1) * guiScale, (y - 1) * guiScale, (w + 1) * guiScale, (h + 1) * guiScale);
+    }
+
+    /** Edit HUD's Done, top-right, back to the panel. */
+    public Rect doneButton() {
+        int w = units(5.5);
+        int h = units(2.3);
+        return new Rect(width - units(1.2) - w, units(1.2), w, h);
+    }
+
+    /** Edit HUD's Reset, beside Done: both readouts back where they started. */
+    public Rect resetReadoutsButton() {
+        Rect done = doneButton();
+        int w = units(5.5);
+        return new Rect(done.x - units(0.6) - w, done.y, w, done.height);
     }
 
     /** Where the tiles, or a page, go. */
@@ -383,6 +525,10 @@ public final class Panel {
         if (canvas.width() != width || canvas.height() != height) {
             resize(canvas.width(), canvas.height());
         }
+        if (editingHud) {
+            drawHudEditing(canvas, mouseX, mouseY);
+            return;
+        }
         scroll = Math.min(scroll, maxScroll());
         canvas.fill(0, 0, width, height, blurred ? Palette.OVERLAY : Palette.OVERLAY_UNBLURRED);
 
@@ -398,7 +544,7 @@ public final class Panel {
         Paint.outline(canvas, panel.x, panel.y, panel.width, panel.height, radius, Palette.PANEL_EDGE);
 
         drawLetters(canvas, panel);
-        drawIconButton(canvas, editHudButton(), Ink.Icon.LAYOUT, units(0.65), 0.52f, 0.42f, mouseX, mouseY);
+        drawIconButton(canvas, editHudButton(), Ink.Icon.LAYOUT, units(0.65), 0.52f, 1f, mouseX, mouseY);
         drawIconButton(canvas, gearButton(), Ink.Icon.GEAR, units(0.65), 0.52f, 1f, mouseX, mouseY);
 
         if (page != null) {
@@ -501,6 +647,100 @@ public final class Panel {
         pageSurface = new CanvasScreenSurface(canvas, scale, main.x, main.y);
         Rect area = new Rect(0, 0, (int) Math.floor(main.width / scale), (int) Math.floor(main.height / scale));
         page.render(pageSurface, area, pageSurface.toUnitsX(mouseX), pageSurface.toUnitsY(mouseY));
+    }
+
+    /**
+     * Edit HUD, as the prototype on {@code prototype/ash-ui} has it: the game
+     * lightly dimmed, each readout that is on outlined and tagged with the
+     * anchor it will keep, a hint along the top, and Reset and Done. The
+     * readouts themselves are the game's, drawn beneath. While one is
+     * dragged, everything but the boxes steps out of the way.
+     */
+    private void drawHudEditing(Canvas canvas, int mouseX, int mouseY) {
+        canvas.fill(0, 0, width, height, Palette.HUD_EDIT_SCRIM);
+        boolean any = false;
+        for (HudLayout.Readout readout : HudLayout.Readout.values()) {
+            Rect box = readoutBox(readout);
+            if (box == null) {
+                continue;
+            }
+            any = true;
+            boolean held = readout == dragging || (dragging == null && box.contains(mouseX, mouseY));
+            canvas.fill(box.x, box.y, box.width, box.height, held ? Palette.HUD_BOX_HOVER : Palette.HUD_BOX);
+            drawDashed(canvas, box, Math.max(1, units(0.1)), Palette.TEXT);
+            drawTag(canvas, readout, box);
+        }
+        if (dragging != null) {
+            return;
+        }
+
+        String hint = any ? "Drag the readouts anywhere. They keep their place when the window changes size."
+                : "Switch the FPS or ping readout on to move it here.";
+        float size = textSize(0.85f);
+        Rect done = doneButton();
+        int w = Ink.width(hint, Ink.Weight.REGULAR, size) + 2 * units(0.8);
+        int x = (width - w) / 2;
+        Paint.roundRect(canvas, x, done.y, w, done.height, units(0.35), Palette.SCRIM, 1f);
+        Paint.outline(canvas, x, done.y, w, done.height, units(0.35), Palette.LINE);
+        Ink.text(hint, Ink.Weight.REGULAR, size, Palette.TEXT).drawAt(canvas, x + units(0.8),
+                done.y + (done.height - Ink.lineHeight(Ink.Weight.REGULAR, size)) / 2, 1f);
+
+        drawTextButton(canvas, resetReadoutsButton(), "Reset", false, mouseX, mouseY);
+        drawTextButton(canvas, done, "Done", true, mouseX, mouseY);
+    }
+
+    /** A rectangle's edge in dashes, {@code thickness} thick. */
+    private void drawDashed(Canvas canvas, Rect box, int thickness, int colour) {
+        int dash = Math.max(2, units(0.45));
+        int step = dash + Math.max(2, units(0.3));
+        for (int x = box.x; x < box.x + box.width; x += step) {
+            int w = Math.min(dash, box.x + box.width - x);
+            canvas.fill(x, box.y, w, thickness, colour);
+            canvas.fill(x, box.y + box.height - thickness, w, thickness, colour);
+        }
+        for (int y = box.y; y < box.y + box.height; y += step) {
+            int h = Math.min(dash, box.y + box.height - y);
+            canvas.fill(box.x, y, thickness, h, colour);
+            canvas.fill(box.x + box.width - thickness, y, thickness, h, colour);
+        }
+    }
+
+    /**
+     * "FPS readout · Top left" beside a readout's box - to its right, or its
+     * left where there is no room - so the tags of readouts stacked one above
+     * the other, as they start, never cover the next box.
+     */
+    private void drawTag(Canvas canvas, HudLayout.Readout readout, Rect box) {
+        String tag = readout.feature().displayName() + " · "
+                + model.hudLayout().placement(readout).anchor().label();
+        float size = textSize(0.72f);
+        int padX = units(0.45);
+        int padY = units(0.15);
+        int w = Ink.width(tag, Ink.Weight.REGULAR, size) + 2 * padX;
+        int h = Ink.lineHeight(Ink.Weight.REGULAR, size) + 2 * padY;
+        int x = box.x + box.width + units(0.4);
+        if (x + w > width) {
+            x = Math.max(0, box.x - units(0.4) - w);
+        }
+        int y = Math.max(0, Math.min(box.y + (box.height - h) / 2, height - h));
+        Paint.roundRect(canvas, x, y, w, h, units(0.2), Palette.SCRIM, 1f);
+        Ink.text(tag, Ink.Weight.REGULAR, size, Palette.MUTED).drawAt(canvas, x + padX, y + padY, 1f);
+    }
+
+    /** A button with a word on it: white with dark text when it is the one to press, quiet otherwise. */
+    private void drawTextButton(Canvas canvas, Rect button, String label, boolean primary, int mouseX, int mouseY) {
+        int radius = units(0.35);
+        int fill = primary ? Palette.TEXT : button.contains(mouseX, mouseY) ? Palette.TOAST : Palette.SCRIM;
+        Paint.roundRect(canvas, button.x, button.y, button.width, button.height, radius, fill, 1f);
+        if (!primary) {
+            Paint.outline(canvas, button.x, button.y, button.width, button.height, radius, Palette.LINE);
+        }
+        Ink.Weight weight = primary ? Ink.Weight.SEMIBOLD : Ink.Weight.REGULAR;
+        float size = textSize(0.85f);
+        int textWidth = Ink.width(label, weight, size);
+        int lineHeight = Ink.lineHeight(weight, size);
+        Ink.text(label, weight, size, primary ? Palette.PRIMARY_TEXT : Palette.TEXT)
+                .drawAt(canvas, button.x + (button.width - textWidth) / 2, button.y + (button.height - lineHeight) / 2, 1f);
     }
 
     /** A placeholder until ash's own settings arrive with #69. */

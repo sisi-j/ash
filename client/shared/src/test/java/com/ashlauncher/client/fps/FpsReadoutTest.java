@@ -3,20 +3,51 @@ package com.ashlauncher.client.fps;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ashlauncher.client.hud.Anchor;
 import com.ashlauncher.client.hud.FakeHudSurface;
+import com.ashlauncher.client.hud.HudLayout;
+import com.ashlauncher.client.hud.Placement;
+import com.ashlauncher.client.settings.Settings;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class FpsReadoutTest {
+
+    @TempDir
+    Path configDir;
+
+    private HudLayout layout() {
+        return new HudLayout(Settings.load(configDir));
+    }
+
+    private HudLayout layoutWithFpsOff() {
+        Settings settings = Settings.load(configDir);
+        settings.set(Settings.FPS_READOUT, false);
+        return new HudLayout(settings);
+    }
 
     @Test
     void it_shows_the_frame_rate_the_game_reports() {
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-        new FpsReadout(() -> 144, () -> true).draw(surface);
+        new FpsReadout(() -> 144, layout()).draw(surface);
 
         assertEquals("144 FPS", surface.onlyText().text());
+    }
+
+    @Test
+    void it_draws_where_the_player_put_it() {
+        Settings settings = Settings.load(configDir);
+        settings.set(Settings.FPS_READOUT_POSITION, new Placement(Anchor.BOTTOM_RIGHT, 4, 4));
+        FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
+
+        new FpsReadout(() -> 144, new HudLayout(settings)).draw(surface);
+
+        // 427 by 240; "144 FPS" is seven characters of six, one line of nine.
+        assertEquals(427 - 42 - 4, surface.onlyText().x());
+        assertEquals(240 - 9 - 4, surface.onlyText().y());
     }
 
     @Test
@@ -24,7 +55,7 @@ class FpsReadoutTest {
         // Read once and held, the number would be whatever the frame rate was
         // at the moment the world loaded, for the rest of the session.
         AtomicInteger rate = new AtomicInteger(60);
-        FpsReadout readout = new FpsReadout(rate::get, () -> true);
+        FpsReadout readout = new FpsReadout(rate::get, layout());
 
         FakeHudSurface first = FakeHudSurface.ofTypicalSize();
         readout.draw(first);
@@ -65,7 +96,7 @@ class FpsReadoutTest {
     void it_sits_in_the_top_left_clear_of_the_crosshair_the_hotbar_and_the_chat() {
         FakeHudSurface surface = new FakeHudSurface(320, SMALLEST_GUI_HEIGHT, 9);
 
-        new FpsReadout(() -> 144, () -> true).draw(surface);
+        new FpsReadout(() -> 144, layout()).draw(surface);
 
         FakeHudSurface.Text drawn = surface.onlyText();
         int bottom = drawn.y() + surface.lineHeight();
@@ -80,7 +111,7 @@ class FpsReadoutTest {
     void a_player_who_turned_it_off_sees_nothing() {
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-        new FpsReadout(() -> 144, () -> false).draw(surface);
+        new FpsReadout(() -> 144, layoutWithFpsOff()).draw(surface);
 
         assertEquals(0, surface.drawn().size(), "drew " + surface.drawn());
     }
@@ -89,13 +120,13 @@ class FpsReadoutTest {
     void switching_it_off_in_game_takes_it_off_screen_at_the_next_frame() {
         // The settings screen changes the setting while the game runs, and the
         // player is looking at the result - not waiting for a restart.
-        AtomicBoolean on = new AtomicBoolean(true);
-        FpsReadout readout = new FpsReadout(() -> 144, on::get);
+        Settings settings = Settings.load(configDir);
+        FpsReadout readout = new FpsReadout(() -> 144, new HudLayout(settings));
         FakeHudSurface before = FakeHudSurface.ofTypicalSize();
         readout.draw(before);
         assertEquals(1, before.drawn().size(), "the test proves nothing if it never drew");
 
-        on.set(false);
+        settings.set(Settings.FPS_READOUT, false);
         FakeHudSurface after = FakeHudSurface.ofTypicalSize();
         readout.draw(after);
 
@@ -108,7 +139,7 @@ class FpsReadoutTest {
         // two lines of text on top of each other read as neither.
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize().withDebugScreenShown();
 
-        new FpsReadout(() -> 144, () -> true).draw(surface);
+        new FpsReadout(() -> 144, layout()).draw(surface);
 
         assertEquals(0, surface.drawn().size(), "drew " + surface.drawn());
     }
@@ -121,7 +152,7 @@ class FpsReadoutTest {
         // both, so the answer lives here rather than in either game.
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize().withHudHidden();
 
-        new FpsReadout(() -> 144, () -> true).draw(surface);
+        new FpsReadout(() -> 144, layout()).draw(surface);
 
         assertEquals(0, surface.drawn().size(), "drew " + surface.drawn());
     }
@@ -133,7 +164,7 @@ class FpsReadoutTest {
         // same way on both.
         FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-        new FpsReadout(() -> 144, () -> true).draw(surface);
+        new FpsReadout(() -> 144, layout()).draw(surface);
 
         assertEquals(0xFF, (surface.onlyText().colour() >>> 24) & 0xFF);
     }

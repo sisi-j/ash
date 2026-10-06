@@ -26,13 +26,14 @@ public final class LegacyHudSurface implements HudSurface {
         this.window = new Window(minecraft);
     }
 
-    /**
-     * Width of the drawable area, in scaled GUI units. Not part of
-     * {@link HudSurface}: only this target's entrypoint needs it, to find the
-     * crosshair's centre.
-     */
+    @Override
     public int width() {
         return window.getWidth();
+    }
+
+    @Override
+    public int textWidth(String text) {
+        return minecraft.textRenderer.getStringWidth(text);
     }
 
     @Override
