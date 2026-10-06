@@ -147,7 +147,8 @@ class SettingsTest {
         assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
                 Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
                 Settings.CROSSHAIR_OUTLINE, Settings.HIT_INDICATOR, Settings.HIT_INDICATOR_COLOUR,
-                Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK), Settings.declared());
+                Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT),
+                Settings.declared());
 
         Settings.load(configDir);
 
@@ -185,7 +186,10 @@ class SettingsTest {
                         + "freelook.enabled=true\n"
                         + "# See yourself from the front while a key is held, as the game's own F5 does. The key is in Options,"
                         + " Controls, Misc. true or false.\n"
-                        + "snaplook.enabled=true\n",
+                        + "snaplook.enabled=true\n"
+                        + "# Show your ping to the server beneath the frame rate: the number the server reports, never"
+                        + " measured by ash. Hidden in singleplayer. true or false.\n"
+                        + "ping-readout.enabled=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

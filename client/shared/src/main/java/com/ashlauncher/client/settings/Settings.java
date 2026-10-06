@@ -112,6 +112,11 @@ public final class Settings {
             "See yourself from the front while a key is held, as the game's own F5 does. The key is in Options,"
                     + " Controls, Misc. true or false.");
 
+    public static final OnOff PING_READOUT = new OnOff(Feature.PING_READOUT, Category.HUD,
+            "Your ping to the server, beneath the frame rate.", "ping-readout.enabled", true,
+            "Show your ping to the server beneath the frame rate: the number the server reports, never measured"
+                    + " by ash. Hidden in singleplayer. true or false.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
@@ -122,7 +127,7 @@ public final class Settings {
     private static final List<Setting<?>> DECLARED = Collections.unmodifiableList(Arrays.<Setting<?>>asList(
             FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
-            HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK));
+            HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;

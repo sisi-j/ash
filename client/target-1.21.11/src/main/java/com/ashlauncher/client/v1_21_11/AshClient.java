@@ -11,6 +11,7 @@ import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
+import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
@@ -45,6 +46,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.KeyboardInput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -73,6 +75,8 @@ public final class AshClient implements ClientModInitializer {
 
     private static final Identifier FPS_READOUT = Identifier.fromNamespaceAndPath("ash", "fps_readout");
 
+    private static final Identifier PING_READOUT = Identifier.fromNamespaceAndPath("ash", "ping_readout");
+
     private static final Identifier HIT_INDICATOR = Identifier.fromNamespaceAndPath("ash", "hit_indicator");
 
     /** By name: a mixin class cannot be named by a class literal, because loading one directly is an error. */
@@ -91,6 +95,9 @@ public final class AshClient implements ClientModInitializer {
      * not the screenshot - whether it draws. Package-private and set once.
      */
     static FpsReadout fpsReadout;
+
+    /** The ping readout this session draws, for the real-game test to ask. */
+    static PingReadout pingReadout;
 
     /** The hit indicator this session draws, if its mixin landed, for the real-game test to ask. */
     static HitIndicator hitIndicator;
@@ -117,6 +124,9 @@ public final class AshClient implements ClientModInitializer {
         FpsReadout fpsReadout = new FpsReadout(
                 () -> Minecraft.getInstance().getFps(), () -> settings.get(Settings.FPS_READOUT));
         AshClient.fpsReadout = fpsReadout;
+        PingReadout pingReadout = new PingReadout(AshClient::latency, () -> settings.get(Settings.PING_READOUT),
+                () -> settings.get(Settings.FPS_READOUT));
+        AshClient.pingReadout = pingReadout;
 
         // Last, so nothing vanilla draws over them. That is a decision about
         // this target's element registry rather than about either feature, so
@@ -128,6 +138,8 @@ public final class AshClient implements ClientModInitializer {
                 marker.draw(new GuiGraphicsHudSurface(graphics)));
         HudElementRegistry.addLast(FPS_READOUT, (graphics, tickCounter) ->
                 fpsReadout.draw(new GuiGraphicsHudSurface(graphics)));
+        HudElementRegistry.addLast(PING_READOUT, (graphics, tickCounter) ->
+                pingReadout.draw(new GuiGraphicsHudSurface(graphics)));
 
         // Every feature, less any whose mixin did not land. The settings
         // screen and the load report both read this one set.
@@ -305,6 +317,22 @@ public final class AshClient implements ClientModInitializer {
                     .orElse(Collections.<Path>emptyList());
         }
         return Collections.emptyList();
+    }
+
+    /**
+     * The server's latency for the player's own tab-list entry, the number
+     * behind the tab list's bars; null while this client hosts the world -
+     * asked as "has a singleplayer server", which stays true after opening to
+     * LAN where "is singleplayer" does not (research 0004, 3.1) - or before
+     * the server has listed the player. Read, never measured.
+     */
+    static Integer latency() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.hasSingleplayerServer() || minecraft.player == null || minecraft.getConnection() == null) {
+            return null;
+        }
+        PlayerInfo info = minecraft.getConnection().getPlayerInfo(minecraft.player.getUUID());
+        return info == null ? null : info.getLatency();
     }
 
     private static String clientVersion() {

@@ -24,13 +24,13 @@ public final class FpsReadout {
      * empty on both targets until the debug screen opens, which it is the
      * readout's job to make unnecessary.
      */
-    static final int MARGIN = 4;
+    public static final int MARGIN = 4;
 
     /**
      * Opaque white, as the marker is, and for the same reason: an unset alpha
      * draws nothing on 1.21.11 and opaque on 1.8.9. See {@link HudSurface#drawText}.
      */
-    static final int COLOUR = 0xFFFFFFFF;
+    public static final int COLOUR = 0xFFFFFFFF;
 
     private final FrameRate frameRate;
     private final BooleanSupplier on;
