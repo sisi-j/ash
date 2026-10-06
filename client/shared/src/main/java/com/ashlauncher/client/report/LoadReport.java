@@ -51,8 +51,20 @@ public final class LoadReport {
      * @param on whether the player has it on; true for one with no switch
      */
     public static LoadReport forSession(String clientVersion, Predicate<Feature> landed, Predicate<Feature> on) {
+        return forSession(clientVersion, feature -> true, landed, on);
+    }
+
+    /**
+     * @param present whether this target has the feature at all; one it does
+     *     not have yet is left out, rather than reported as one that degraded
+     */
+    public static LoadReport forSession(String clientVersion, Predicate<Feature> present,
+            Predicate<Feature> landed, Predicate<Feature> on) {
         LoadReport report = new LoadReport(clientVersion);
         for (Feature feature : Feature.values()) {
+            if (!present.test(feature)) {
+                continue;
+            }
             report.with(feature, FeatureStatus.of(on.test(feature), landed.test(feature)));
         }
         return report;

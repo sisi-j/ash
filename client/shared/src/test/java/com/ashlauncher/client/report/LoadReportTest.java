@@ -81,4 +81,13 @@ class LoadReportTest {
         assertTrue(json.contains("\"id\": \"settings-screen\", \"name\": \"ash's settings screen\","
                 + " \"status\": \"loaded\""), json);
     }
+
+    @Test
+    void a_feature_this_target_does_not_have_yet_is_left_out_rather_than_reported_degraded() {
+        String json = LoadReport.forSession("0.1.0", feature -> feature != Feature.FREELOOK,
+                feature -> feature != Feature.FREELOOK, feature -> true).toJson();
+
+        assertFalse(json.contains("freelook"), json);
+        assertFalse(json.contains("degraded"), json);
+    }
 }

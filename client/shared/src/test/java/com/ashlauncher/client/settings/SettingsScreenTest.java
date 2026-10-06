@@ -137,7 +137,37 @@ class SettingsScreenTest {
         // first would tell a different story about the same session.
         SettingsScreen screen = new SettingsScreen(Settings.load(configDir), feature -> false, () -> { });
 
-        assertEquals("FPS readout, Toggle sprint, Crosshair and Hit indicator did not load. That is a problem with ash, not with your game or"
-                + " your setup, and an update to ash will fix it.", screen.footer());
+        assertEquals("FPS readout, Toggle sprint, Crosshair, Hit indicator and Freelook did not load. That is a problem with ash, not with"
+                + " your game or your setup, and an update to ash will fix it.", screen.footer());
+    }
+
+    @Test
+    void a_feature_this_target_does_not_have_yet_has_no_row_at_all() {
+        Settings settings = Settings.load(configDir);
+        SettingsScreen screen = new SettingsScreen(settings, feature -> feature != Feature.FREELOOK,
+                feature -> true, feature -> "", () -> changes.add("changed"));
+
+        for (SettingsScreen.Row row : screen.rows()) {
+            assertTrue(row.feature() != Feature.FREELOOK, "a feature this target lacks has a row");
+        }
+        assertEquals("", screen.footer(), "a feature this target lacks was reported as one that did not load");
+    }
+
+    @Test
+    void a_feature_off_on_this_server_cannot_be_switched_and_says_why_without_blaming_ash() {
+        Settings settings = Settings.load(configDir);
+        SettingsScreen screen = new SettingsScreen(settings, feature -> true, feature -> true,
+                feature -> feature == Feature.FREELOOK ? "Freelook is off on Hypixel: its rules ban it." : "",
+                () -> changes.add("changed"));
+        SettingsScreen.Row freelook = row(screen, Settings.FREELOOK);
+
+        freelook.press();
+
+        assertFalse(freelook.available());
+        assertTrue(freelook.loaded());
+        assertTrue(settings.get(Settings.FREELOOK), "it was switched off as if the player had chosen to");
+        assertEquals("Freelook is off on Hypixel: its rules ban it.", freelook.whyUnavailable());
+        assertEquals("", screen.footer(), "a server's ban was told as ash's fault");
+        assertEquals(List.of(), changes);
     }
 }

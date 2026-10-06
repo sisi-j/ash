@@ -4,6 +4,7 @@ import com.ashlauncher.client.report.Feature;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -29,6 +30,7 @@ public final class SettingsScreen {
 
     private final Settings settings;
     private final Predicate<Feature> landed;
+    private final Function<Feature, String> offHere;
     private final Runnable changed;
     private final List<Row> rows;
     private String saveProblem = "";
@@ -41,12 +43,26 @@ public final class SettingsScreen {
      *     the session ended with
      */
     public SettingsScreen(Settings settings, Predicate<Feature> landed, Runnable changed) {
+        this(settings, feature -> true, landed, feature -> "", changed);
+    }
+
+    /**
+     * @param present whether this target has the feature at all; one it does
+     *     not have yet has no row, rather than a row saying it did not load
+     * @param offHere why a feature is off where the player is now - a server
+     *     whose rules ban it - or empty; its row then cannot be switched
+     */
+    public SettingsScreen(Settings settings, Predicate<Feature> present, Predicate<Feature> landed,
+            Function<Feature, String> offHere, Runnable changed) {
         this.settings = settings;
         this.landed = landed;
+        this.offHere = offHere;
         this.changed = changed;
         List<Row> rows = new ArrayList<>();
         for (OnOff setting : Settings.switches()) {
-            rows.add(new Row(setting));
+            if (present.test(setting.feature())) {
+                rows.add(new Row(setting));
+            }
         }
         this.rows = Collections.unmodifiableList(rows);
     }
@@ -108,7 +124,7 @@ public final class SettingsScreen {
         }
         List<String> unavailable = new ArrayList<>();
         for (Row row : rows) {
-            if (!row.available()) {
+            if (!row.loaded()) {
                 unavailable.add(row.name());
             }
         }
@@ -171,18 +187,34 @@ public final class SettingsScreen {
             return !optionsOf(setting.feature()).isEmpty();
         }
 
-        /** Whether pressing it does anything. False for a feature whose mixins did not land. */
-        public boolean available() {
+        /** Whether the feature's mixins landed this session. */
+        public boolean loaded() {
             return landed.test(setting.feature());
         }
 
+        /** Why it is off where the player is now, or empty. */
+        public String offHere() {
+            return offHere.apply(setting.feature());
+        }
+
         /**
-         * Why this feature cannot be switched, in one line, when it did not
-         * load: what the screen says when it is pressed, in the same terms as
-         * {@link #footer()}. Empty for a feature that did load.
+         * Whether pressing it does anything. False for a feature whose mixins
+         * did not land, and for one that is off on this server.
+         */
+        public boolean available() {
+            return loaded() && offHere().isEmpty();
+        }
+
+        /**
+         * Why this feature cannot be switched, in one line: it did not load, in
+         * the same terms as {@link #footer()}, or it is off on this server and
+         * why. What the screen says when it is pressed. Empty for one that can be.
          */
         public String whyUnavailable() {
-            return available() ? "" : name() + " did not load. An update to ash will fix it.";
+            if (!loaded()) {
+                return name() + " did not load. An update to ash will fix it.";
+            }
+            return offHere();
         }
 
         /**

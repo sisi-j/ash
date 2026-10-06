@@ -12,6 +12,7 @@ public enum Feature {
     TOGGLE_SPRINT("toggle-sprint", "Toggle sprint"),
     CROSSHAIR("crosshair", "Crosshair"),
     HIT_INDICATOR("hit-indicator", "Hit indicator"),
+    FREELOOK("freelook", "Freelook"),
     /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can
