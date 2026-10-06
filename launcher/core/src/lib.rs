@@ -404,31 +404,24 @@ impl Ash {
         )
         .await?;
 
-        // The depot has the bundled mods, verified and shared. The loader
-        // only ever looks in the instance's own mods directory, so being
-        // prepared means they are in both places.
+        // ash's own jars reach the loader by path, from the depot and the
+        // installation, so the mods folder is the player's alone. What Phase
+        // 2 copied into it comes out, by exact name and pinned hash, and
+        // nothing else does.
         if let Some(pin) = pin {
-            for bundled in pin.bundled_mods {
-                instance::install_bundled_mod(
-                    &self.config.instances_root,
-                    id,
-                    &self.config.depot_root.join(bundled.depot_path()?),
-                    bundled.artifact()?,
-                    &bundled.file_name()?,
-                )?;
+            let removed =
+                instance::remove_left_behind(&self.config.instances_root, id, &left_behind(pin)?)?;
+            if !removed.is_empty() {
+                self.diagnostics.info(
+                    "mods-folder-migrated",
+                    &format!("instance={id} removed={}", removed.join(",")),
+                );
             }
 
-            // ash's own client last, so a damaged installation is not
-            // reported before the things that can be re-downloaded have been.
-            if let Some(file_name) = pin.client_jar {
-                instance::install_client(
-                    &self.config.instances_root,
-                    id,
-                    &self.config.client_root,
-                    file_name,
-                    pin.version_id,
-                )?;
-            }
+            // Checked here as well as at launch, so Download only says so
+            // too. Last, so a damaged installation is not reported before
+            // the things that can be re-downloaded have been.
+            self.ash_jars(pin)?;
         }
 
         // An instance with every game file and no JRE is not prepared. The
@@ -753,7 +746,8 @@ impl Ash {
             },
             played_ms: instance.played_ms + open_ms,
             last_session,
-            mods: glance::mods(&game, pin),
+            // Off for every instance until a player can switch them on (#46).
+            mods: glance::mods(&game, pin, false),
         })
     }
 
@@ -815,6 +809,20 @@ impl Ash {
             }
         };
 
+        // A modded instance's loader is told where every mod is: ash's own
+        // by path, and the player's folder moved to one with nothing in it.
+        // A path the loader cannot find is only a warning to it, so each is
+        // checked here, before a game with half of ash in it can start.
+        let instance = self.instance(id)?;
+        let mods = match loader::pin_for(self.config.loaders, instance.loader, &instance.version_id)
+        {
+            None => None,
+            Some(pin) => Some(launch::Mods {
+                add: self.ash_jars(pin)?,
+                folder: Some(self.no_mods_folder()?),
+            }),
+        };
+
         launch::assemble(&launch::LaunchContext {
             metadata: &metadata,
             runtime: &runtime,
@@ -828,6 +836,7 @@ impl Ash {
             os: Os::current(),
             overrides: &overrides::load(&self.config.data_root, id),
             join: join.as_ref(),
+            mods: mods.as_ref(),
         })
     }
 
@@ -921,6 +930,56 @@ impl Ash {
         Ok((parsed.host, parsed.port))
     }
 
+    // ---- ash's own jars ---------------------------------------------------
+
+    /// Every jar of ash's a modded instance loads, as the paths the loader
+    /// is given: the bundled mods in the depot, then ash's client in the
+    /// installation. Each must exist, and a missing one is named.
+    fn ash_jars(&self, pin: &LoaderPin) -> Result<Vec<PathBuf>, AshError> {
+        let mut jars = Vec::new();
+        for bundled in pin.bundled_mods {
+            let relative = bundled.depot_path()?;
+            let path = self.config.depot_root.join(&relative);
+            if !path.is_file() {
+                // Verified in the depot moments ago, so something removed it
+                // since - almost always antivirus software.
+                return Err(AshError::FileVanished { path: relative });
+            }
+            jars.push(path);
+        }
+        if let Some(file_name) = pin.client_jar {
+            let path = self.config.client_root.join(file_name);
+            if !path.is_file() {
+                return Err(AshError::ClientMissing { version_id: pin.version_id.to_owned() });
+            }
+            jars.push(path);
+        }
+        Ok(jars)
+    }
+
+    /// The directory the loader is told is the mods folder while the
+    /// player's own mods are off: one of ash's, under the data root, where a
+    /// player has no reason to put anything.
+    ///
+    /// The loader cannot be told to read no folder, only a different one,
+    /// so this one has to be empty. A jar found in it is removed first: it is
+    /// ash's directory, and a jar in it would load in every instance.
+    fn no_mods_folder(&self) -> Result<PathBuf, AshError> {
+        let folder = self.config.data_root.join("no-mods");
+        std::fs::create_dir_all(&folder)
+            .map_err(AshError::writing("creating the empty mods folder"))?;
+        for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            if name.ends_with(".jar") {
+                self.diagnostics
+                    .warn("no-mods-folder", "removed a jar from ash's empty mods folder");
+                std::fs::remove_file(entry.path())
+                    .map_err(AshError::writing("emptying the empty mods folder"))?;
+            }
+        }
+        Ok(folder)
+    }
+
     /// The version id an instance runs, where its metadata lives, and that
     /// metadata's published hash.
     ///
@@ -949,4 +1008,21 @@ impl Ash {
             loader::pin_for(self.config.loaders, instance.loader, &instance.version_id),
         ))
     }
+}
+
+/// Where Phase 2 copied a pin's jars into an instance's mods folder, and how
+/// to know them: a bundled mod by its name and pinned hash, ash's client by
+/// its fixed name alone.
+fn left_behind(pin: &LoaderPin) -> Result<Vec<instance::LeftBehind>, AshError> {
+    let mut jars = Vec::new();
+    for bundled in pin.bundled_mods {
+        jars.push(instance::LeftBehind {
+            file_name: bundled.file_name()?,
+            sha1: Some(bundled.sha1.to_owned()),
+        });
+    }
+    if let Some(file_name) = pin.client_jar {
+        jars.push(instance::LeftBehind { file_name: file_name.to_owned(), sha1: None });
+    }
+    Ok(jars)
 }

@@ -102,8 +102,19 @@ fn properties(raw: &str) -> Vec<(String, String)> {
     pairs
 }
 
-/// The player's mods, leaving out ash's own client and bundled mods.
-pub(crate) fn mods(game_directory: &Path, pin: Option<&LoaderPin>) -> Vec<String> {
+/// The player's mods that load: those in the mods folder, leaving out any
+/// of ash's own that Phase 2 left there and preparing has not yet removed.
+///
+/// None while the player's own mods are off, because the loader is then
+/// pointed at an empty folder and reads nothing from this one.
+pub(crate) fn mods(
+    game_directory: &Path,
+    pin: Option<&LoaderPin>,
+    players_mods_on: bool,
+) -> Vec<String> {
+    if !players_mods_on {
+        return Vec::new();
+    }
     // A vanilla game loads nothing from the folder, whatever is in it.
     let Some(pin) = pin else {
         return Vec::new();

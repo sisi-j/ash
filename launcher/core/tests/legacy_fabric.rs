@@ -569,19 +569,32 @@ async fn a_prepared_legacy_instance_plans_with_no_network() {
     assert_eq!(plan.version_id, "fabric-loader-9.9.3-1.8.9");
 }
 
+/// The value of a `-Dname=value` JVM argument, if the command line has one.
+fn property<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    let prefix = format!("-D{name}=");
+    args.iter().find_map(|a| a.strip_prefix(&prefix))
+}
+
 #[tokio::test]
-async fn the_api_lands_where_the_loader_looks() {
+async fn the_api_reaches_the_loader_by_path_and_the_classpath_survives() {
     let f = fixture();
     let id = f.modded().await;
 
-    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepared");
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
 
-    assert!(f
-        .ash
-        .game_directory(&id)
-        .join("mods")
-        .join("legacy-fabric-api-9.9.9+1.8.9.jar")
-        .is_file());
+    let added = property(&view.args, "fabric.addMods").expect("ash's jars were not handed over");
+    assert!(added.contains(&file_name(API)), "the api is not among them: {added}");
+    assert!(property(&view.args, "fabric.modsFolder").is_some(), "the player's folder still loads");
+    // The trap on this target: a JVM argument in the loader pin switches off
+    // the fallback that supplies the classpath. ash adds these beside the
+    // heap size instead, so the classpath has to still be there.
+    assert!(view.args.iter().any(|a| a == "-cp"), "the classpath was lost: {:?}", view.args);
+    let mods = f.ash.game_directory(&id).join("mods");
+    assert_eq!(
+        std::fs::read_dir(&mods).unwrap().count(),
+        0,
+        "ash put something in the mods folder"
+    );
 }
 
 // ---- and vanilla 1.8.9 is untouched -------------------------------------------
@@ -742,24 +755,24 @@ async fn a_mirrored_artifact_that_does_not_match_its_hash_is_rejected() {
 // ---- ash's own client -------------------------------------------------------
 
 #[tokio::test]
-async fn ashs_own_client_and_everything_it_calls_land_in_the_instance() {
+async fn ashs_own_client_and_everything_it_calls_reach_the_loader() {
     let f = fixture_with(serving());
     let id = f.modded().await;
 
-    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepared");
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
 
-    let mods = f.ash.game_directory(&id).join("mods");
-    assert_eq!(
-        std::fs::read(mods.join(ASH_CLIENT)).ok().as_deref(),
-        Some(ASH_CLIENT_JAR),
-        "ash's client is not in the instance, or is not the one that shipped"
+    let added = property(&view.args, "fabric.addMods").expect("ash's jars were not handed over");
+    let client = f.ash.config().client_root.join(ASH_CLIENT);
+    assert!(
+        added.contains(&client.display().to_string()),
+        "ash's client is not among them: {added}"
     );
     // And the API beside it. The aggregator alone would put "Legacy Fabric
     // API" in the mod list and nothing on the class path: it is four entries
     // and no classes, so the module is what ash's client actually calls into.
     // A loader that cannot resolve a declared dependency refuses to start.
-    assert!(mods.join(file_name(API)).is_file(), "the API aggregator is missing");
-    assert!(mods.join(file_name(API_MODULE)).is_file(), "the API module is missing");
+    assert!(added.contains(&file_name(API)), "the API aggregator is missing: {added}");
+    assert!(added.contains(&file_name(API_MODULE)), "the API module is missing: {added}");
 
     // None of it came over the network. `serving` has no route for ash's own
     // client, so a fetch would have panicked rather than failed quietly.
@@ -778,11 +791,11 @@ async fn the_client_survives_legacy_fabrics_repository_being_unreachable() {
     let f = fixture_with(with_mirror(serving()).host_unreachable(LEGACY));
     let id = f.modded().await;
 
-    f.ash.prepare_instance(&id, &NullSink, &Cancel::new()).await.expect("prepared");
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
 
-    let mods = f.ash.game_directory(&id).join("mods");
-    assert!(mods.join(ASH_CLIENT).is_file(), "ash's client is missing");
-    assert!(mods.join(file_name(API_MODULE)).is_file(), "the API module is missing");
+    let added = property(&view.args, "fabric.addMods").expect("ash's jars were not handed over");
+    assert!(added.contains(ASH_CLIENT), "ash's client is missing: {added}");
+    assert!(added.contains(&file_name(API_MODULE)), "the API module is missing: {added}");
     assert!(
         f.http.requested().iter().any(|url| url.starts_with(MIRROR)),
         "the test proves nothing if the mirror was never asked"

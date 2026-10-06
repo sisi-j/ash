@@ -325,86 +325,52 @@ pub(crate) fn unseen_end(instances_root: &Path, id: &InstanceId, started_ms: u64
         .map_or(started_ms, |written| (written.as_millis() as u64).max(started_ms))
 }
 
-/// The one directory a loader reads, made if it is not there yet.
-///
-/// Both installs below go through this. What they do *not* share is the
-/// failure they report on the way out - "installing a bundled mod" and
-/// "installing ash's client" send a reader to different places - so the copy
-/// itself stays with each of them rather than becoming a parameter.
-fn mods_dir(instances_root: &Path, id: &InstanceId) -> Result<PathBuf, AshError> {
-    let mods = game_dir(instances_root, id).join("mods");
-    fs::create_dir_all(&mods).map_err(storage_err("creating the mods directory"))?;
-    Ok(mods)
+/// One of ash's own jars as Phase 2 left it in the mods folder: its exact
+/// file name, and the SHA-1 its bytes must have for it to be ash's.
+pub(crate) struct LeftBehind {
+    pub(crate) file_name: String,
+    /// `None` for ash's client, which ships in the installer with no pinned
+    /// hash, so its fixed name is all there is to know it by.
+    pub(crate) sha1: Option<String>,
 }
 
-/// Put a bundled mod where the loader will find it.
+/// Remove the jars Phase 2 copied into the mods folder, and nothing else.
 ///
-/// Copied out of the depot rather than fetched again: the depot already has
-/// it verified, and two instances on one version target share those bytes.
-///
-/// An ash release that moves a pin has to *replace* the jar rather than sit
-/// beside it. A loader refuses to start when two files claim one mod id, so
-/// leaving the previous version behind would turn an ash update into a game
-/// that no longer launches - and the player would have no reason to connect
-/// the two.
-///
-/// Removal is scoped to this artifact's own file names. A player's own mods,
-/// worlds and resource packs share this directory tree and are not ash's to
-/// manage; preparing an instance must never touch them.
-pub(crate) fn install_bundled_mod(
+/// The mods folder is the player's now: the loader is handed ash's jars by
+/// path. A file is removed only when its name is exactly one ash wrote and,
+/// for a bundled mod, its bytes are exactly the pinned ones. A player's own
+/// download of the same mod, under the same name or any other, is not ash's
+/// to touch. Returns the names removed.
+pub(crate) fn remove_left_behind(
     instances_root: &Path,
     id: &InstanceId,
-    source: &Path,
-    artifact: &str,
-    file_name: &str,
-) -> Result<(), AshError> {
-    let mods = mods_dir(instances_root, id)?;
-
-    let prefix = format!("{artifact}-");
-    for entry in fs::read_dir(&mods).into_iter().flatten().flatten() {
-        let Ok(name) = entry.file_name().into_string() else {
+    left_behind: &[LeftBehind],
+) -> Result<Vec<String>, AshError> {
+    let mods = game_dir(instances_root, id).join("mods");
+    let mut removed = Vec::new();
+    for jar in left_behind {
+        let path = mods.join(&jar.file_name);
+        if !path.is_file() {
             continue;
+        }
+        let ours = match &jar.sha1 {
+            None => true,
+            Some(pinned) => fs::read(&path)
+                .map(|bytes| sha1_hex(&bytes).eq_ignore_ascii_case(pinned))
+                .unwrap_or(false),
         };
-        if name != file_name && name.starts_with(&prefix) && name.ends_with(".jar") {
-            let _ = fs::remove_file(entry.path());
+        if ours {
+            fs::remove_file(&path)
+                .map_err(storage_err("removing ash's jar from the mods folder"))?;
+            removed.push(jar.file_name.clone());
         }
     }
-
-    fs::copy(source, mods.join(file_name))
-        .map(|_| ())
-        .map_err(storage_err("installing a bundled mod"))
+    Ok(removed)
 }
 
-/// Put ash's own client where the loader will find it.
-///
-/// Copied out of the installation rather than the depot, because this jar is
-/// not downloaded: it ships inside the installer so that the launcher and the
-/// client can never be version-skewed. There is correspondingly nothing to
-/// verify - the bytes arrived the same way ash's own executable did.
-///
-/// A missing one is refused rather than skipped. Preparing without it would
-/// produce a modded instance with a loader, an API and no ash client, which
-/// starts perfectly well and is not the thing the player asked for.
-///
-/// The file name is fixed per version target, so an ash update overwrites the
-/// previous client rather than leaving it beside the new one - a loader
-/// refuses to start when two files claim one mod id.
-pub(crate) fn install_client(
-    instances_root: &Path,
-    id: &InstanceId,
-    client_root: &Path,
-    file_name: &str,
-    version_id: &str,
-) -> Result<(), AshError> {
-    let source = client_root.join(file_name);
-    if !source.is_file() {
-        return Err(AshError::ClientMissing { version_id: version_id.to_owned() });
-    }
-
-    let mods = mods_dir(instances_root, id)?;
-    fs::copy(&source, mods.join(file_name))
-        .map(|_| ())
-        .map_err(storage_err("installing ash's client"))
+fn sha1_hex(bytes: &[u8]) -> String {
+    use sha1::{Digest, Sha1};
+    Sha1::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn dir_entry_names(dir: &Path) -> Vec<String> {
