@@ -157,14 +157,14 @@ function serverIcon(colour: string): string {
   return canvas.toDataURL().replace("data:image/png;base64,", "");
 }
 
-/** Each instance's list as its game wrote it. The vanilla one has never opened Multiplayer. */
+/** Each instance's servers as ash-core serves them: the 1.21.11 one has joined Hypixel, the 1.8.9 one nothing yet, and the vanilla one has never opened Multiplayer. */
 const SERVERS: Record<string, ServerEntry[]> = {
   a: [
-    { name: "Hypixel", address: "mc.hypixel.net", icon: serverIcon("#e0a526") },
-    { name: "Bedwars Practice", address: "bedwarspractice.club", icon: null },
-    { name: "Old SMP", address: "smp.example.net:25570", icon: null },
+    { name: "Hypixel", address: "mc.hypixel.net", icon: serverIcon("#e0a526"), last_joined_ms: now - 2 * HOUR },
+    { name: "Bedwars Practice", address: "bedwarspractice.club", icon: null, last_joined_ms: null },
+    { name: "Old SMP", address: "smp.example.net:25570", icon: null, last_joined_ms: null },
   ],
-  b: [{ name: "Hypixel", address: "mc.hypixel.net", icon: serverIcon("#e0a526") }],
+  b: [{ name: "Hypixel", address: "mc.hypixel.net", icon: serverIcon("#e0a526"), last_joined_ms: null }],
   c: [],
 };
 

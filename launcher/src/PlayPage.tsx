@@ -23,8 +23,8 @@ import { Face } from "./TitleBar";
  * The launcher's home: who is playing, LAUNCH GAME for the selected
  * instance, and below it the instances to choose from.
  *
- * The servers card lists the game's own server list; #75 puts the ones
- * played most recently first.
+ * The servers card puts the servers the player joined most recently first,
+ * from ash's client's own record, then the rest of the game's list.
  */
 export function PlayPage(props: {
   player: Account | null;
@@ -152,7 +152,7 @@ function ServersCard(props: { instance: Instance; launch: Launch; sounds: boolea
   return (
     <div className="card servers-card">
       <h3>
-        Servers <small>{instance.name}</small>
+        {servers?.some((s) => s.last_joined_ms !== null) ? "Recent servers" : "Servers"} <small>{instance.name}</small>
       </h3>
       {servers && servers.length === 0 && (
         <p className="hint">No servers yet. Add one in the game's Multiplayer screen.</p>

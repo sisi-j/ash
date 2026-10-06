@@ -60,7 +60,8 @@ npm run check:ui
 Builds the real screens as the app builds them, but with
 `ui-check/fake-api.ts` in place of `src/api.ts`, and renders each state that
 matters in Chromium: signed out, no instances, idle, the account menu,
-preparing (with launch sounds on and off), playing, the Servers card (online
+preparing (with launch sounds on and off), playing, the Servers card (recent servers
+first and the title an instance that has joined nothing keeps, online
 and offline servers, a Join, and an instance with none), the "This instance" card
 (for an ash instance and a vanilla one, and its shortcut to the instance page),
 a crash with the player's own mods on (named, with Play without them), a failed

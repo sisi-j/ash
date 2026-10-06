@@ -79,16 +79,19 @@ fn a_list_written_by_1_21_11_reads_in_its_order_without_its_hidden_entry() {
                 name: "Hypixel".into(),
                 address: "mc.hypixel.net".into(),
                 icon: Some(ICON.into()),
+                last_joined_ms: None,
             },
             ServerEntry {
                 name: "Local test".into(),
                 address: "localhost:25570".into(),
-                icon: None
+                icon: None,
+                last_joined_ms: None,
             },
             ServerEntry {
                 name: "Spëcial ★ server".into(),
                 address: "[::1]:25565".into(),
                 icon: None,
+                last_joined_ms: None,
             },
         ]
     );
@@ -235,4 +238,119 @@ async fn a_server_the_player_has_not_listed_is_never_asked() {
 
     assert_eq!(err.kind(), "server_not_listed");
     assert!(f.servers.connections().is_empty(), "an unlisted server was contacted");
+}
+
+// ---- recent servers -----------------------------------------------------------
+//
+// ash's client records every join, with when, in `ash/recent-servers.json`;
+// the card puts the most recent first. The record is the client's: the
+// launcher only reads it.
+
+/// The record as the client writes it: the contract both sides test against.
+const RECENT: &str = include_str!("fixtures/recent-servers.json");
+
+impl Fixture {
+    fn joined(&self, id: &InstanceId, record: &str) {
+        let path = self.ash.game_directory(id).join("ash").join("recent-servers.json");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, record).unwrap();
+    }
+}
+
+fn addresses(servers: &[ServerEntry]) -> Vec<&str> {
+    servers.iter().map(|s| s.address.as_str()).collect()
+}
+
+#[test]
+fn the_most_recently_joined_come_first_then_the_rest_of_the_list_in_its_order() {
+    let f = fixture();
+    let id = f.instance("1.21.11", MODERN_LIST);
+    f.joined(&id, RECENT);
+
+    let servers = f.ash.servers(&id).unwrap();
+
+    assert_eq!(addresses(&servers), ["mc.hypixel.net", "localhost:25570", "[::1]:25565"]);
+    assert_eq!(servers[0].last_joined_ms, Some(1_791_300_000_000));
+    assert_eq!(servers[0].name, "Hypixel", "a listed server lost its own name and icon");
+    assert_eq!(servers[2].last_joined_ms, None);
+}
+
+#[test]
+fn a_server_joined_by_direct_connect_is_there_by_its_address() {
+    let f = fixture();
+    let id = f.instance("1.21.11", MODERN_LIST);
+    f.joined(&id, r#"{ "servers": [ { "address": "Play.MCCIsland.net", "joined_ms": 5 } ] }"#);
+
+    let servers = f.ash.servers(&id).unwrap();
+
+    assert_eq!(servers[0].name, "Play.MCCIsland.net");
+    assert_eq!(servers[0].icon, None);
+    assert_eq!(servers.len(), 4, "the list lost a server");
+}
+
+#[test]
+fn an_address_written_differently_is_still_the_listed_server() {
+    let f = fixture();
+    let id = f.instance("1.21.11", MODERN_LIST);
+    f.joined(&id, r#"{ "servers": [ { "address": " MC.Hypixel.NET. ", "joined_ms": 5 } ] }"#);
+
+    let servers = f.ash.servers(&id).unwrap();
+
+    assert_eq!(addresses(&servers), ["mc.hypixel.net", "localhost:25570", "[::1]:25565"]);
+    assert_eq!(servers[0].last_joined_ms, Some(5));
+}
+
+#[test]
+fn an_entry_that_is_not_an_address_is_dropped_and_the_rest_stand() {
+    let f = fixture();
+    let id = f.instance("1.21.11", MODERN_LIST);
+    f.joined(
+        &id,
+        r#"{ "servers": [ { "address": "host:notaport", "joined_ms": 9 },
+                          { "address": "localhost:25570", "joined_ms": 3 } ] }"#,
+    );
+
+    let servers = f.ash.servers(&id).unwrap();
+
+    assert_eq!(addresses(&servers)[0], "localhost:25570");
+    assert!(!addresses(&servers).contains(&"host:notaport"));
+}
+
+#[test]
+fn a_record_ash_cannot_read_leaves_the_list_as_the_game_has_it_and_is_logged() {
+    let f = fixture();
+    let id = f.instance("1.21.11", MODERN_LIST);
+    f.joined(&id, "not json at all");
+
+    assert_eq!(
+        addresses(&f.ash.servers(&id).unwrap()),
+        ["mc.hypixel.net", "localhost:25570", "[::1]:25565"]
+    );
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    assert!(log.contains("recent-servers-unreadable"), "{log}");
+    assert!(!log.contains("not json"), "the file's text reached the log");
+}
+
+#[test]
+fn the_launcher_never_writes_the_record() {
+    let f = fixture();
+    let id = f.instance("1.21.11", MODERN_LIST);
+    f.joined(&id, RECENT);
+    let path = f.ash.game_directory(&id).join("ash").join("recent-servers.json");
+
+    f.ash.servers(&id).unwrap();
+
+    assert_eq!(std::fs::read_to_string(path).unwrap(), RECENT);
+}
+
+#[tokio::test]
+async fn a_server_the_player_joined_but_never_listed_can_be_asked() {
+    let f = fixture();
+    f.servers.serve("play.mccisland.net", 25565, online(236));
+    let id = f.instance("1.21.11", MODERN_LIST);
+    f.joined(&id, r#"{ "servers": [ { "address": "play.mccisland.net", "joined_ms": 5 } ] }"#);
+
+    let status = f.ash.server_status(&id, "play.mccisland.net").await.unwrap();
+
+    assert!(matches!(status, ServerStatus::Online { players_online: 236, .. }), "{status:?}");
 }

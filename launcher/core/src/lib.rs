@@ -28,6 +28,7 @@ mod natives;
 mod overrides;
 mod preferences;
 mod profile;
+mod recent_servers;
 mod runtime;
 mod server_list;
 mod version;
@@ -906,22 +907,56 @@ impl Ash {
 
     // ---- servers ----------------------------------------------------------
 
-    /// The instance's servers, as the game's multiplayer screen lists them.
+    /// The instance's servers: the ones the player joined most recently first,
+    /// from ash's client's record of every join, then the rest of the game's
+    /// own list in the player's order.
     ///
-    /// A list the game wrote but ash cannot read shows as no servers, as it
-    /// does in the game, and ash's log says where reading stopped.
+    /// A server joined by direct connect, and so in no list, is still one the
+    /// player has played on, and is here by its address. A vanilla instance,
+    /// or an ash one that has joined nothing yet, has no record, and is the
+    /// game's list as it stands.
+    ///
+    /// A list or record ash cannot read counts as empty, as the game treats
+    /// its own list, and ash's log says where reading stopped.
     pub fn servers(&self, id: &InstanceId) -> Result<Vec<ServerEntry>, AshError> {
         self.instance(id)?;
-        match server_list::read(&self.game_directory(id)) {
-            Ok(servers) => Ok(servers),
-            Err(unreadable) => {
-                self.diagnostics.warn(
-                    "servers-unreadable",
-                    &format!("instance={id} stopped at byte {}", unreadable.at),
-                );
-                Ok(Vec::new())
+        let game = self.game_directory(id);
+        let mut listed = server_list::read(&game).unwrap_or_else(|unreadable| {
+            self.diagnostics.warn(
+                "servers-unreadable",
+                &format!("instance={id} stopped at byte {}", unreadable.at),
+            );
+            Vec::new()
+        });
+        let joins = recent_servers::read(&game).unwrap_or_else(|unreadable| {
+            self.diagnostics.warn(
+                "recent-servers-unreadable",
+                &format!("instance={id} line={} column={}", unreadable.line, unreadable.column),
+            );
+            Vec::new()
+        });
+
+        let mut servers = Vec::new();
+        for join in joins {
+            if servers.iter().any(|s: &ServerEntry| recent_servers::same(&s.address, &join.address))
+            {
+                continue;
             }
+            let at = listed.iter().position(|s| recent_servers::same(&s.address, &join.address));
+            let mut server = match at {
+                Some(at) => listed.remove(at),
+                None => ServerEntry {
+                    name: join.address.clone(),
+                    address: join.address.clone(),
+                    icon: None,
+                    last_joined_ms: None,
+                },
+            };
+            server.last_joined_ms = Some(join.joined_ms);
+            servers.push(server);
         }
+        servers.extend(listed);
+        Ok(servers)
     }
 
     /// Ask one of the instance's servers how it is, as the game's
@@ -963,8 +998,8 @@ impl Ash {
         Ok(status)
     }
 
-    /// `address` as it appears in the instance's list, or why it cannot be
-    /// used. Nothing reaches a server the player has not listed.
+    /// `address` as it appears among the instance's servers, or why it cannot be
+    /// used. Nothing reaches a server the player has neither listed nor joined.
     fn listed(&self, id: &InstanceId, address: &str) -> Result<String, AshError> {
         let listed = self.servers(id)?.into_iter().any(|server| server.address == address);
         if !listed {

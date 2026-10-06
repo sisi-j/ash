@@ -1,8 +1,11 @@
 package com.ashlauncher.client.v1_21_11;
 
 import com.ashlauncher.client.freelook.BlockList;
+import com.ashlauncher.client.servers.RecentServers;
+import java.io.IOException;
 import java.util.Objects;
 import java.util.function.Consumer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ServerData;
@@ -16,6 +19,9 @@ final class CurrentServer {
 
     private final Consumer<String> log;
     private String logged = "";
+
+    /** The address this connection was last recorded under, so each join is recorded once. */
+    private String joined = null;
 
     CurrentServer(Consumer<String> log) {
         this.log = log;
@@ -51,7 +57,16 @@ final class CurrentServer {
         String address = address();
         if (address == null) {
             logged = "";
+            joined = null;
             return;
+        }
+        if (!address.equals(joined)) {
+            joined = address;
+            try {
+                RecentServers.record(FabricLoader.getInstance().getGameDir(), address, System.currentTimeMillis());
+            } catch (IOException unwritable) {
+                log.accept("ash: could not record this server for the launcher's recent servers: " + unwritable);
+            }
         }
         String line = "ash: playing on " + address + ", server brand " + Objects.toString(brand(), "not sent yet");
         if (!line.equals(logged)) {

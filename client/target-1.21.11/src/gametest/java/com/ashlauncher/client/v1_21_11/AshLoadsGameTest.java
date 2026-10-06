@@ -5,6 +5,7 @@ import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
+import com.ashlauncher.client.servers.RecentServers;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.settings.Settings;
@@ -126,6 +127,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             context.waitTicks(40);
             context.takeScreenshot("ash-in-world");
 
+            joinIsRecorded(context);
             toggleSprintWorks(context, server);
             freelookWorks(context, server);
             settingsScreenWorks(context);
@@ -444,6 +446,22 @@ public class AshLoadsGameTest implements FabricClientGameTest {
      * active, and under Xvfb it never is - so a test that moved the cursor
      * could pass by nothing turning at all.
      */
+    /**
+     * Joining the test's server is in the record the launcher's servers card
+     * reads, under the address the game itself holds for it.
+     */
+    private static void joinIsRecorded(ClientGameTestContext context) {
+        String address = context.computeOnClient(c -> c.getCurrentServer() == null ? null : c.getCurrentServer().ip);
+        if (address == null) {
+            throw new AssertionError("the game holds no address for the server it joined");
+        }
+        List<RecentServers.Join> joins = RecentServers.read(
+                FabricLoader.getInstance().getGameDir().resolve(RecentServers.RELATIVE_PATH));
+        if (joins.isEmpty() || !joins.get(0).address.equals(address)) {
+            throw new AssertionError("joining " + address + " was not recorded first in the recent servers");
+        }
+    }
+
     private static void freelookWorks(ClientGameTestContext context, TestDedicatedServerContext server) {
         KeyMapping key = binding(context, Freelook.BINDING_NAME);
         float[] before = context.computeOnClient(c -> new float[] {c.player.getYRot(), c.player.getXRot()});
