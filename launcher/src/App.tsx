@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
+  appWindow,
   describeAge,
   isUiError,
   type Accounts as AccountList,
@@ -107,6 +108,19 @@ export default function App() {
     [instances, selectedId],
   );
   const launch = useLaunch(selected?.id ?? null);
+
+  // What the player chose for once the game is up. Only on a launch this
+  // window watched succeed: never on a failed one, which leaves ash open on
+  // the reason, and never on reopening ash onto a game already running.
+  const beforePhase = useRef(launch.phase.at);
+  const onGameStart = preferences?.on_game_start ?? "keep_open";
+  useEffect(() => {
+    const started = beforePhase.current === "working" && launch.phase.at === "running";
+    beforePhase.current = launch.phase.at;
+    if (!started) return;
+    if (onGameStart === "minimise") void appWindow.minimise();
+    if (onGameStart === "close") void appWindow.close();
+  }, [launch.phase.at, onGameStart]);
 
   const savePreferences = useCallback(
     async (next: LauncherPreferences) => {

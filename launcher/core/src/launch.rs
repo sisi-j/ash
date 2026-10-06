@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use crate::depot;
 use crate::error::AshError;
 use crate::natives;
-use crate::overrides::MachineOverrides;
+use crate::overrides::{MachineDefaults, MachineOverrides};
 use crate::process::Invocation;
 use crate::runtime::Runtime;
 use crate::version::{self, Os, VersionMetadata};
@@ -35,6 +35,8 @@ pub(crate) struct LaunchContext<'a> {
     pub os: Os,
     /// This machine's settings. Never read from anything that syncs.
     pub overrides: &'a MachineOverrides,
+    /// This machine's defaults, for whatever the overrides leave unsaid.
+    pub defaults: &'a MachineDefaults,
     /// A server to go straight into, for this launch only. Never stored.
     pub join: Option<&'a Join>,
     /// What a modded instance's loader is told about mods. `None` for
@@ -104,7 +106,7 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
     let mut game = resolve(&game_entries(metadata, context.os), &variables);
 
     // Mojang's metadata never states a heap size, so this is ash's to add.
-    jvm.insert(0, format!("-Xmx{}M", context.overrides.memory_mb_or_default()));
+    jvm.insert(0, format!("-Xmx{}M", context.overrides.memory_mb_or(context.defaults)));
 
     // Beside the heap size, never in the loader pin's own arguments: on
     // 1.8.9 any JVM argument there switches off the fallback that supplies

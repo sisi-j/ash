@@ -1,13 +1,14 @@
 //! Launcher preferences.
 //!
 //! The launcher's own settings, as opposed to any one instance's: whether
-//! LAUNCH GAME makes a sound, today, and the rest of the launcher's Settings
-//! page as it arrives. Kept under the data root with ash's other state of
-//! its own, never inside `instances/`.
+//! LAUNCH GAME makes a sound, and what the launcher does once the game starts.
+//! Kept under the data root with ash's other state of its own, never inside
+//! `instances/`.
 //!
 //! Unlike a [`crate::MachineOverrides`] value, a preference here means the
 //! same on any machine, which is why the glossary lists launcher preferences
-//! among what synced settings will carry.
+//! among what synced settings will carry. The Settings page's default memory
+//! is therefore not one: it is [`crate::MachineDefaults`], machine-local.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,23 @@ pub struct LauncherPreferences {
     /// game starts. On unless the player turns it off.
     #[serde(default = "enabled")]
     pub launch_sounds: bool,
+    /// What the launcher does once a launch has started the game.
+    #[serde(default)]
+    pub on_game_start: OnGameStart,
+}
+
+/// What the launcher does once it has started the game. Only after a launch
+/// that worked: one that failed leaves the launcher where the player can read
+/// why.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OnGameStart {
+    /// Stay as it is, showing PLAYING and Stop.
+    #[default]
+    KeepOpen,
+    Minimise,
+    /// Close the launcher. The game carries on without it.
+    Close,
 }
 
 fn enabled() -> bool {
@@ -36,7 +54,7 @@ fn enabled() -> bool {
 
 impl Default for LauncherPreferences {
     fn default() -> Self {
-        Self { launch_sounds: enabled() }
+        Self { launch_sounds: enabled(), on_game_start: OnGameStart::default() }
     }
 }
 

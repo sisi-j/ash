@@ -49,8 +49,8 @@ pub use glance::{AshFeatures, InstanceGlance, LastSession};
 pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
-pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
-pub use preferences::LauncherPreferences;
+pub use overrides::{MachineDefaults, MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
+pub use preferences::{LauncherPreferences, OnGameStart};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
 pub use server_list::{Handshake, ServerEntry, ServerStatus};
@@ -583,6 +583,29 @@ impl Ash {
         Ok(preferences)
     }
 
+    /// This machine's defaults for every instance. Like the overrides, never
+    /// among the preferences, which sync.
+    pub fn machine_defaults(&self) -> MachineDefaults {
+        overrides::load_defaults(&self.config.data_root)
+    }
+
+    /// Validated as an instance's own memory is, so a figure the JVM would
+    /// refuse is refused while the player is looking at the field.
+    pub fn set_machine_defaults(
+        &self,
+        defaults: MachineDefaults,
+    ) -> Result<MachineDefaults, AshError> {
+        defaults.validate()?;
+        overrides::save_defaults(&self.config.data_root, &defaults)?;
+        Ok(defaults)
+    }
+
+    /// The memory an instance with none of its own is given on this machine:
+    /// what an instance page's Automatic stands for.
+    pub fn default_memory_mb(&self) -> u32 {
+        self.machine_defaults().memory_mb_or_default()
+    }
+
     // ---- launching --------------------------------------------------------
 
     /// Exactly what ash would run, without running it.
@@ -835,6 +858,7 @@ impl Ash {
             client_id: &self.client_id,
             os: Os::current(),
             overrides: &overrides::load(&self.config.data_root, id),
+            defaults: &overrides::load_defaults(&self.config.data_root),
             join: join.as_ref(),
             mods: mods.as_ref(),
         })
