@@ -11,16 +11,26 @@ import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
+import com.ashlauncher.client.report.ModOrigins;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.sprint.ToggleSprint;
 import com.ashlauncher.client.sprint.ToggleSprintHook;
 import com.ashlauncher.client.ui.draw.Ink;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.legacyfabric.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.legacyfabric.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
@@ -173,10 +183,51 @@ public final class AshClient implements ClientModInitializer {
     private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
             LoadReport.forSession(clientVersion(), landed::contains, settings::on)
+                    .withOrigins(modOrigins(), BUNDLED)
                     .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {
             LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
         }
+    }
+
+    /**
+     * ash's bundled mods on this target, by mod id: the copies the loader
+     * could have swapped for a player's own. Ids, not file names - one of
+     * Legacy Fabric's differs from its jar's name.
+     */
+    private static final List<String> BUNDLED = Arrays.asList("legacy-fabric-api", "legacy-fabric-api-base-common", "legacy-fabric-keybinding-api-v1-common", "legacy-fabric-rendering-api-v1", "legacy-fabric-rendering-api-v1-common");
+
+    /**
+     * Where each loaded mod came from, read from the loader, for the report to
+     * say whether the player's own mods were involved.
+     */
+    private static ModOrigins modOrigins() {
+        FabricLoader loader = FabricLoader.getInstance();
+        // ash moves the folder while the player's mods are off; unset, it is the instance's own.
+        String moved = System.getProperty("fabric.modsFolder");
+        Path modsFolder = moved != null ? Paths.get(moved) : loader.getGameDir().resolve("mods");
+        Map<String, List<Path>> files = new HashMap<>();
+        for (ModContainer mod : loader.getAllMods()) {
+            List<Path> from = filesOf(loader, mod, 0);
+            if (!from.isEmpty()) {
+                files.put(mod.getMetadata().getId(), from);
+            }
+        }
+        return ModOrigins.of(modsFolder, files);
+    }
+
+    /** The jar a mod came in: its own, or for one nested in another, the outermost. */
+    private static List<Path> filesOf(FabricLoader loader, ModContainer mod, int depth) {
+        ModOrigin origin = mod.getOrigin();
+        if (origin.getKind() == ModOrigin.Kind.PATH) {
+            return origin.getPaths();
+        }
+        if (origin.getKind() == ModOrigin.Kind.NESTED && depth < 8) {
+            return loader.getModContainer(origin.getParentModId())
+                    .map(parent -> filesOf(loader, parent, depth + 1))
+                    .orElse(Collections.<Path>emptyList());
+        }
+        return Collections.emptyList();
     }
 
     private static String clientVersion() {

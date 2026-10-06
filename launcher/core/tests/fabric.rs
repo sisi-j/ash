@@ -980,6 +980,139 @@ async fn a_report_from_a_newer_client_still_surfaces_what_degraded() {
     assert_eq!(notice.features, ["Toggle sprint"]);
 }
 
+// ---- the player's own mods in the report ---------------------------------------
+//
+// The client also says whether any of the player's own mods loaded, and whose
+// copy of each bundled mod ran. With theirs in the game, a feature that did
+// not load may be their mod's doing, and the notice must not say it is ash's
+// (ADR-0018).
+
+#[tokio::test]
+async fn a_report_from_before_these_facts_still_reads_as_it_did() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+    );
+
+    let notice = f.ash.degradation_notice(&id).unwrap().expect("the report was not read");
+
+    assert_eq!(notice.features, ["Toggle sprint"]);
+    assert!(notice.message.contains("problem with ash"), "{}", notice.message);
+}
+
+#[tokio::test]
+async fn with_the_players_mods_on_the_notice_never_says_the_fault_is_ashs() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "third_party_mods": true, "bundled": [], "features": [
+            { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+    );
+
+    let message = f.ash.degradation_notice(&id).unwrap().expect("a notice").message;
+
+    assert!(
+        !message.contains("problem with ash"),
+        "blamed ash with the player's mods in the game: {message}"
+    );
+    assert!(message.contains("Your own mods were on"), "{message}");
+    assert!(message.contains("Toggle sprint"), "{message}");
+}
+
+#[tokio::test]
+async fn the_players_copy_of_a_bundled_mod_is_said_even_when_everything_loaded() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "third_party_mods": true,
+             "bundled": [ { "id": "fabric-api", "copy": "player" } ],
+             "features": [ { "id": "fps-readout", "name": "FPS readout", "status": "loaded" } ] }"#,
+    );
+
+    let notice = f.ash.degradation_notice(&id).unwrap().expect("a notice");
+
+    assert!(notice.features.is_empty(), "a feature was named that loaded");
+    assert!(
+        notice.message.contains("Your own copy of Fabric API ran in place of"),
+        "{}",
+        notice.message
+    );
+}
+
+#[tokio::test]
+async fn legacy_fabric_api_is_named_once_however_many_of_its_modules_were_swapped() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "third_party_mods": true, "bundled": [
+               { "id": "legacy-fabric-api", "copy": "player" },
+               { "id": "legacy-fabric-rendering-api-v1", "copy": "player" },
+               { "id": "legacy-fabric-api-base-common", "copy": "ash" } ],
+             "features": [] }"#,
+    );
+
+    let message = f.ash.degradation_notice(&id).unwrap().expect("a notice").message;
+
+    assert_eq!(message.matches("Legacy Fabric API").count(), 1, "{message}");
+}
+
+#[tokio::test]
+async fn ashs_copies_and_no_mods_of_the_players_say_nothing() {
+    let f = fixture();
+    let id = f.modded().await;
+    // The contract report, with toggle sprint loaded this time.
+    write_load_report(&f, &id, &TOGGLE_SPRINT_DEGRADED.replace("degraded", "loaded"));
+
+    assert_eq!(f.ash.degradation_notice(&id).unwrap(), None);
+}
+
+#[tokio::test]
+async fn the_new_facts_reach_ashs_log_as_words_ash_chose() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "third_party_mods": true,
+             "bundled": [ { "id": "fabric-api", "copy": "player" } ],
+             "features": [ { "id": "fps-readout", "name": "A name the player can read", "status": "loaded" } ] }"#,
+    );
+
+    f.ash.degradation_notice(&id).unwrap();
+
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    assert!(log.contains("third-party-mods=yes bundled.fabric-api=player"), "{log}");
+    assert!(!log.contains("A name the player can read"), "display text reached the log:\n{log}");
+}
+
+#[tokio::test]
+async fn a_bundled_mod_named_in_no_shape_the_client_writes_makes_the_report_unreadable() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "third_party_mods": false,
+             "bundled": [ { "id": "Fabric API; rm -rf", "copy": "ash" } ],
+             "features": [ { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" } ] }"#,
+    );
+
+    assert_eq!(f.ash.degradation_notice(&id).unwrap(), None);
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    assert!(log.contains("load-report-unreadable"), "{log}");
+    assert!(!log.contains("rm -rf"), "the file's text reached the log:\n{log}");
+}
+
 // ---- this instance at a glance ----------------------------------------------
 //
 // The Play page's middle card. The features that are on come from the load

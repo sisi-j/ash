@@ -1,5 +1,9 @@
 {
   "client": "0.1.0",
+  "third_party_mods": false,
+  "bundled": [
+    { "id": "fabric-api", "copy": "ash" }
+  ],
   "features": [
     { "id": "fps-readout", "name": "FPS readout", "status": "loaded" },
     { "id": "toggle-sprint", "name": "Toggle sprint", "status": "degraded" }

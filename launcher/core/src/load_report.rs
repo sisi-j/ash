@@ -35,6 +35,13 @@ pub(crate) const RELATIVE_PATH: &str = "ash/load-report.json";
 pub(crate) struct LoadReport {
     client: ClientVersion,
     features: Vec<ReportedFeature>,
+    /// Whether any of the player's own mods loaded. Absent in a report from
+    /// before the client said, which is a session where they could not have.
+    #[serde(default)]
+    third_party_mods: bool,
+    /// Whose copy of each of ash's bundled mods the loader ran.
+    #[serde(default)]
+    bundled: Vec<BundledMod>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -76,6 +83,61 @@ impl TryFrom<String> for FeatureId {
             Ok(Self(id))
         } else {
             Err("not a feature id ash's client writes")
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct BundledMod {
+    id: ModId,
+    copy: Copy,
+}
+
+/// Whose copy of a bundled mod ran.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Copy {
+    /// The one ash pinned.
+    Ash,
+    /// One from the player's own mods folder, which the loader kept in
+    /// place of ash's because it was newer.
+    Player,
+    /// A word a newer client knows and this launcher does not.
+    #[serde(other)]
+    Other,
+}
+
+/// A mod's id, in the shape the loader allows one: `fabric-api`,
+/// `legacy-fabric-keybinding-api-v1-common`. Anything else is not a report
+/// from ash, and it goes to the log, so it is checked.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
+struct ModId(String);
+
+impl TryFrom<String> for ModId {
+    type Error = &'static str;
+
+    fn try_from(id: String) -> Result<Self, Self::Error> {
+        let well_formed = (1..=64).contains(&id.len())
+            && id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_');
+        if well_formed {
+            Ok(Self(id))
+        } else {
+            Err("not a mod id")
+        }
+    }
+}
+
+impl ModId {
+    /// What to call it in front of a player. Legacy Fabric API is an
+    /// aggregator and its modules, and to the player all of it is one thing.
+    fn name(&self) -> String {
+        match self.0.as_str() {
+            "fabric-api" => "Fabric API".to_owned(),
+            id if id.starts_with("legacy-fabric-") => "Legacy Fabric API".to_owned(),
+            id => id.to_owned(),
         }
     }
 }
@@ -187,16 +249,48 @@ impl LoadReport {
             .filter(|f| f.status == FeatureStatus::Degraded)
             .map(|f| f.name.clone())
             .collect();
-        if features.is_empty() {
+        // A player's newer copy of a bundled mod, which the loader ran in
+        // place of ash's without a word. Named once each, however many of its
+        // modules were swapped.
+        let mut replaced: Vec<String> = Vec::new();
+        for name in self.bundled.iter().filter(|m| m.copy == Copy::Player).map(|m| m.id.name()) {
+            if !replaced.contains(&name) {
+                replaced.push(name);
+            }
+        }
+        if features.is_empty() && replaced.is_empty() {
             return None;
         }
-        let message = format!(
-            "{} did not load last time you played. That is a problem with ash, not with your game \
-             or your setup, and an update to ash will fix it. You can still play - the rest of \
-             ash works without {}.",
-            listed(&features),
-            if features.len() == 1 { "it" } else { "them" },
-        );
+
+        let them = if features.len() == 1 { "it" } else { "them" };
+        let mut message = match (features.is_empty(), self.third_party_mods) {
+            (true, _) => String::new(),
+            // With the player's own mods in the game, ash cannot know the
+            // fault is its own, and must not say so (ADR-0018).
+            (false, true) => format!(
+                "{} did not load last time you played. Your own mods were on, so one of them may \
+                 be the cause. Turn them off on the instance's page to check: if {them} still \
+                 {} not load, an update to ash will fix it.",
+                listed(&features),
+                if features.len() == 1 { "does" } else { "do" },
+            ),
+            (false, false) => format!(
+                "{} did not load last time you played. That is a problem with ash, not with your \
+                 game or your setup, and an update to ash will fix it. You can still play - the \
+                 rest of ash works without {them}.",
+                listed(&features),
+            ),
+        };
+        if !replaced.is_empty() {
+            if !message.is_empty() {
+                message.push(' ');
+            }
+            message.push_str(&format!(
+                "Your own copy of {} ran in place of the one ash ships, and ash is not tested with \
+                 it.",
+                listed(&replaced),
+            ));
+        }
         Some(DegradationNotice { features, message })
     }
 
@@ -226,7 +320,8 @@ impl LoadReport {
             .collect()
     }
 
-    /// One line for ash's log: `client=0.1.0 fps-readout=loaded toggle-sprint=degraded`.
+    /// One line for ash's log: `client=0.1.0 fps-readout=loaded toggle-sprint=degraded
+    /// third-party-mods=no bundled.fabric-api=ash`.
     ///
     /// Built only from the validated id and version, never from the display
     /// name - which is the one field whose content ash does not constrain.
@@ -240,6 +335,19 @@ impl LoadReport {
                 FeatureStatus::Other => "unknown",
             };
             line.push_str(&format!(" {}={status}", feature.id.0));
+        }
+        line.push_str(if self.third_party_mods {
+            " third-party-mods=yes"
+        } else {
+            " third-party-mods=no"
+        });
+        for bundled in &self.bundled {
+            let copy = match bundled.copy {
+                Copy::Ash => "ash",
+                Copy::Player => "player",
+                Copy::Other => "unknown",
+            };
+            line.push_str(&format!(" bundled.{}={copy}", bundled.id.0));
         }
         line
     }
