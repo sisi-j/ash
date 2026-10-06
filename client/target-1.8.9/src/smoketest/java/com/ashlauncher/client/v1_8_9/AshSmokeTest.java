@@ -878,14 +878,16 @@ public final class AshSmokeTest implements ClientModInitializer {
 
     /**
      * ash's panel draws in the screen's real pixels, so it looks exactly the
-     * same at every GUI scale: the white pixels of its SETTINGS letters are
-     * the same pixels at each. At this test's 854 by 480 window the game
+     * same at every GUI scale: the white pixels of its SETTINGS letters, and
+     * the bright pixels of the Crosshair tile's icon, are the same pixels at
+     * each. At this test's 854 by 480 window the game
      * offers scales 1 and 2, and Auto; the 1.21.11 test, which can resize its
      * window, covers 3 as well.
      */
     private static void panelIsCrispAtEveryGuiScale(MinecraftClient client) {
         KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
         java.util.Set<Long> first = null;
+        java.util.Set<Long> firstIcon = null;
         for (int scale : new int[] {1, 2, 0}) {
             onClient(client, () -> {
                 client.options.guiScale = scale;
@@ -896,11 +898,24 @@ public final class AshSmokeTest implements ClientModInitializer {
                     client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
             pause(500L);
             Rect letters = onClient(client, () -> screen.panel().lettersArea());
+            Rect iconArea = onClient(client, () -> screen.panel().tileIconOf(Feature.CROSSHAIR));
             String name = "ash-panel-gui-scale-" + (scale == 0 ? "auto" : scale) + ".png";
             screenshot(client, name);
             keyIntoScreen(client, screen, settingsKey.getCode());
             await("close ash's settings at GUI scale " + scale, () -> client.currentScreen == null ? client : null);
-            java.util.Set<Long> white = whitePixels(new File(new File(client.runDirectory, "screenshots"), name), letters);
+            File shot = new File(new File(client.runDirectory, "screenshots"), name);
+            java.util.Set<Long> white = whitePixels(shot, letters, 240);
+            java.util.Set<Long> icon = whitePixels(shot, iconArea, 170);
+            if (icon.size() < 30) {
+                fail("the Crosshair tile has no icon at GUI scale " + scale + ": " + icon.size()
+                        + " bright pixels in " + iconArea);
+            }
+            if (firstIcon == null) {
+                firstIcon = icon;
+            } else if (!firstIcon.equals(icon)) {
+                fail("at GUI scale " + (scale == 0 ? "Auto" : scale)
+                        + " the Crosshair icon is not the same pixels as at GUI scale 1");
+            }
             if (white.size() < 50) {
                 fail("SETTINGS is not on the panel at GUI scale " + scale + ": " + white.size() + " white pixels in "
                         + letters);
@@ -918,8 +933,8 @@ public final class AshSmokeTest implements ClientModInitializer {
         });
     }
 
-    /** Where a screenshot is white, inside a rectangle of real pixels, as points relative to it. */
-    private static java.util.Set<Long> whitePixels(File shot, Rect area) {
+    /** Where a screenshot is at least {@code level} in every channel, inside a rectangle of real pixels, as points relative to it. */
+    private static java.util.Set<Long> whitePixels(File shot, Rect area, int level) {
         BufferedImage image = null;
         try {
             image = ImageIO.read(shot);
@@ -930,7 +945,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         for (int y = area.y; y < area.y + area.height; y++) {
             for (int x = area.x; x < area.x + area.width; x++) {
                 int rgb = image.getRGB(x, y);
-                if (((rgb >> 16) & 0xFF) >= 240 && ((rgb >> 8) & 0xFF) >= 240 && (rgb & 0xFF) >= 240) {
+                if (((rgb >> 16) & 0xFF) >= level && ((rgb >> 8) & 0xFF) >= level && (rgb & 0xFF) >= level) {
                     white.add(((long) (x - area.x) << 32) | (y - area.y));
                 }
             }
