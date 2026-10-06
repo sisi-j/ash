@@ -497,11 +497,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         }
         context.takeScreenshot("ash-freelook");
 
-        // A screen opening mid-hold ends it, puts the view back, and it does
-        // not come back with the key still held from before.
+        // A screen opening mid-hold ends it and puts the view back, while the
+        // screen is open. (The game releases every key for a screen and reads
+        // the keyboard again when it closes, so a key still held then is a new
+        // press, as it is for sneak; the test lets go first.)
         context.setScreen(() -> new InventoryScreen(Minecraft.getInstance().player));
-        context.waitTicks(2);
-        context.setScreen(() -> null);
         context.waitTicks(2);
         if (context.computeOnClient(c -> AshClient.freelook.active())) {
             throw new AssertionError("freelook outlived a screen opening mid-hold");
@@ -510,7 +510,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             throw new AssertionError("ending freelook did not put the first-person view back");
         }
         context.getInput().releaseKey(key);
+        context.setScreen(() -> null);
         context.waitTicks(2);
+        if (context.computeOnClient(c -> AshClient.freelook.active())) {
+            throw new AssertionError("freelook came back with its key let go");
+        }
         float cameraYaw = context.computeOnClient(c -> c.gameRenderer.getMainCamera().yRot());
         if (Math.abs(cameraYaw - before[0]) > 0.5) {
             throw new AssertionError("the camera did not return to where the player looks: " + cameraYaw);
