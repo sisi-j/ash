@@ -460,6 +460,10 @@ fn ash_state(client_root: std::path::PathBuf) -> Ash {
 /// installer so that the launcher and the client can never be version-skewed.
 /// Resolving it is the adapter's job, like every other path.
 fn client_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
+    #[cfg(debug_assertions)]
+    if let Some(dir) = dev_client_dir() {
+        return dir;
+    }
     app.path()
         .resource_dir()
         // Resolving the resource directory only fails on a broken
@@ -475,6 +479,44 @@ fn client_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
         // is prepared, which is a better moment to tell the player than a
         // panic before the window opens.
         .unwrap_or_default()
+}
+
+/// The client jars `./gradlew build` made, for `npm run tauri dev`.
+///
+/// A dev build has no installation: only `build:installer` copies the jars
+/// into `client/` beside the executable, so without this every ash-client
+/// instance in dev stopped at "ash's own client is missing". Each target's
+/// jar is copied into one directory, the shape an installation has, as the
+/// real-launch example does.
+///
+/// Debug builds only, and found from where this crate was compiled, never
+/// from the working directory. An installed ash never looks here.
+#[cfg(debug_assertions)]
+fn dev_client_dir() -> Option<std::path::PathBuf> {
+    let client = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../client");
+    let staged = client.join("build").join("dev-run");
+    std::fs::create_dir_all(&staged).ok()?;
+
+    let mut staged_any = false;
+    for module in std::fs::read_dir(&client).ok()?.flatten() {
+        let Ok(jars) = std::fs::read_dir(module.path().join("build").join("libs")) else {
+            continue;
+        };
+        for jar in jars.flatten() {
+            let name = jar.file_name().to_string_lossy().into_owned();
+            if name.starts_with("ash-client-") && name.ends_with(".jar") {
+                staged_any |= std::fs::copy(jar.path(), staged.join(&name)).is_ok();
+            }
+        }
+    }
+
+    if !staged_any {
+        eprintln!(
+            "ash: no ash-client-*.jar under client/*/build/libs; run ./gradlew build in client/"
+        );
+        return None;
+    }
+    Some(staged)
 }
 
 /// Resolving this is the adapter's job, not the library's - `ash-core` never

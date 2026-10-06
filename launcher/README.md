@@ -16,6 +16,10 @@ npm install     # once
 npm run tauri dev
 ```
 
+A dev build launches ash-client instances with the jars from the last
+`./gradlew build` in `client/`, gathered into `client/build/dev-run` when it
+starts. Build the client first, and restart `tauri dev` after rebuilding it.
+
 ## The client
 
 `client/` builds the jar the launcher places into a modded instance. The
