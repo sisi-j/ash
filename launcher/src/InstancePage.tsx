@@ -11,11 +11,7 @@ import {
 } from "./api";
 import { Icon } from "./icons";
 import type { Launch } from "./launch";
-
-/** The memory slider's range and step, in GB. */
-const MEMORY_MIN_GB = 2;
-const MEMORY_MAX_GB = 16;
-const MEMORY_STEP_GB = 0.5;
+import { filledPercent, formatGb, MEMORY_MAX_GB, MEMORY_MIN_GB, MEMORY_STEP_GB, onSlider, toGb } from "./memory";
 
 /** How long after the last keystroke or drag a change is saved. */
 const SAVE_AFTER_MS = 500;
@@ -28,26 +24,6 @@ type Status = { saved: true } | { saved: false; message: string };
 
 /** One of the machine-local overrides, by its field. */
 type Field = keyof MachineOverrides;
-
-/** Megabytes in gigabytes as a label says them: exact, to one decimal. */
-function formatGb(mb: number): string {
-  const gb = mb / 1024;
-  return Number.isInteger(gb * 2) ? `${gb}` : gb.toFixed(1);
-}
-
-/** Megabytes as the slider's gigabytes, to its half-gigabyte step. */
-function toGb(mb: number): number {
-  return Math.round((mb / 1024) * 2) / 2;
-}
-
-/**
- * Where the knob sits. ash-core allows more than the slider shows (512 MB
- * to 64 GB), so a figure set before this page existed keeps its own label
- * while the knob rests at the nearer end, until the player moves it.
- */
-function onSlider(gb: number): number {
-  return Math.min(MEMORY_MAX_GB, Math.max(MEMORY_MIN_GB, gb));
-}
 
 function parseWhole(text: string): number | null {
   const trimmed = text.trim();
@@ -330,7 +306,7 @@ export function InstancePage(props: {
                   step={MEMORY_STEP_GB}
                   value={knobGb}
                   aria-labelledby="memory-label"
-                  style={{ ["--filled" as string]: `${((knobGb - MEMORY_MIN_GB) / (MEMORY_MAX_GB - MEMORY_MIN_GB)) * 100}%` }}
+                  style={{ ["--filled" as string]: filledPercent(knobGb) }}
                   onChange={(e) =>
                     saveField("memory_mb", Math.round(Number(e.target.value) * 1024), "memory")
                   }
