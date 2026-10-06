@@ -15,6 +15,7 @@ import type {
   Account,
   DegradationNotice,
   Instance,
+  InstanceGlance,
   LaunchOutcome,
   PrepareEvent,
   PrepareOutcome,
@@ -24,7 +25,8 @@ export * from "../src/api.ts";
 
 const state = new URLSearchParams(window.location.search).get("state") ?? "idle";
 
-const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
 const now = Date.now();
 
 // ---- faces ----------------------------------------------------------------
@@ -79,6 +81,8 @@ const INSTANCES: Instance[] = [
     loader: "fabric",
     created_at_ms: now - 300 * HOUR,
     last_played_ms: now - 2 * HOUR,
+    played_ms: 14 * HOUR + 20 * MINUTE,
+    last_session: { started_ms: now - 2 * HOUR - 48 * MINUTE, ended_ms: now - 2 * HOUR },
   },
   {
     id: "b",
@@ -87,6 +91,8 @@ const INSTANCES: Instance[] = [
     loader: "legacy_fabric",
     created_at_ms: now - 200 * HOUR,
     last_played_ms: now - 26 * HOUR,
+    played_ms: 62 * HOUR + 5 * MINUTE,
+    last_session: { started_ms: now - 26 * HOUR - 72 * MINUTE, ended_ms: now - 26 * HOUR },
   },
   {
     id: "c",
@@ -95,6 +101,8 @@ const INSTANCES: Instance[] = [
     loader: "vanilla",
     created_at_ms: now - 100 * HOUR,
     last_played_ms: null,
+    played_ms: 0,
+    last_session: null,
   },
 ];
 
@@ -111,6 +119,25 @@ const notice: DegradationNotice | null =
         message: "Hit indicator did not load last time. An update to ash will fix it.",
       }
     : null;
+
+/**
+ * Each instance at a glance, as ash-core would put it together. While a game
+ * is playing, the first instance's session is the running one.
+ */
+function glance(id: string): InstanceGlance {
+  const instance = INSTANCES.find((i) => i.id === id)!;
+  const running = state === "playing" && id === "a";
+  const ashOn: string[] = ["Crosshair", "Hit indicator", "FPS readout", "Toggle sprint"];
+  return {
+    features:
+      instance.loader === "vanilla"
+        ? { state: "no_client" }
+        : { state: "on", features: notice ? ashOn.filter((f) => !notice.features.includes(f)) : ashOn },
+    played_ms: instance.played_ms + (running ? 12 * MINUTE : 0),
+    last_session: running ? { started_ms: now - 12 * MINUTE, ended_ms: null } : instance.last_session,
+    mods: id === "a" ? ["Sodium"] : [],
+  };
+}
 
 /** States where clicking LAUNCH GAME starts a download, so the click has steps to show. */
 const downloads = state === "preparing" || state === "sounds-off" || state === "download-only";
@@ -236,6 +263,7 @@ export const api: typeof real.api = {
 
   overrides: () => resolve({ memory_mb: null, java_executable: null, resolution: null }),
   degradationNotice: () => resolve(notice),
+  instanceGlance: (id) => resolve(glance(id)),
   // ash-core's own refusal for a window it would not open.
   setOverrides: (_id, settings) =>
     settings.resolution &&

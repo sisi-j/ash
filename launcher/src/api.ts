@@ -79,6 +79,32 @@ export type Instance = {
   loader: Loader;
   created_at_ms: number;
   last_played_ms: number | null;
+  /** Finished sessions added together. `instanceGlance` adds a running one. */
+  played_ms: number;
+  last_session: Session | null;
+};
+
+/** One run of the game, from ash starting it to its exit. */
+export type Session = {
+  started_ms: number;
+  /** `null` while it runs. */
+  ended_ms: number | null;
+};
+
+/** Mirrors `ash_core::AshFeatures`, an internally tagged enum. */
+export type AshFeatures =
+  | { state: "no_client" }
+  | { state: "not_reported" }
+  | { state: "on"; features: string[] };
+
+/** Mirrors `ash_core::InstanceGlance`: the Play page's "This instance" card. */
+export type InstanceGlance = {
+  features: AshFeatures;
+  /** Every session added together, a running one up to now. */
+  played_ms: number;
+  last_session: Session | null;
+  /** The player's mods, never ash's own. */
+  mods: string[];
 };
 
 /**
@@ -264,6 +290,7 @@ export const api = {
   overrides: (id: InstanceId) => invoke<MachineOverrides>("overrides", { id }),
   degradationNotice: (id: InstanceId) =>
     invoke<DegradationNotice | null>("degradation_notice", { id }),
+  instanceGlance: (id: InstanceId) => invoke<InstanceGlance>("instance_glance", { id }),
   setOverrides: (id: InstanceId, settings: MachineOverrides) =>
     invoke<MachineOverrides>("set_overrides", { id, settings }),
   defaultMemoryMb: () => invoke<number>("default_memory_mb"),
@@ -359,6 +386,13 @@ export function describeAge(timestamp: number, now = Date.now()): string {
     if (n >= 1) return `${n} ${name}${n === 1 ? "" : "s"} ago`;
   }
   return "just now";
+}
+
+/** "48 min", "14 h 20 min": a length of time, as the Play page shows one. */
+export function describeDuration(ms: number): string {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000);
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
 export function describeBytes(bytes: number): string {

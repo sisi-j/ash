@@ -53,7 +53,9 @@ npm run check:ui
 Builds the real screens as the app builds them, but with
 `ui-check/fake-api.ts` in place of `src/api.ts`, and renders each state that
 matters in Chromium: signed out, no instances, idle, the account menu,
-preparing (with launch sounds on and off), playing, a failed launch, a crash,
+preparing (with launch sounds on and off), playing, the "This instance" card
+(for an ash instance and a vanilla one, and its shortcut to the instance page),
+a failed launch, a crash,
 an instance that could not be checked, Download only, a degradation notice,
 the instance page (custom memory saved, a refused window size, the delete
 confirmation, and back to Play after deleting), the new-instance form, and

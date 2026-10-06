@@ -17,8 +17,8 @@ use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::{
-    Ash, AshError, Cancel, Config, InstanceId, Loader, LoaderPin, NullSink, PinnedFile,
-    PinnedLibrary, VERSION_MANIFEST_URL,
+    Ash, AshError, AshFeatures, Cancel, Config, InstanceId, Loader, LoaderPin, NullSink,
+    PinnedFile, PinnedLibrary, VERSION_MANIFEST_URL,
 };
 
 mod common;
@@ -930,6 +930,136 @@ async fn a_report_from_a_newer_client_still_surfaces_what_degraded() {
 
     let notice = f.ash.degradation_notice(&id).unwrap().expect("the degraded feature was lost");
     assert_eq!(notice.features, ["Toggle sprint"]);
+}
+
+// ---- this instance at a glance ----------------------------------------------
+//
+// The Play page's middle card. The features that are on come from the load
+// report and the client's settings together: the report names them and says
+// what loaded, and the settings are newer when the player edits them between
+// sessions. Neither file is ever written here.
+
+/// The client's settings as it writes them on its first run, every switch on.
+fn write_client_settings(f: &Fixture, id: &InstanceId, body: &str) {
+    let path = f.ash.game_directory(id).join("config").join("ash.properties");
+    std::fs::write(path, body).unwrap();
+}
+
+const EVERY_SWITCH_ON: &str = "# ash's settings\nfps-readout.enabled = true\n\
+                               toggle-sprint.enabled = true\ncrosshair.enabled = true\n";
+
+fn features_on(f: &Fixture, id: &InstanceId) -> AshFeatures {
+    f.ash.instance_glance(id).expect("glance").features
+}
+
+#[tokio::test]
+async fn an_ash_instance_says_nothing_of_its_features_until_the_client_has_run() {
+    let f = fixture();
+    let id = f.modded().await;
+
+    assert_eq!(features_on(&f, &id), AshFeatures::NotReported);
+}
+
+#[tokio::test]
+async fn the_features_on_are_those_that_loaded_and_are_switched_on() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_client_settings(&f, &id, EVERY_SWITCH_ON);
+    write_load_report(&f, &id, TOGGLE_SPRINT_DEGRADED);
+
+    // Toggle sprint is switched on, but did not load, so it is not running.
+    assert_eq!(features_on(&f, &id), AshFeatures::On { features: vec!["FPS readout".into()] });
+}
+
+#[tokio::test]
+async fn a_feature_switched_off_in_the_file_since_the_session_is_not_on() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "fps-readout", "name": "FPS readout", "status": "loaded" },
+            { "id": "crosshair", "name": "Crosshair", "status": "off" } ] }"#,
+    );
+    write_client_settings(&f, &id, "fps-readout.enabled=false\ncrosshair.enabled: true\n");
+
+    assert_eq!(features_on(&f, &id), AshFeatures::On { features: vec!["Crosshair".into()] });
+}
+
+#[tokio::test]
+async fn a_feature_with_no_switch_is_not_listed_as_one_that_is_on() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "settings-screen", "name": "ash's settings screen", "status": "loaded" } ] }"#,
+    );
+    write_client_settings(&f, &id, EVERY_SWITCH_ON);
+
+    assert_eq!(features_on(&f, &id), AshFeatures::On { features: vec![] });
+}
+
+#[tokio::test]
+async fn a_switch_the_client_cannot_read_is_taken_as_the_report_has_it() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "fps-readout", "name": "FPS readout", "status": "loaded" },
+            { "id": "crosshair", "name": "Crosshair", "status": "off" } ] }"#,
+    );
+    // The client reads neither, falls back to its defaults, and reports what
+    // that came to. ash does not know the defaults and does not guess them.
+    write_client_settings(&f, &id, "fps-readout.enabled = yes\ncrosshair.enabled = on\n");
+
+    assert_eq!(features_on(&f, &id), AshFeatures::On { features: vec!["FPS readout".into()] });
+}
+
+#[tokio::test]
+async fn a_vanilla_instance_has_no_ash_client_and_no_mods() {
+    let f = fixture();
+    f.modded().await;
+    let plain = f.ash.create_instance("plain", VERSION, Loader::Vanilla).unwrap().id;
+    // A vanilla game loads nothing from the folder, so this is not a mod it runs.
+    std::fs::write(f.ash.game_directory(&plain).join("mods").join("sodium.jar"), b"").unwrap();
+
+    let glance = f.ash.instance_glance(&plain).unwrap();
+
+    assert_eq!(glance.features, AshFeatures::NoClient);
+    assert!(glance.mods.is_empty(), "{:?}", glance.mods);
+}
+
+/// A jar that names itself the way a Fabric mod does.
+fn fabric_mod(name: &str) -> Vec<u8> {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    writer.start_file("fabric.mod.json", options).unwrap();
+    write!(writer, r#"{{"schemaVersion": 1, "id": "x", "name": "{name}"}}"#).unwrap();
+    writer.finish().unwrap().into_inner()
+}
+
+#[tokio::test]
+async fn the_mods_are_the_players_and_never_ashs_own() {
+    let f = fixture();
+    let id = f.modded().await;
+    f.prepare(&id).await;
+    assert!(f.ash.instance_glance(&id).unwrap().mods.is_empty(), "ash's own jars were listed");
+
+    let mods = f.ash.game_directory(&id).join("mods");
+    std::fs::write(mods.join("sodium-fabric-0.6.13+mc1.21.11.jar"), fabric_mod("Sodium")).unwrap();
+    std::fs::write(mods.join("not-a-zip.jar"), b"whatever this is").unwrap();
+    std::fs::write(mods.join("notes.txt"), b"not a mod").unwrap();
+
+    // By the name a mod gives itself, or by its file name if it gives none.
+    assert_eq!(f.ash.instance_glance(&id).unwrap().mods, ["not-a-zip", "Sodium"]);
 }
 
 fn value_of<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {

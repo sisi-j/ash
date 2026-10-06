@@ -747,6 +747,84 @@ button {
   height: 12px;
 }
 
+/* This instance: its facts scroll inside the card when the window is short,
+   so the shortcut under them is never pushed out of it. */
+.glance-rows {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+}
+
+/* One row per fact, its name on the left and its value on the right. */
+.kv {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.kv:last-of-type {
+  border-bottom: 0;
+}
+
+.kv-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.kv-stacked .feature-chips {
+  justify-content: flex-start;
+}
+
+.kv > span:first-child {
+  flex: none;
+  color: var(--text-2);
+}
+
+.kv b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  text-align: right;
+}
+
+.kv b.quiet {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.feature-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.feature-chip {
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--fill-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.glance-rows .hint {
+  margin-top: 6px;
+}
+
+/* The shortcut sits at the foot of the card, under whatever the card holds. */
+.glance-open {
+  align-self: flex-start;
+  margin: auto 0 0;
+}
+
 .instance-rows {
   flex: 1;
   min-height: 0;

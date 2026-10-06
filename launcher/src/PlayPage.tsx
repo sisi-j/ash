@@ -1,4 +1,16 @@
-import { describeAge, describeKind, type Account, type Instance, type InstanceId } from "./api";
+import { useEffect, useState } from "react";
+import {
+  api,
+  describeAge,
+  describeDuration,
+  describeKind,
+  type Account,
+  type AshFeatures,
+  type Instance,
+  type InstanceGlance,
+  type InstanceId,
+  type Session,
+} from "./api";
 import { Icon } from "./icons";
 import type { Launch } from "./launch";
 import { LaunchArea } from "./LaunchArea";
@@ -8,8 +20,7 @@ import { Face } from "./TitleBar";
  * The launcher's home: who is playing, LAUNCH GAME for the selected
  * instance, and below it the instances to choose from.
  *
- * The two middle cards hold their places until recent servers (#74, #75)
- * and the instance at a glance (#73) fill them.
+ * The servers card holds its place until recent servers (#74, #75) fill it.
  */
 export function PlayPage(props: {
   player: Account | null;
@@ -70,12 +81,7 @@ export function PlayPage(props: {
           </h3>
           <p className="hint">Your servers, with Join, are coming soon.</p>
         </div>
-        <div className="card">
-          <h3>
-            This instance <small>{selected.name}</small>
-          </h3>
-          <p className="hint">Its ash features, play time and mods are coming soon.</p>
-        </div>
+        <ThisInstanceCard instance={selected} phase={launch.phase.at} onOpen={props.onOpen} />
         <InstancesCard
           instances={props.instances}
           selected={selected.id}
@@ -90,6 +96,102 @@ export function PlayPage(props: {
       </div>
     </section>
   );
+}
+
+/** How often a running session's play time is asked for again. */
+const RUNNING_REFRESH_MS = 30_000;
+
+/**
+ * The selected instance at a glance: what ash is running in it, how long it
+ * has been played, and the player's own mods.
+ */
+function ThisInstanceCard(props: {
+  instance: Instance;
+  /** Asked again whenever this changes, so a session that starts or ends shows. */
+  phase: Launch["phase"]["at"];
+  onOpen: (id: InstanceId) => void;
+}) {
+  const { instance, phase } = props;
+  const [glance, setGlance] = useState<InstanceGlance | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    const ask = () =>
+      api
+        .instanceGlance(instance.id)
+        .then((g) => live && setGlance(g))
+        .catch(() => live && setGlance(null));
+    void ask();
+    // A running session counts up, so it is asked for again while it runs.
+    const timer = phase === "running" ? setInterval(() => void ask(), RUNNING_REFRESH_MS) : undefined;
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [instance.id, phase]);
+
+  // Until the first answer, the card holds its place without guessing.
+  const chips = glance?.features.state === "on" && glance.features.features.length > 0;
+  const shown = glance && (
+    <div className="glance-rows">
+      {/* Chips go under their label: beside it, a narrow card stacks them one per line. */}
+      <div className={chips ? "kv kv-stacked" : "kv"}>
+        <span>ash features on</span>
+        <Features features={glance.features} />
+      </div>
+      <div className="kv">
+        <span>Play time</span>
+        <b className="numeric">{describeDuration(glance.played_ms)}</b>
+      </div>
+      <div className="kv">
+        <span>Last session</span>
+        <b className="numeric">{describeSession(glance.last_session)}</b>
+      </div>
+      <div className="kv">
+        <span>Mods</span>
+        <b>{glance.mods.length ? glance.mods.join(", ") : "None"}</b>
+      </div>
+      {glance.features.state !== "no_client" && (
+        <p className="hint">Right Shift changes these in game.</p>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="card glance-card">
+      <h3>
+        This instance <small>{instance.name}</small>
+      </h3>
+      {shown}
+      <button className="mini glance-open" onClick={() => props.onOpen(instance.id)}>
+        <Icon name="settings" />
+        Instance settings
+      </button>
+    </div>
+  );
+}
+
+function Features(props: { features: AshFeatures }) {
+  const { features } = props;
+  if (features.state === "no_client") return <b className="quiet">Vanilla, no ash client</b>;
+  if (features.state === "not_reported") return <b className="quiet">Shown after you play</b>;
+  if (features.features.length === 0) return <b>None</b>;
+  return (
+    <span className="feature-chips">
+      {features.features.map((name) => (
+        <span key={name} className="feature-chip">
+          {name}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** "2 hours ago · 48 min", or "Playing now · 12 min" while it runs. */
+function describeSession(session: Session | null): string {
+  if (!session) return "Never played";
+  if (session.ended_ms === null) return `Playing now · ${describeDuration(Date.now() - session.started_ms)}`;
+  return `${describeAge(session.ended_ms)} · ${describeDuration(session.ended_ms - session.started_ms)}`;
 }
 
 /** "1.21" from "1.21.11": the version a player names, short enough for a badge. */

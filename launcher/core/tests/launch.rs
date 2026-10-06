@@ -13,6 +13,7 @@
 //! with `${arch}`.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
@@ -770,6 +771,128 @@ async fn launching_records_that_the_instance_was_played() {
     // Recorded on launch, not on exit: a session that ends in a crash still
     // happened.
     assert!(f.ash.instance(&id).expect("instance").last_played_ms.is_some());
+}
+
+// ---- play time and the last session -------------------------------------------
+//
+// A session runs from ash's launch to the game's exit, and is kept in the
+// instance's own metadata. The clock is the real one, so these assert what
+// must at least have passed rather than exact figures.
+
+const A_WHILE: Duration = Duration::from_millis(30);
+
+impl Fixture {
+    /// The launcher closed and opened again: a new `Ash` over the same files
+    /// and the same signed-in player, holding none of the games the old one
+    /// started.
+    fn restarted(&self) -> Ash {
+        Ash::new(
+            Config::rooted_at(self.tmp.path()),
+            serving() as Arc<dyn HttpPort>,
+            Arc::clone(&self.store) as Arc<dyn CredentialStore>,
+            FakeProcessPort::new() as Arc<dyn ProcessPort>,
+            "test-client",
+        )
+    }
+}
+
+#[tokio::test]
+async fn a_session_ends_when_the_game_is_seen_to_exit() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.launch(&id).await;
+    std::thread::sleep(A_WHILE);
+
+    f.ash.stop_game(&id);
+    f.ash.game_status(&id);
+    // Asked again, as the window does: the session is ended once.
+    f.ash.game_status(&id);
+
+    let glance = f.ash.instance_glance(&id).unwrap();
+    let session = glance.last_session.expect("a session");
+    let ended = session.ended_ms.expect("the session did not end");
+    assert!(ended - session.started_ms >= A_WHILE.as_millis() as u64);
+    assert_eq!(glance.played_ms, ended - session.started_ms);
+}
+
+#[tokio::test]
+async fn a_running_session_counts_up_to_now() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.launch(&id).await;
+
+    let before = f.ash.instance_glance(&id).unwrap();
+    std::thread::sleep(A_WHILE);
+    let after = f.ash.instance_glance(&id).unwrap();
+
+    assert_eq!(
+        after.last_session.expect("a session").ended_ms,
+        None,
+        "running, but shown as ended"
+    );
+    assert!(after.played_ms >= before.played_ms + A_WHILE.as_millis() as u64);
+}
+
+#[tokio::test]
+async fn play_time_adds_up_across_sessions_and_survives_a_restart() {
+    let f = fixture();
+    let id = f.ready().await;
+    for _ in 0..2 {
+        f.launch(&id).await;
+        std::thread::sleep(A_WHILE);
+        f.ash.stop_game(&id);
+        f.ash.game_status(&id);
+    }
+    let played = f.ash.instance_glance(&id).unwrap();
+    assert!(played.played_ms >= 2 * A_WHILE.as_millis() as u64, "{played:?}");
+
+    let reopened = f.restarted().instance_glance(&id).unwrap();
+
+    assert_eq!(reopened, played);
+}
+
+#[tokio::test]
+async fn a_session_nobody_saw_end_ends_when_the_game_last_wrote_its_log() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.launch(&id).await;
+    let started = f.ash.instance(&id).unwrap().last_session.unwrap().started_ms;
+    std::thread::sleep(A_WHILE);
+    // The game's last line, written after the launcher was closed under it.
+    let logs = f.ash.game_directory(&id).join("logs");
+    std::fs::create_dir_all(&logs).unwrap();
+    std::fs::write(logs.join("latest.log"), "[Render thread/INFO]: Stopping!\n").unwrap();
+    let written = std::fs::metadata(logs.join("latest.log"))
+        .unwrap()
+        .modified()
+        .unwrap()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+
+    let ash = f.restarted();
+    let glance = ash.instance_glance(&id).unwrap();
+
+    assert_eq!(glance.last_session.unwrap().ended_ms, Some(written));
+    assert_eq!(glance.played_ms, written - started);
+
+    // And the next launch closes it there for good.
+    ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launch");
+    assert_eq!(ash.instance(&id).unwrap().played_ms, written - started);
+}
+
+#[tokio::test]
+async fn a_session_with_no_log_to_go_by_adds_no_time() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.launch(&id).await;
+    std::thread::sleep(A_WHILE);
+
+    let glance = f.restarted().instance_glance(&id).unwrap();
+
+    let session = glance.last_session.unwrap();
+    assert_eq!(session.ended_ms, Some(session.started_ms));
+    assert_eq!(glance.played_ms, 0, "a guess was counted as play time");
 }
 
 // ---- 1.8.9 ------------------------------------------------------------------

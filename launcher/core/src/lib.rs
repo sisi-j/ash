@@ -19,6 +19,7 @@ mod depot;
 mod diagnostics;
 mod error;
 mod gamelog;
+mod glance;
 mod instance;
 mod launch;
 mod load_report;
@@ -42,7 +43,8 @@ pub use config::Config;
 pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use diagnostics::Diagnostics;
 pub use error::AshError;
-pub use instance::{DeletionPreview, Instance, InstanceId};
+pub use glance::{AshFeatures, InstanceGlance, LastSession};
+pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
 pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
@@ -91,6 +93,15 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or_default()
 }
 
+/// A game ash started, and the session it is.
+struct Game {
+    process: Box<dyn GameProcess>,
+    /// Which session in the instance's metadata this game is.
+    started_ms: u64,
+    /// Whether that session has been ended, so it is ended once.
+    end_recorded: bool,
+}
+
 /// The whole of ash's public API.
 pub struct Ash {
     config: Config,
@@ -109,7 +120,7 @@ pub struct Ash {
     /// An exited game stays in the map: its status and the tail of its log
     /// are what the player needs *after* a crash, and dropping the entry on
     /// exit would throw both away at the moment they matter.
-    games: Mutex<HashMap<String, Box<dyn GameProcess>>>,
+    games: Mutex<HashMap<String, Game>>,
     /// The last load-report line written to ash's log, by instance, so the
     /// same report read again - by the notice, then by a launch - is logged
     /// once, while a new session's report is logged even if it says the same.
@@ -629,19 +640,81 @@ impl Ash {
                 return Err(e);
             }
         };
-        self.games.lock().unwrap().insert(id.as_str().to_owned(), process);
+        let started_ms = now_ms();
+        self.games
+            .lock()
+            .unwrap()
+            .insert(id.as_str().to_owned(), Game { process, started_ms, end_recorded: false });
 
-        // Recorded now rather than on exit: a session that ends in a crash
-        // still happened, and the player looking for "what did I play last"
-        // means the same thing either way.
-        self.mark_played(id)?;
+        // The session starts now rather than when it ends: a session that
+        // ends in a crash still happened, and the player looking for "what
+        // did I play last" means the same thing either way.
+        instance::begin_session(&self.config.instances_root, id, started_ms)?;
 
         Ok(view)
     }
 
     /// How a launched game is doing. `None` if ash never started it.
+    ///
+    /// The first time it answers that the game has exited, the session ends
+    /// in the instance's metadata - which is why the window asks until then.
     pub fn game_status(&self, id: &InstanceId) -> Option<GameStatus> {
-        self.games.lock().unwrap().get(id.as_str()).map(|game| game.status())
+        let mut games = self.games.lock().unwrap();
+        let game = games.get_mut(id.as_str())?;
+        let status = game.process.status();
+        if matches!(status, GameStatus::Exited { .. }) && !game.end_recorded {
+            match instance::end_session(&self.config.instances_root, id, game.started_ms, now_ms())
+            {
+                Ok(()) => game.end_recorded = true,
+                // Tried again on the next ask. Losing the time is worse
+                // than a line in the log for each attempt.
+                Err(e) => {
+                    self.diagnostics.warn("session-end", &format!("instance={id} {}", e.kind()))
+                }
+            }
+        }
+        Some(status)
+    }
+
+    /// What the Play page shows of an instance beside LAUNCH GAME.
+    pub fn instance_glance(&self, id: &InstanceId) -> Result<InstanceGlance, AshError> {
+        // Asked first, so a game that has exited since the window last
+        // looked has its session ended before it is read.
+        let running = matches!(self.game_status(id), Some(GameStatus::Running));
+        let instance = self.instance(id)?;
+        let game = self.game_directory(id);
+
+        let last_session = instance.last_session.map(|session| LastSession {
+            started_ms: session.started_ms,
+            ended_ms: match session.ended_ms {
+                Some(ended) => Some(ended),
+                None if running => None,
+                // Open, with no game of ash's running for it: the launcher
+                // was closed while it ran. Shown as it will be closed.
+                None => {
+                    Some(instance::unseen_end(&self.config.instances_root, id, session.started_ms))
+                }
+            },
+        });
+        let open_ms = match instance.last_session {
+            Some(instance::Session { ended_ms: None, started_ms }) => {
+                let ended = last_session.and_then(|s| s.ended_ms).unwrap_or_else(now_ms);
+                ended.saturating_sub(started_ms)
+            }
+            _ => 0,
+        };
+
+        let pin = loader::pin_for(self.config.loaders, instance.loader, &instance.version_id);
+        Ok(InstanceGlance {
+            features: if instance.loader == Loader::Vanilla {
+                AshFeatures::NoClient
+            } else {
+                glance::features(&game)
+            },
+            played_ms: instance.played_ms + open_ms,
+            last_session,
+            mods: glance::mods(&game, pin),
+        })
     }
 
     /// The tail of the game's own output.
@@ -649,8 +722,13 @@ impl Ash {
     /// Available while it runs and after it exits, which is the only time it
     /// is worth reading.
     pub fn game_log(&self, id: &InstanceId) -> Vec<String> {
-        let raw =
-            self.games.lock().unwrap().get(id.as_str()).map(|game| game.log()).unwrap_or_default();
+        let raw = self
+            .games
+            .lock()
+            .unwrap()
+            .get(id.as_str())
+            .map(|game| game.process.log())
+            .unwrap_or_default();
         // Mojang's log4j configuration makes the game write XML to stdout,
         // and ash applies that configuration because for old versions it is
         // the Log4Shell mitigation. Rendering it back is the price.
@@ -660,7 +738,7 @@ impl Ash {
     /// Ask a running game to stop.
     pub fn stop_game(&self, id: &InstanceId) {
         if let Some(game) = self.games.lock().unwrap().get(id.as_str()) {
-            game.stop();
+            game.process.stop();
         }
     }
 
