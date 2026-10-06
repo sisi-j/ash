@@ -31,6 +31,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.phys.EntityHitResult;
 
 /**
@@ -93,6 +94,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
             "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
             "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
+            "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             assertReportSays(feature);
@@ -133,6 +135,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             toggleSprintWorks(context, server);
             freelookWorks(context, server);
             snaplookWorks(context);
+            pingReadoutWorks(context);
             settingsScreenWorks(context);
             crosshairOptionsWork(context);
             crosshairWorks(context);
@@ -658,6 +661,27 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.getInput().setCursorPos(at[0], at[1]);
         context.getInput().pressMouse(org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT);
         context.waitTicks(3);
+    }
+
+    /**
+     * The ping readout, against the test's dedicated server: it says exactly
+     * the latency the server gave the player's own tab-list entry.
+     */
+    private static void pingReadoutWorks(ClientGameTestContext context) {
+        String result = context.computeOnClient(client -> {
+            PlayerInfo info = client.getConnection().getPlayerInfo(client.player.getUUID());
+            if (info == null) {
+                return "the server has not listed the player";
+            }
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.pingReadout.draw(surface);
+            String expected = info.getLatency() + " ms";
+            return surface.drawn.equals(List.of(expected)) ? null : "drew " + surface.drawn + ", not " + expected;
+        });
+        if (result != null) {
+            throw new AssertionError("the ping readout does not show the tab list's number: " + result);
+        }
+        context.takeScreenshot("ash-ping-readout");
     }
 
     private static void assertReadoutDraws(ClientGameTestContext context, boolean expected, String otherwise) {

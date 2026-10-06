@@ -134,6 +134,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         toggleSprintWorks(client);
         freelookWorks(client);
         snaplookWorks(client);
+        pingReadoutIsHiddenInSingleplayer(client);
         settingsScreenWorks(client);
         crosshairOptionsWork(client);
         crosshairWorks(client);
@@ -201,6 +202,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"hit-indicator\", \"name\": \"Hit indicator\", \"status\": \"loaded\" }",
             "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
             "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
+            "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -494,6 +496,21 @@ public final class AshSmokeTest implements ClientModInitializer {
             }
         }
         onClient(client, () -> client.options.perspective = 0);
+    }
+
+    /**
+     * The ping readout, switched on, in this test's own singleplayer world:
+     * hidden, because a latency to one's own world means nothing.
+     */
+    private static void pingReadoutIsHiddenInSingleplayer(MinecraftClient client) {
+        List<String> drawn = onClient(client, () -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.pingReadout.draw(surface);
+            return surface.drawn;
+        });
+        if (!drawn.isEmpty() || onClient(client, AshClient::latency) != null) {
+            fail("the ping readout showed in a singleplayer world: " + drawn);
+        }
     }
 
     /** How many chunks the world renderer drew last frame: its own debug line, "C: drawn/total ...". */

@@ -14,6 +14,7 @@ public enum Feature {
     HIT_INDICATOR("hit-indicator", "Hit indicator"),
     FREELOOK("freelook", "Freelook"),
     SNAPLOOK("snaplook", "Snaplook"),
+    PING_READOUT("ping-readout", "Ping readout"),
     /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can

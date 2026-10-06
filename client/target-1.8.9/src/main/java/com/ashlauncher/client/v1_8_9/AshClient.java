@@ -12,6 +12,7 @@ import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hit.RecentAttacks;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
+import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
@@ -41,6 +42,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
+import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.entity.player.ClientPlayerEntity;
@@ -90,6 +92,9 @@ public final class AshClient implements ClientModInitializer {
      */
     static FpsReadout fpsReadout;
 
+    /** The ping readout this session draws, for the smoke test to ask. */
+    static PingReadout pingReadout;
+
     /** The hit indicator this session draws, if both its mixins landed, for the smoke test to ask. */
     static HitIndicator hitIndicator;
 
@@ -106,6 +111,9 @@ public final class AshClient implements ClientModInitializer {
         Marker marker = new Marker();
         FpsReadout fpsReadout = new FpsReadout(MinecraftClient::getCurrentFps, () -> settings.get(Settings.FPS_READOUT));
         AshClient.fpsReadout = fpsReadout;
+        PingReadout pingReadout = new PingReadout(AshClient::latency, () -> settings.get(Settings.PING_READOUT),
+                () -> settings.get(Settings.FPS_READOUT));
+        AshClient.pingReadout = pingReadout;
 
         HudRenderCallback.EVENT.register((minecraft, tickDelta) -> {
             // One surface for both: constructing it reads the window size and
@@ -113,6 +121,7 @@ public final class AshClient implements ClientModInitializer {
             LegacyHudSurface surface = new LegacyHudSurface(minecraft);
             marker.draw(surface);
             fpsReadout.draw(surface);
+            pingReadout.draw(surface);
             // Around the middle pixel of the game's crosshair, which it draws
             // at (width / 2 - 7, height / 2 - 7) with its centre on pixel 7.
             HitHook.draw(surface, surface.width() / 2, surface.height() / 2);
@@ -280,6 +289,21 @@ public final class AshClient implements ClientModInitializer {
                     .orElse(Collections.<Path>emptyList());
         }
         return Collections.emptyList();
+    }
+
+    /**
+     * The server's latency for the player's own tab-list entry, the number
+     * behind the tab list's bars; null in singleplayer, which on 1.8.9 stays
+     * true after opening to LAN (research 0004, 3.2), or before the server has
+     * listed the player. Read, never measured.
+     */
+    static Integer latency() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.isInSingleplayer() || client.player == null || client.getNetworkHandler() == null) {
+            return null;
+        }
+        PlayerListEntry entry = client.getNetworkHandler().getPlayerListEntry(client.player.getUuid());
+        return entry == null ? null : entry.getLatency();
     }
 
     private static String clientVersion() {
