@@ -224,6 +224,8 @@ export type MachineOverrides = {
   memory_mb: number | null;
   java_executable: string | null;
   resolution: Resolution | null;
+  /** Whether the loader reads the instance's own `mods` folder. Off unless the player turns it on. */
+  third_party_mods: boolean;
 };
 
 /**
@@ -320,6 +322,9 @@ export const api = {
   launch: (id: InstanceId) => invoke<void>("launch", { id }),
   /** As `launch`, straight into one of the instance's own servers. */
   join: (id: InstanceId, address: string) => invoke<void>("join", { id, address }),
+  /** As `launch`, with the player's own mods left out this once. The setting is not changed. */
+  launchWithoutThirdPartyMods: (id: InstanceId) =>
+    invoke<void>("launch_without_third_party_mods", { id }),
   /** The instance's servers, in the player's own order. */
   servers: (id: InstanceId) => invoke<ServerEntry[]>("servers", { id }),
   /** Asks the server at most once a minute; sooner, it answers with the last reply. */
@@ -359,6 +364,8 @@ export const api = {
   previewDeletion: (id: InstanceId) =>
     invoke<DeletionPreview>("preview_deletion", { id }),
   deleteInstance: (id: InstanceId) => invoke<void>("delete_instance", { id }),
+  /** The instance's `mods` folder, the player's, opened in the file manager. */
+  revealModsFolder: (id: InstanceId) => invoke<void>("reveal_mods_folder", { id }),
   revealGameDirectory: (id: InstanceId) =>
     invoke<void>("reveal_game_directory", { id }),
   /** ash's own log: the first thing anyone asks for when a launch fails. */

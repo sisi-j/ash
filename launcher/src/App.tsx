@@ -256,6 +256,7 @@ export default function App() {
         <LaunchFailure
           phase={launch.phase}
           onRetry={launch.retry}
+          onPlayWithoutMods={launch.playWithoutMods}
           onClose={launch.dismiss}
         />
       )}

@@ -314,6 +314,7 @@ async fn no_machine_local_value_is_written_into_the_directory_a_sync_would_carry
                 memory_mb: Some(DESKTOP_MEMORY_MB),
                 java_executable: None,
                 resolution: Some(Resolution { width: 3840, height: 2160 }),
+                third_party_mods: true,
             },
         )
         .expect("set");
@@ -398,6 +399,7 @@ async fn settings_survive_being_read_back() {
         memory_mb: Some(6144),
         java_executable: None,
         resolution: Some(Resolution { width: 1920, height: 1080 }),
+        third_party_mods: true,
     };
 
     f.ash.set_overrides(&id, chosen.clone()).expect("set");

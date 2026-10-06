@@ -19,8 +19,8 @@ use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::servers::FakeServerPort;
 use ash_core::{
-    Ash, AshError, AshFeatures, Cancel, Config, InstanceId, Loader, LoaderPin, NullSink,
-    PinnedFile, PinnedLibrary, VERSION_MANIFEST_URL,
+    Ash, AshError, AshFeatures, Cancel, Config, InstanceId, Loader, LoaderPin, MachineOverrides,
+    NullSink, PinnedFile, PinnedLibrary, VERSION_MANIFEST_URL,
 };
 
 mod common;
@@ -1105,6 +1105,138 @@ async fn a_players_mods_are_not_listed_while_they_do_not_load() {
     // The loader reads an empty folder of ash's instead, so listing Sodium
     // would be telling the player it runs when it does not.
     assert!(f.ash.instance_glance(&id).unwrap().mods.is_empty());
+}
+
+// ---- third-party mods ---------------------------------------------------------
+//
+// A player can turn on their own mods for one instance. On, the loader reads
+// the instance's `mods` folder; off, an empty one of ash's. Either way the
+// launch never changes what is in `mods`.
+
+impl Fixture {
+    fn set_third_party_mods(&self, id: &InstanceId, on: bool) {
+        let current = self.ash.overrides(id).expect("overrides");
+        self.ash
+            .set_overrides(id, MachineOverrides { third_party_mods: on, ..current })
+            .expect("saved");
+    }
+}
+
+#[tokio::test]
+async fn third_party_mods_are_off_until_turned_on_and_only_for_that_instance() {
+    let f = fixture();
+    let one = f.modded().await;
+    let other = f.ash.create_instance("other", VERSION, Loader::Fabric).expect("instance").id;
+    assert!(!f.ash.overrides(&one).unwrap().third_party_mods, "on by default");
+
+    f.set_third_party_mods(&one, true);
+
+    assert!(f.ash.overrides(&one).unwrap().third_party_mods);
+    assert!(!f.ash.overrides(&other).unwrap().third_party_mods, "another instance was turned on");
+    let view = f.ash.preview_launch(&other, &NullSink, &Cancel::new()).await.expect("previewed");
+    assert!(
+        property(&view.args, "fabric.modsFolder").is_some(),
+        "the other instance reads its mods"
+    );
+}
+
+#[tokio::test]
+async fn with_them_on_the_loader_reads_the_mods_folder_and_the_launch_leaves_it_alone() {
+    let f = fixture();
+    let id = f.modded().await;
+    let mods = f.ash.game_directory(&id).join("mods");
+    std::fs::write(mods.join("sodium.jar"), fabric_mod("Sodium")).unwrap();
+    std::fs::create_dir_all(mods.join("disabled")).unwrap();
+    std::fs::write(mods.join("disabled").join("old.jar"), b"switched off by the player").unwrap();
+    let before = snapshot(&mods);
+    f.set_third_party_mods(&id, true);
+
+    let view = f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    // Unset, the loader reads `<gameDir>/mods`, one level deep, as it always has.
+    assert_eq!(property(&view.args, "fabric.modsFolder"), None);
+    // The player's mods are never passed by path: `addMods` walks folders
+    // all the way down, and `mods/disabled` would start loading.
+    assert!(!property(&view.args, "fabric.addMods").unwrap().contains("sodium"));
+    assert_eq!(snapshot(&mods), before, "the launch changed the mods folder");
+}
+
+#[tokio::test]
+async fn playing_without_them_leaves_them_out_this_once_and_keeps_the_setting() {
+    let f = fixture();
+    let id = f.modded().await;
+    f.set_third_party_mods(&id, true);
+
+    let view = f
+        .ash
+        .launch_without_third_party_mods(&id, &NullSink, &Cancel::new())
+        .await
+        .expect("launched");
+
+    assert!(property(&view.args, "fabric.modsFolder").is_some(), "the player's mods still loaded");
+    assert!(f.ash.overrides(&id).unwrap().third_party_mods, "the player's choice was changed");
+}
+
+#[tokio::test]
+async fn the_setting_is_still_set_the_next_time_ash_opens() {
+    let f = fixture();
+    let id = f.modded().await;
+    f.set_third_party_mods(&id, true);
+
+    let reopened = Ash::new(
+        Config { loaders: pins(), ..Config::rooted_at(f.tmp.path()) },
+        FakeHttp::offline() as Arc<dyn HttpPort>,
+        InMemoryCredentialStore::new(),
+        FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
+        "test-client",
+    );
+
+    assert!(reopened.overrides(&id).unwrap().third_party_mods);
+}
+
+#[tokio::test]
+async fn with_them_on_the_card_lists_the_mods_by_their_own_names() {
+    let f = fixture();
+    let id = f.modded().await;
+    let mods = f.ash.game_directory(&id).join("mods");
+    std::fs::write(mods.join("sodium-fabric-0.6.13+mc1.21.11.jar"), fabric_mod("Sodium")).unwrap();
+    std::fs::write(mods.join("not-a-zip.jar"), b"whatever this is").unwrap();
+    std::fs::write(mods.join("notes.txt"), b"not a mod").unwrap();
+    f.set_third_party_mods(&id, true);
+
+    // By the name a mod gives itself, or by its file name if it gives none.
+    assert_eq!(f.ash.instance_glance(&id).unwrap().mods, ["not-a-zip", "Sodium"]);
+}
+
+#[tokio::test]
+async fn the_mods_folder_can_be_opened_even_after_it_was_removed() {
+    let f = fixture();
+    let id = f.modded().await;
+    std::fs::remove_dir_all(f.ash.game_directory(&id).join("mods")).unwrap();
+
+    let folder = f.ash.mods_directory(&id).expect("a folder to open");
+
+    assert!(folder.is_dir());
+    assert_eq!(folder, f.ash.game_directory(&id).join("mods"));
+}
+
+/// Every file under a folder, with its bytes.
+fn snapshot(root: &std::path::Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut files = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                files.push((path.clone(), std::fs::read(&path).unwrap()));
+            }
+        }
+    }
+    files.sort();
+    files
 }
 
 fn value_of<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {

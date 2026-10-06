@@ -40,7 +40,17 @@ export type Phase =
   | { at: "idle"; plan: Plan }
   | { at: "working"; progress: Progress; goal: Goal }
   | { at: "running" }
-  | { at: "crashed"; code: number | null; log: string[] }
+  | {
+      at: "crashed";
+      code: number | null;
+      log: string[];
+      /**
+       * The player's own mods, when the session ran with them on: the likely
+       * cause, named. Empty when they were on but none can be named; null
+       * when they were off.
+       */
+      mods: string[] | null;
+    }
   | { at: "failed"; error: UiError; goal: Goal };
 
 const START: Progress = {
@@ -74,6 +84,8 @@ export type Launch = {
    */
   runningAs: string | null;
   start: (what: Goal) => void;
+  /** Play with the player's own mods left out, this once: what a crash with them on offers. */
+  playWithoutMods: () => void;
   /** Play, straight into one of the instance's servers. */
   join: (address: string) => void;
   /** Do again what just failed: the same goal, into the same server if there was one. */
@@ -156,7 +168,8 @@ export function useLaunch(id: InstanceId | null): Launch {
         return;
       }
       const log = await api.gameLog(id).catch(() => []);
-      if (live) setPhase({ at: "crashed", code: status.code, log });
+      const mods = withoutMods.current ? null : await playersMods(id);
+      if (live) setPhase({ at: "crashed", code: status.code, log, mods });
     };
 
     const timer = setInterval(() => void tick(), POLL_MS);
@@ -247,16 +260,26 @@ export function useLaunch(id: InstanceId | null): Launch {
 
   // The server the last play was going into, so trying again goes there too.
   const server = useRef<string | null>(null);
+  // Whether the last play left the player's own mods out, which a crash
+  // then cannot blame on them, and which trying again keeps doing.
+  const withoutMods = useRef(false);
 
   const begin = useCallback(
-    (what: Goal, into: string | null) => {
+    (what: Goal, into: string | null, leaveModsOut = false) => {
       if (id === null) return;
       goal.current = what;
       server.current = into;
+      withoutMods.current = leaveModsOut;
       setCommand(null);
       setPhase({ at: "working", goal: what, progress: START });
       const call =
-        what === "prepare" ? api.prepareInstance(id) : into ? api.join(id, into) : api.launch(id);
+        what === "prepare"
+          ? api.prepareInstance(id)
+          : leaveModsOut
+            ? api.launchWithoutThirdPartyMods(id)
+            : into
+              ? api.join(id, into)
+              : api.launch(id);
       call.catch((e) => setPhase({ at: "failed", error: e as UiError, goal: what }));
     },
     [id],
@@ -268,9 +291,24 @@ export function useLaunch(id: InstanceId | null): Launch {
     runningAs: command ? argumentAfter(command.args, "--username") : null,
     start: (what) => begin(what, null),
     join: (address) => begin("play", address),
-    retry: () => begin(phase.at === "failed" ? phase.goal : "play", server.current),
+    playWithoutMods: () => begin("play", null, true),
+    retry: () => begin(phase.at === "failed" ? phase.goal : "play", server.current, withoutMods.current),
     cancel: () => id !== null && void api.cancelPreparation(id),
     stop: () => id !== null && void api.stopGame(id),
     dismiss: () => void replan(),
   };
+}
+
+/**
+ * The player's own mods, if the instance has them on: named, for a crash to
+ * point at. Null when they are off, or when ash cannot tell.
+ */
+async function playersMods(id: InstanceId): Promise<string[] | null> {
+  try {
+    const overrides = await api.overrides(id);
+    if (!overrides.third_party_mods) return null;
+    return (await api.instanceGlance(id)).mods;
+  } catch {
+    return null;
+  }
 }

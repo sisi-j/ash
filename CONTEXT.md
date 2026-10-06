@@ -111,7 +111,7 @@ The feature that draws a **mark** at the crosshair when the server confirms one 
 _Avoid_: hit marker (in docs), hitmarker, damage indicator
 
 **Third-party mod**:
-A mod the player supplies themselves, loaded only when they opt in. It lives in the instance's `mods` folder, which is the player's alone: ash hands its own client and bundled mods to the loader by path and never puts anything there. While third-party mods are off, the loader is pointed at an empty folder of ash's instead.
+A mod the player supplies themselves, loaded only when they opt in. It lives in the instance's `mods` folder, which is the player's alone: ash hands its own client and bundled mods to the loader by path and never puts anything there. While third-party mods are off, the loader is pointed at an empty folder of ash's instead. The opt-in is per instance, off by default, and machine-local: it decides which files in this machine's folder load. A crash with them on names them and offers to play without them, once, without changing the setting.
 _Avoid_: mod (unqualified), external mod, custom mod
 
 ### Cosmetics
@@ -139,7 +139,7 @@ The launcher's own settings, as opposed to any one instance's: launch sounds, an
 _Avoid_: launcher settings, app settings, config
 
 **Machine-local override**:
-A field deliberately excluded from sync because it only makes sense on one machine: memory allocation, Java path, window resolution. Also this machine's default memory for every instance, which an instance's own memory overrides.
+A field deliberately excluded from sync because it only makes sense on one machine: memory allocation, Java path, window resolution, and whether an instance loads third-party mods. Also this machine's default memory for every instance, which an instance's own memory overrides.
 _Avoid_: local config, machine settings, device settings
 
 **Server entry**:

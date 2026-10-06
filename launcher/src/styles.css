@@ -1860,3 +1860,16 @@ button {
 .launcher-settings {
   margin-top: 6px;
 }
+
+/* A switch with its button beside it, on one line. */
+.setting-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The crash card's word on the player's own mods, between the reason and the output. */
+.failure-mods {
+  margin: 0;
+  color: var(--text-2);
+}

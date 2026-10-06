@@ -145,7 +145,34 @@ const STATES: State[] = [
     reach: launchGame,
     verify: async (page) => ((await windowDid(page)) === "close" ? null : "ash did not close once the game started"),
   },
-  { name: "crashed", shows: "OutOfMemoryError" },
+  {
+    name: "crashed",
+    shows: "OutOfMemoryError",
+    // The player's own mods were off, so the crash is not pinned on them.
+    verify: async (page) =>
+      (await page.getByRole("button", { name: "Play without them" }).count()) === 0 ? null : "offered to play without mods that were off",
+  },
+  {
+    name: "crashed-with-mods",
+    shows: "one of them is the likely cause: Sodium.",
+    verify: async (page) =>
+      (await page.getByRole("button", { name: "Play without them" }).count()) === 1 ? null : "no way to play without them",
+  },
+  {
+    name: "crashed-play-without-mods",
+    shows: "DOWNLOADING",
+    reach: (page) => page.getByRole("button", { name: "Play without them" }).click(),
+    verify: async (page) =>
+      (await page.evaluate(() => (window as unknown as { withoutMods?: boolean }).withoutMods)) ? null : "it launched with the mods on",
+  },
+  { name: "instances-with-mods", shows: "ash client · your mods" },
+  {
+    name: "instance-page-mods",
+    shows: "Open mods folder",
+    reach: openInstance,
+    verify: async (page) =>
+      (await page.getByRole("switch", { name: "Your mods" }).getAttribute("aria-checked")) === "true" ? null : "the instance's mods do not show as on",
+  },
   {
     name: "unchecked",
     shows: "ash could not reach Mojang to check this instance.",
