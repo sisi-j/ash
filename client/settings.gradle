@@ -23,6 +23,7 @@ pluginManagement {
 rootProject.name = 'ash-client'
 
 include 'shared'
+include 'bench'
 // Named for the version target rather than "modern", because "modern" is a
 // word that rots: 1.21.11 is the last obfuscated release and 26.x is already
 // out. The directory says which build it is and always will.

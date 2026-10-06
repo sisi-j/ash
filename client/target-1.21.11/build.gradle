@@ -68,6 +68,38 @@ fabricApi {
     }
 }
 
+// The frame-time measurement (#42): a developer tool, run by hand on a real
+// machine, in a source set of its own so nothing of it reaches a player's
+// jar. Not the client game test tier above: that steps the game a frame at a
+// time, which makes frame times mean nothing.
+sourceSets {
+    benchmark {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+dependencies {
+    benchmarkImplementation project(':bench')
+}
+
+loom {
+    runs {
+        // `./gradlew :target-1.21.11:runBenchmark`, with `-Pbench.label=...`
+        // to name the run. Results go to `client/benchmark-results`, outside
+        // `build` so a clean keeps them. See `client/README.md`.
+        benchmark {
+            client()
+            configName = 'ash frame-time measurement (1.21.11)'
+            source 'benchmark'
+            runDir 'build/run/benchmark'
+            programArgs '--width', '1280', '--height', '720'
+            property 'ash.bench.label', (project.findProperty('bench.label') ?: '').toString()
+            property 'ash.bench.out', rootProject.file('benchmark-results').absolutePath
+        }
+    }
+}
+
 processResources {
     // Written into `fabric.mod.json` rather than repeated there, so what the
     // client declares it needs cannot drift from what it was built against.
@@ -92,4 +124,37 @@ tasks.named('jar') {
 // `archivesName` above.
 tasks.withType(AbstractArchiveTask).configureEach {
     archiveVersion = ''
+}
+
+// Nothing of the frame-time measurement may reach a player: the jar the
+// launcher ships is opened and checked on every build, rather than trusted
+// to leave out a source set it was never told about.
+tasks.register('checkJarHasNoBenchmark') {
+    group = 'verification'
+    description = 'Fails if the jar a player gets holds any of the frame-time measurement.'
+    def shipped = tasks.named('remapJar').flatMap { it.archiveFile }
+    inputs.file(shipped)
+
+    doLast {
+        def offences = []
+        def entries = 0
+        zipTree(shipped.get().asFile).visit { entry ->
+            entries++
+            def path = entry.relativePath.pathString
+            if (path.startsWith('com/ashlauncher/client/bench/') || path.contains('AshBenchmark')) {
+                offences << path
+            }
+        }
+        if (entries == 0) {
+            throw new GradleException('the shipped jar is empty - this check proved nothing')
+        }
+        if (!offences.isEmpty()) {
+            throw new GradleException('the frame-time measurement reached the jar a player gets:\n  '
+                    + offences.join('\n  '))
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'checkJarHasNoBenchmark'
 }

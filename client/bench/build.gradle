@@ -1,0 +1,33 @@
+// The frame-time measurement's own logic: the scene's timings, the camera's
+// path, and the numbers a run comes to. A developer tool and never a
+// player's - only each target's `benchmark` source set depends on this, and
+// neither target's jar takes anything from it. See `client/README.md`,
+// "Measuring frame time".
+
+plugins {
+    id 'java-library'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// Java 8 bytecode: the 1.8.9 benchmark runs inside a game on Java 8's terms,
+// as the shared module does.
+tasks.named('compileJava') {
+    options.release = 8
+}
+
+tasks.named('compileTestJava') {
+    options.release = 21
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
