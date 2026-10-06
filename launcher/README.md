@@ -63,10 +63,11 @@ matters in Chromium: signed out, no instances, idle, the account menu,
 preparing (with launch sounds on and off), playing, the Servers card (online
 and offline servers, a Join, and an instance with none), the "This instance" card
 (for an ash instance and a vanilla one, and its shortcut to the instance page),
-a failed launch (which leaves ash open whatever it is set to do), minimising or
+a crash with the player's own mods on (named, with Play without them), a failed
+launch (which leaves ash open whatever it is set to do), minimising or
 closing once the game starts, a crash,
 an instance that could not be checked, Download only, a degradation notice,
-the instance page (custom memory saved, a refused window size, the delete
+the instance page (the player's own mods switched on, custom memory saved, a refused window size, the delete
 confirmation, and back to Play after deleting), the new-instance form, and
 each sidebar page, with Settings also showing a custom default memory. The
 fake is typed against the real module, so the two cannot drift apart without

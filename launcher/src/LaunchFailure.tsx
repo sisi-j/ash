@@ -16,6 +16,8 @@ const LAST_LINES = 40;
 export function LaunchFailure(props: {
   phase: Extract<Phase, { at: "failed" } | { at: "crashed" }>;
   onRetry: () => void;
+  /** Play again with the player's own mods left out, offered after a crash with them on. */
+  onPlayWithoutMods: () => void;
   onClose: () => void;
 }) {
   const { phase } = props;
@@ -24,6 +26,9 @@ export function LaunchFailure(props: {
   // A crash says nothing about whether playing again will work, so the
   // button says what it does rather than promising a fix.
   const retry = phase.at === "crashed" ? "Play again" : phase.error.retryable ? "Try again" : null;
+  // A crash with the player's own mods on is most likely one of theirs,
+  // and saying so comes with the way to find out.
+  const mods = phase.at === "crashed" ? phase.mods : null;
 
   useEffect(() => {
     const escape = (e: KeyboardEvent) => e.key === "Escape" && props.onClose();
@@ -56,6 +61,13 @@ export function LaunchFailure(props: {
             : phase.error.message}
         </p>
 
+        {mods && (
+          <p className="failure-mods">
+            Your own mods were on, so one of them is the likely cause
+            {mods.length > 0 ? `: ${listed(mods)}.` : "."} Play without them to find out. They stay switched on.
+          </p>
+        )}
+
         {output && (
           <div className="failure-output">
             <div className="failure-output-head">
@@ -69,8 +81,13 @@ export function LaunchFailure(props: {
         )}
 
         <div className="actions">
+          {mods && (
+            <button className="button button-go" onClick={props.onPlayWithoutMods}>
+              Play without them
+            </button>
+          )}
           {retry && (
-            <button className="button button-go" onClick={props.onRetry}>
+            <button className={`button${mods ? "" : " button-go"}`} onClick={props.onRetry}>
               {retry}
             </button>
           )}
@@ -84,4 +101,10 @@ export function LaunchFailure(props: {
       </div>
     </div>
   );
+}
+
+/** "A", "A and B", "A, B and C": the way a sentence names things. */
+function listed(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }

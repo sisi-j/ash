@@ -327,7 +327,7 @@ fn set_launcher_preferences(
 /// arrives as `prepare-progress` and the outcome as `launch-finished`.
 #[tauri::command]
 fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
-    start(app, id, None);
+    start(app, id, Play::Launch);
     Ok(())
 }
 
@@ -335,11 +335,26 @@ fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
 /// the same events as `launch`.
 #[tauri::command]
 fn join(app: tauri::AppHandle, id: InstanceId, address: String) -> Result<(), UiError> {
-    start(app, id, Some(address));
+    start(app, id, Play::Join(address));
     Ok(())
 }
 
-fn start(app: tauri::AppHandle, id: InstanceId, address: Option<String>) {
+/// Start the game with the player's own mods left out, this once: what a
+/// crash with them on offers. Reported on the same events as `launch`.
+#[tauri::command]
+fn launch_without_third_party_mods(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
+    start(app, id, Play::WithoutThirdPartyMods);
+    Ok(())
+}
+
+/// The three ways the window starts a game.
+enum Play {
+    Launch,
+    Join(String),
+    WithoutThirdPartyMods,
+}
+
+fn start(app: tauri::AppHandle, id: InstanceId, play: Play) {
     tauri::async_runtime::spawn(async move {
         let cancel = Cancel::new();
         let ash = {
@@ -349,9 +364,12 @@ fn start(app: tauri::AppHandle, id: InstanceId, address: Option<String>) {
         };
 
         let sink = WindowSink(app.clone());
-        let outcome = match &address {
-            Some(address) => ash.join(&id, address, &sink, &cancel).await,
-            None => ash.launch(&id, &sink, &cancel).await,
+        let outcome = match &play {
+            Play::Join(address) => ash.join(&id, address, &sink, &cancel).await,
+            Play::Launch => ash.launch(&id, &sink, &cancel).await,
+            Play::WithoutThirdPartyMods => {
+                ash.launch_without_third_party_mods(&id, &sink, &cancel).await
+            }
         };
 
         {
@@ -479,6 +497,22 @@ async fn reveal_log(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
     tauri_plugin_opener::reveal_item_in_dir(&target).map_err(|_| UiError {
         kind: "reveal_failed",
         message: "Could not open the log folder.".into(),
+        retryable: true,
+    })
+}
+
+/// The instance's `mods` folder, opened itself rather than shown in its
+/// parent: it is where the player is about to drop a jar.
+#[tauri::command]
+async fn reveal_mods_folder(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<(), UiError> {
+    let path = state.ash.mods_directory(&id).map_err(UiError::from)?;
+    tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|_| UiError {
+        kind: "reveal_failed",
+        // No path in the message: user-facing text never carries one.
+        message: "Could not open the mods folder.".into(),
         retryable: true,
     })
 }
@@ -619,6 +653,8 @@ pub fn run() {
             preview_deletion,
             delete_instance,
             reveal_game_directory,
+            reveal_mods_folder,
+            launch_without_third_party_mods,
             plan_instance,
             prepare_instance,
             ensure_runtime,

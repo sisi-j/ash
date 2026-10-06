@@ -188,10 +188,12 @@ const downloads = state === "preparing" || state === "sounds-off" || state === "
  * time after, as a game that fell over a moment after starting would be.
  */
 let statusAsked = 0;
+/** States where the game falls over a moment after starting. */
+const crashes = state.startsWith("crashed");
 function status(): real.GameStatus | null {
   statusAsked += 1;
   if (state === "playing") return { state: "running" };
-  if (state === "crashed") return statusAsked === 1 ? { state: "running" } : { state: "exited", code: 1, clean: false };
+  if (crashes) return statusAsked === 1 ? { state: "running" } : { state: "exited", code: 1, clean: false };
   return null;
 }
 
@@ -309,15 +311,21 @@ export const api: typeof real.api = {
   cancelPreparation: nothing,
 
   launch: async () => launch(),
+  launchWithoutThirdPartyMods: async () => {
+    (window as unknown as { withoutMods?: boolean }).withoutMods = true;
+    launch();
+  },
   join: async (_id, address) => joined(address),
   servers: (id) => resolve(SERVERS[id] ?? []),
   serverStatus: (_id, address) => resolve(STATUSES[address] ?? { state: "offline" }),
   previewLaunch: () => resolve({ program: "java", args: [], working_directory: "" }),
   gameStatus: () => resolve(status()),
-  gameLog: () => resolve(state === "crashed" ? CRASH_LOG : []),
+  gameLog: () => resolve(crashes ? CRASH_LOG : []),
   stopGame: nothing,
 
-  overrides: () => resolve({ memory_mb: null, java_executable: null, resolution: null }),
+  // The 1.21.11 instance has the player's own mods on, except where a crash must be one of ash's.
+  overrides: (id) =>
+    resolve({ memory_mb: null, java_executable: null, resolution: null, third_party_mods: id === "a" && state !== "crashed" }),
   degradationNotice: () => resolve(notice),
   instanceGlance: (id) => resolve(glance(id)),
   // ash-core's own refusal for a window it would not open.
@@ -347,6 +355,7 @@ export const api: typeof real.api = {
     }),
   deleteInstance: nothing,
   revealGameDirectory: nothing,
+  revealModsFolder: nothing,
   revealLog: nothing,
   chooseJava: () => resolve(String.raw`C:\Program Files\Java\jdk-21\bin\javaw.exe`),
 };

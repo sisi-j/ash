@@ -17,7 +17,7 @@ import { filledPercent, formatGb, MEMORY_MAX_GB, MEMORY_MIN_GB, MEMORY_STEP_GB, 
 const SAVE_AFTER_MS = 500;
 
 /** The page's rows, for saying which one a save or a refusal belongs to. */
-type Row = "name" | "memory" | "window" | "java";
+type Row = "name" | "memory" | "window" | "java" | "mods";
 
 /** What the last save on a row came to: saved, or refused and why. */
 type Status = { saved: true } | { saved: false; message: string };
@@ -380,6 +380,36 @@ export function InstancePage(props: {
           </div>
         </div>
 
+        {instance.loader !== "vanilla" && (
+          <div className="setting">
+            <span className="setting-label" id="mods-label">
+              Your mods
+            </span>
+            <div className="setting-control">
+              <div className="setting-inline">
+                <button
+                  className="switch"
+                  role="switch"
+                  aria-labelledby="mods-label"
+                  aria-checked={overrides?.third_party_mods ?? false}
+                  disabled={!overrides}
+                  onClick={() =>
+                    overrides && saveField("third_party_mods", !overrides.third_party_mods, "mods", 0)
+                  }
+                />
+                <button className="button" onClick={() => void api.revealModsFolder(instance.id)}>
+                  Open mods folder
+                </button>
+              </div>
+              <span className="setting-hint">
+                {LOADER_LABELS[instance.loader]} mods for {instance.version_id}, from this instance's mods
+                folder. ash never changes what is in it.
+              </span>
+              {rowStatus("mods")}
+            </div>
+          </div>
+        )}
+
         <div className="setting">
           <span className="setting-label">Game folder</span>
           <div className="setting-control">
@@ -398,7 +428,7 @@ export function InstancePage(props: {
       </div>
 
       <p className="hint">
-        Memory, window size and Java stay on this machine. ash keeps them outside the instance, so settings that
+        Memory, window size, Java and whether your mods load stay on this machine. ash keeps them outside the instance, so settings that
         sync between your machines can never carry them from one to another.
       </p>
 

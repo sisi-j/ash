@@ -59,6 +59,15 @@ pub struct MachineOverrides {
     pub java_executable: Option<PathBuf>,
     #[serde(default)]
     pub resolution: Option<Resolution>,
+    /// Whether the loader reads the instance's `mods` folder: the player's
+    /// own mods, for the instance's own loader. Off unless the player turns
+    /// it on.
+    ///
+    /// Machine-local, for Phase 4: it decides which files in *this*
+    /// machine's folder load. Synced, turning it on at one machine would
+    /// start loading whatever another machine's folder happened to hold.
+    #[serde(default)]
+    pub third_party_mods: bool,
 }
 
 /// This machine's defaults for every instance: what one with no memory of its

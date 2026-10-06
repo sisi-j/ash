@@ -321,6 +321,24 @@ function InstancesCard(props: {
   onOpen: (id: InstanceId) => void;
   onNew: () => void;
 }) {
+  // Which instances load the player's own mods: worth seeing from here,
+  // because that is where to look first when one of them breaks.
+  const [withMods, setWithMods] = useState<Set<InstanceId>>(new Set());
+  useEffect(() => {
+    let live = true;
+    Promise.all(
+      props.instances.map((i) =>
+        api
+          .overrides(i.id)
+          .then((o) => (o.third_party_mods ? i.id : null))
+          .catch(() => null),
+      ),
+    ).then((ids) => live && setWithMods(new Set(ids.filter((id): id is InstanceId => id !== null))));
+    return () => {
+      live = false;
+    };
+  }, [props.instances]);
+
   return (
     <div className="card card-primary">
       <h3>
@@ -346,7 +364,8 @@ function InstancesCard(props: {
             <span className="instance-text">
               <b>{instance.name}</b>
               <small>
-                {describeKind(instance)} ·{" "}
+                {describeKind(instance)}
+                {withMods.has(instance.id) && " · your mods"} ·{" "}
                 {instance.last_played_ms ? describeAge(instance.last_played_ms) : "never played"}
               </small>
             </span>

@@ -100,6 +100,14 @@ fn now_ms() -> u64 {
 /// How long a server's answer stands before it is asked again.
 const STATUS_INTERVAL_MS: u64 = 60_000;
 
+/// How a launch goes: straight into a server or not, and whether the
+/// player's own mods are left out this once.
+#[derive(Debug, Clone, Copy, Default)]
+struct How<'a> {
+    join: Option<&'a str>,
+    without_third_party_mods: bool,
+}
+
 /// A game ash started, and the session it is.
 struct Game {
     process: Box<dyn GameProcess>,
@@ -623,7 +631,7 @@ impl Ash {
         sink: &S,
         cancel: &Cancel,
     ) -> Result<InvocationView, AshError> {
-        Ok(self.assemble(id, None, sink, cancel).await?.view())
+        Ok(self.assemble(id, How::default(), sink, cancel).await?.view())
     }
 
     /// Start the game, and return once it is running.
@@ -636,7 +644,7 @@ impl Ash {
         sink: &S,
         cancel: &Cancel,
     ) -> Result<InvocationView, AshError> {
-        self.start(id, None, sink, cancel).await
+        self.start(id, How::default(), sink, cancel).await
     }
 
     /// Start the game straight into one of the instance's servers.
@@ -651,13 +659,37 @@ impl Ash {
         cancel: &Cancel,
     ) -> Result<InvocationView, AshError> {
         let address = self.listed(id, address)?;
-        self.start(id, Some(&address), sink, cancel).await
+        self.start(id, How { join: Some(&address), ..How::default() }, sink, cancel).await
+    }
+
+    /// Start the game with the player's own mods left out, this once.
+    ///
+    /// What a crash with them on offers, so that "one of your mods may have
+    /// done this" comes with a way to find out. The setting itself is not
+    /// touched: the player's choice stays theirs.
+    pub async fn launch_without_third_party_mods<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<InvocationView, AshError> {
+        self.start(id, How { without_third_party_mods: true, ..How::default() }, sink, cancel).await
+    }
+
+    /// The instance's `mods` folder, the player's, for opening in the file
+    /// manager. Made if something removed it, so there is always a folder
+    /// to open.
+    pub fn mods_directory(&self, id: &InstanceId) -> Result<PathBuf, AshError> {
+        self.instance(id)?;
+        let mods = self.game_directory(id).join("mods");
+        std::fs::create_dir_all(&mods).map_err(AshError::writing("creating the mods folder"))?;
+        Ok(mods)
     }
 
     async fn start<S: ProgressSink + ?Sized>(
         &self,
         id: &InstanceId,
-        join: Option<&str>,
+        how: How<'_>,
         sink: &S,
         cancel: &Cancel,
     ) -> Result<InvocationView, AshError> {
@@ -665,7 +697,7 @@ impl Ash {
             return Err(AshError::AlreadyRunning { id: id.as_str().to_owned() });
         }
 
-        let invocation = self.assemble(id, join, sink, cancel).await?;
+        let invocation = self.assemble(id, how, sink, cancel).await?;
         let view = invocation.view();
 
         // Logged from the view, which has no serialiser for the access token
@@ -769,8 +801,13 @@ impl Ash {
             },
             played_ms: instance.played_ms + open_ms,
             last_session,
-            // Off for every instance until a player can switch them on (#46).
-            mods: glance::mods(&game, pin, false),
+            // Listed only when they load: with them off, the loader reads an
+            // empty folder of ash's and nothing in this one runs.
+            mods: glance::mods(
+                &game,
+                pin,
+                overrides::load(&self.config.data_root, id).third_party_mods,
+            ),
         })
     }
 
@@ -803,7 +840,7 @@ impl Ash {
     async fn assemble<S: ProgressSink + ?Sized>(
         &self,
         id: &InstanceId,
-        join: Option<&str>,
+        how: How<'_>,
         sink: &S,
         cancel: &Cancel,
     ) -> Result<Invocation, AshError> {
@@ -818,7 +855,7 @@ impl Ash {
         let (plan, runtime) = self.prepare_all(id, sink, cancel).await?;
         let metadata = depot::read_metadata(&self.config.depot_root, &plan.version_id)?;
 
-        let join = match join {
+        let join = match how.join {
             None => None,
             Some(address) if launch::takes_quick_play(&metadata) => {
                 Some(launch::Join::QuickPlay(address.to_owned()))
@@ -833,16 +870,19 @@ impl Ash {
         };
 
         // A modded instance's loader is told where every mod is: ash's own
-        // by path, and the player's folder moved to one with nothing in it.
-        // A path the loader cannot find is only a warning to it, so each is
-        // checked here, before a game with half of ash in it can start.
+        // by path, and the player's in the instance's `mods` folder when they
+        // have turned them on - otherwise in one of ash's with nothing in it.
+        // A path the loader cannot find is only a warning to it, so each of
+        // ash's is checked here, before a game with half of ash in it starts.
         let instance = self.instance(id)?;
+        let overrides = overrides::load(&self.config.data_root, id);
+        let players_mods = overrides.third_party_mods && !how.without_third_party_mods;
         let mods = match loader::pin_for(self.config.loaders, instance.loader, &instance.version_id)
         {
             None => None,
             Some(pin) => Some(launch::Mods {
                 add: self.ash_jars(pin)?,
-                folder: Some(self.no_mods_folder()?),
+                folder: if players_mods { None } else { Some(self.no_mods_folder()?) },
             }),
         };
 
@@ -857,7 +897,7 @@ impl Ash {
             xuid: &session.xuid,
             client_id: &self.client_id,
             os: Os::current(),
-            overrides: &overrides::load(&self.config.data_root, id),
+            overrides: &overrides,
             defaults: &overrides::load_defaults(&self.config.data_root),
             join: join.as_ref(),
             mods: mods.as_ref(),
