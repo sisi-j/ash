@@ -29,11 +29,13 @@ mod overrides;
 mod preferences;
 mod profile;
 mod runtime;
+mod server_list;
 mod version;
 
 pub mod credentials;
 pub mod http;
 pub mod process;
+pub mod servers;
 
 pub use account::{Account, Accounts};
 pub use catalogue::{
@@ -51,6 +53,7 @@ pub use overrides::{MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use preferences::LauncherPreferences;
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
+pub use server_list::{Handshake, ServerEntry, ServerStatus};
 pub use version::Os;
 
 use std::collections::HashMap;
@@ -62,6 +65,7 @@ use serde::Serialize;
 
 use crate::credentials::CredentialStore;
 use crate::http::HttpPort;
+use crate::servers::ServerPort;
 
 /// A sign-in waiting on the player, as the UI needs to see it.
 ///
@@ -93,6 +97,9 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or_default()
 }
 
+/// How long a server's answer stands before it is asked again.
+const STATUS_INTERVAL_MS: u64 = 60_000;
+
 /// A game ash started, and the session it is.
 struct Game {
     process: Box<dyn GameProcess>,
@@ -108,6 +115,7 @@ pub struct Ash {
     http: Arc<dyn HttpPort>,
     credentials: Arc<dyn CredentialStore>,
     process: Arc<dyn ProcessPort>,
+    servers: Arc<dyn ServerPort>,
     client_id: String,
     /// One sign-in at a time. The device code lives here rather than
     /// travelling to the UI and back.
@@ -125,6 +133,10 @@ pub struct Ash {
     /// same report read again - by the notice, then by a launch - is logged
     /// once, while a new session's report is logged even if it says the same.
     reports_logged: Mutex<HashMap<String, String>>,
+    /// Each server's last answer and when it came, by protocol and address,
+    /// so no server is asked more than once a minute however often the
+    /// window asks.
+    statuses: Mutex<HashMap<(i32, String), (u64, ServerStatus)>>,
 }
 
 impl Ash {
@@ -136,6 +148,7 @@ impl Ash {
         http: Arc<dyn HttpPort>,
         credentials: Arc<dyn CredentialStore>,
         process: Arc<dyn ProcessPort>,
+        servers: Arc<dyn ServerPort>,
         client_id: impl Into<String>,
     ) -> Self {
         Self {
@@ -144,10 +157,12 @@ impl Ash {
             http,
             credentials,
             process,
+            servers,
             client_id: client_id.into(),
             pending: Mutex::new(None),
             games: Mutex::new(HashMap::new()),
             reports_logged: Mutex::new(HashMap::new()),
+            statuses: Mutex::new(HashMap::new()),
         }
     }
 
@@ -592,7 +607,7 @@ impl Ash {
         sink: &S,
         cancel: &Cancel,
     ) -> Result<InvocationView, AshError> {
-        Ok(self.assemble(id, sink, cancel).await?.view())
+        Ok(self.assemble(id, None, sink, cancel).await?.view())
     }
 
     /// Start the game, and return once it is running.
@@ -605,11 +620,36 @@ impl Ash {
         sink: &S,
         cancel: &Cancel,
     ) -> Result<InvocationView, AshError> {
+        self.start(id, None, sink, cancel).await
+    }
+
+    /// Start the game straight into one of the instance's servers.
+    ///
+    /// Only a server in the instance's own list, the one the game shows. The
+    /// server is this launch's alone and is not stored anywhere.
+    pub async fn join<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        address: &str,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<InvocationView, AshError> {
+        let address = self.listed(id, address)?;
+        self.start(id, Some(&address), sink, cancel).await
+    }
+
+    async fn start<S: ProgressSink + ?Sized>(
+        &self,
+        id: &InstanceId,
+        join: Option<&str>,
+        sink: &S,
+        cancel: &Cancel,
+    ) -> Result<InvocationView, AshError> {
         if matches!(self.game_status(id), Some(GameStatus::Running)) {
             return Err(AshError::AlreadyRunning { id: id.as_str().to_owned() });
         }
 
-        let invocation = self.assemble(id, sink, cancel).await?;
+        let invocation = self.assemble(id, join, sink, cancel).await?;
         let view = invocation.view();
 
         // Logged from the view, which has no serialiser for the access token
@@ -746,6 +786,7 @@ impl Ash {
     async fn assemble<S: ProgressSink + ?Sized>(
         &self,
         id: &InstanceId,
+        join: Option<&str>,
         sink: &S,
         cancel: &Cancel,
     ) -> Result<Invocation, AshError> {
@@ -760,6 +801,20 @@ impl Ash {
         let (plan, runtime) = self.prepare_all(id, sink, cancel).await?;
         let metadata = depot::read_metadata(&self.config.depot_root, &plan.version_id)?;
 
+        let join = match join {
+            None => None,
+            Some(address) if launch::takes_quick_play(&metadata) => {
+                Some(launch::Join::QuickPlay(address.to_owned()))
+            }
+            // A version that connects to exactly what it is given does no
+            // SRV lookup of its own, so a server reached through one would be
+            // unreachable unless ash looks it up first.
+            Some(address) => {
+                let (host, port) = self.destination(address).await?;
+                Some(launch::Join::Direct { host, port })
+            }
+        };
+
         launch::assemble(&launch::LaunchContext {
             metadata: &metadata,
             runtime: &runtime,
@@ -772,7 +827,98 @@ impl Ash {
             client_id: &self.client_id,
             os: Os::current(),
             overrides: &overrides::load(&self.config.data_root, id),
+            join: join.as_ref(),
         })
+    }
+
+    // ---- servers ----------------------------------------------------------
+
+    /// The instance's servers, as the game's multiplayer screen lists them.
+    ///
+    /// A list the game wrote but ash cannot read shows as no servers, as it
+    /// does in the game, and ash's log says where reading stopped.
+    pub fn servers(&self, id: &InstanceId) -> Result<Vec<ServerEntry>, AshError> {
+        self.instance(id)?;
+        match server_list::read(&self.game_directory(id)) {
+            Ok(servers) => Ok(servers),
+            Err(unreadable) => {
+                self.diagnostics.warn(
+                    "servers-unreadable",
+                    &format!("instance={id} stopped at byte {}", unreadable.at),
+                );
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    /// Ask one of the instance's servers how it is, as the game's
+    /// multiplayer screen does: in the instance's own protocol, through an
+    /// SRV redirect if the address has one, and giving up after
+    /// [`Config::server_timeout`].
+    ///
+    /// At most once a minute per server. Asked again sooner, it answers with
+    /// what the server last said - a ping tells the server the player's
+    /// address, and the window asking more often is no reason to tell it
+    /// more often.
+    pub async fn server_status(
+        &self,
+        id: &InstanceId,
+        address: &str,
+    ) -> Result<ServerStatus, AshError> {
+        let address = self.listed(id, address)?;
+        let protocol = server_list::protocol_for(&self.instance(id)?.version_id);
+        let key = (protocol, address.clone());
+
+        if let Some((asked_ms, status)) = self.statuses.lock().unwrap().get(&key) {
+            if now_ms().saturating_sub(*asked_ms) < STATUS_INTERVAL_MS {
+                return Ok(status.clone());
+            }
+        }
+
+        let ask = async {
+            let (host, port) = self.destination(&address).await.ok()?;
+            let mut stream = self.servers.connect(&host, port).await.ok()?;
+            server_list::exchange(&mut *stream, protocol, &host, port).await.ok()
+        };
+        let status = tokio::time::timeout(self.config.server_timeout, ask)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(ServerStatus::Offline);
+
+        self.statuses.lock().unwrap().insert(key, (now_ms(), status.clone()));
+        Ok(status)
+    }
+
+    /// `address` as it appears in the instance's list, or why it cannot be
+    /// used. Nothing reaches a server the player has not listed.
+    fn listed(&self, id: &InstanceId, address: &str) -> Result<String, AshError> {
+        let listed = self.servers(id)?.into_iter().any(|server| server.address == address);
+        if !listed {
+            return Err(AshError::ServerNotListed { address: address.to_owned() });
+        }
+        if server_list::Address::parse(address).is_none() {
+            return Err(AshError::InvalidServerAddress { address: address.to_owned() });
+        }
+        Ok(address.to_owned())
+    }
+
+    /// The host and port to connect to: the SRV record's target for an
+    /// address with no port, where there is one, as the game resolves it.
+    async fn destination(&self, address: &str) -> Result<(String, u16), AshError> {
+        let parsed = server_list::Address::parse(address)
+            .ok_or_else(|| AshError::InvalidServerAddress { address: address.to_owned() })?;
+        if !parsed.port_given {
+            // Bounded on its own, for a join: a DNS server that never answers
+            // must not hold a launch.
+            let lookup = self.servers.srv(&parsed.host);
+            if let Ok(Some(redirect)) =
+                tokio::time::timeout(self.config.server_timeout, lookup).await
+            {
+                return Ok(redirect);
+            }
+        }
+        Ok((parsed.host, parsed.port))
     }
 
     /// The version id an instance runs, where its metadata lives, and that

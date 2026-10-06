@@ -825,6 +825,103 @@ button {
   margin: auto 0 0;
 }
 
+/* Servers: one row each, scrolling inside the card when there are many. */
+.server-rows {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.server-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+}
+
+.server-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  /* Server icons are 64px pixel art: scaled down, they stay sharp. */
+  image-rendering: pixelated;
+}
+
+.server-initial {
+  display: grid;
+  place-items: center;
+  background: var(--fill-2);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.server-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.server-text b,
+.server-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-text b {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.server-text small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* Green when it answered, grey when it did not, faint while asking. */
+.server-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--grey);
+  vertical-align: 1px;
+}
+
+.server-dot.is-online {
+  background: var(--green);
+}
+
+.server-dot.is-checking {
+  background: var(--fill-3);
+}
+
+.join {
+  flex: none;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--green);
+  color: #04120a;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.join:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.join:disabled {
+  background: var(--fill-2);
+  color: var(--text-3);
+}
+
 .instance-rows {
   flex: 1;
   min-height: 0;

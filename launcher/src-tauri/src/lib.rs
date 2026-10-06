@@ -9,10 +9,12 @@ use std::sync::{Arc, Mutex};
 use ash_core::credentials::OsCredentialStore;
 use ash_core::http::ReqwestHttp;
 use ash_core::process::OsProcessPort;
+use ash_core::servers::OsServerPort;
 use ash_core::{
     Account, Accounts, Ash, Cancel, Catalogue, Config, DegradationNotice, DeletionPreview,
     GameStatus, Instance, InstanceGlance, InstanceId, InvocationView, LauncherPreferences, Loader,
-    MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime, SignInStatus,
+    MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime, ServerEntry,
+    ServerStatus, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -305,6 +307,19 @@ fn set_launcher_preferences(
 /// arrives as `prepare-progress` and the outcome as `launch-finished`.
 #[tauri::command]
 fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
+    start(app, id, None);
+    Ok(())
+}
+
+/// Start the game straight into one of the instance's servers, reported on
+/// the same events as `launch`.
+#[tauri::command]
+fn join(app: tauri::AppHandle, id: InstanceId, address: String) -> Result<(), UiError> {
+    start(app, id, Some(address));
+    Ok(())
+}
+
+fn start(app: tauri::AppHandle, id: InstanceId, address: Option<String>) {
     tauri::async_runtime::spawn(async move {
         let cancel = Cancel::new();
         let ash = {
@@ -314,7 +329,10 @@ fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
         };
 
         let sink = WindowSink(app.clone());
-        let outcome = ash.launch(&id, &sink, &cancel).await;
+        let outcome = match &address {
+            Some(address) => ash.join(&id, address, &sink, &cancel).await,
+            None => ash.launch(&id, &sink, &cancel).await,
+        };
 
         {
             let state = app.state::<AppState>();
@@ -333,7 +351,26 @@ fn launch(app: tauri::AppHandle, id: InstanceId) -> Result<(), UiError> {
             },
         );
     });
-    Ok(())
+}
+
+// ---- servers ----
+
+#[tauri::command]
+async fn servers(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<ServerEntry>, UiError> {
+    state.ash.servers(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn server_status(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    address: String,
+) -> Result<ServerStatus, UiError> {
+    let ash = Arc::clone(&state.ash);
+    ash.server_status(&id, &address).await.map_err(UiError::from)
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -449,6 +486,7 @@ fn ash_state(client_root: std::path::PathBuf) -> Ash {
         Arc::new(ReqwestHttp::new()),
         Arc::new(OsCredentialStore::new()),
         Arc::new(OsProcessPort::new()),
+        Arc::new(OsServerPort::new()),
         CLIENT_ID,
     )
 }
@@ -524,6 +562,9 @@ pub fn run() {
             ensure_runtime,
             cancel_preparation,
             launch,
+            join,
+            servers,
+            server_status,
             preview_launch,
             game_status,
             game_log,
