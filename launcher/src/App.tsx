@@ -241,7 +241,7 @@ export default function App() {
       {(launch.phase.at === "failed" || launch.phase.at === "crashed") && (
         <LaunchFailure
           phase={launch.phase}
-          onRetry={() => launch.start(launch.phase.at === "failed" ? launch.phase.goal : "play")}
+          onRetry={launch.retry}
           onClose={launch.dismiss}
         />
       )}

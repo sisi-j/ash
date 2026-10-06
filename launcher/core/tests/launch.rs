@@ -18,6 +18,7 @@ use std::time::Duration;
 use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, GameStatus, ProcessPort};
+use ash_core::servers::{FakeServerPort, ServerPort};
 use ash_core::{Ash, Cancel, Config, InstanceId, Loader, NullSink, VERSION_MANIFEST_URL};
 
 mod common;
@@ -150,7 +151,9 @@ fn version_json() -> String {
             {{"rules":[{{"action":"allow","features":{{"has_custom_resolution":true}}}}],
              "value":["--width","${{resolution_width}}","--height","${{resolution_height}}"]}},
             {{"rules":[{{"action":"allow","features":{{"has_quick_plays_support":true}}}}],
-             "value":["--quickPlayPath","${{quickPlayPath}}"]}}
+             "value":["--quickPlayPath","${{quickPlayPath}}"]}},
+            {{"rules":[{{"action":"allow","features":{{"is_quick_play_multiplayer":true}}}}],
+             "value":["--quickPlayMultiplayer","${{quickPlayMultiplayer}}"]}}
           ]
         }}}}"#,
         index_sha = common::sha1(asset_index_json().as_bytes()),
@@ -312,6 +315,7 @@ fn serving() -> Arc<FakeHttp> {
 struct Fixture {
     ash: Ash,
     process: Arc<FakeProcessPort>,
+    servers: Arc<FakeServerPort>,
     store: Arc<InMemoryCredentialStore>,
     tmp: tempfile::TempDir,
 }
@@ -319,14 +323,16 @@ struct Fixture {
 fn fixture_with(process: Arc<FakeProcessPort>) -> Fixture {
     let tmp = tempfile::tempdir().expect("temp dir");
     let store = InMemoryCredentialStore::new();
+    let servers = FakeServerPort::new();
     let ash = Ash::new(
         Config::rooted_at(tmp.path()),
         serving() as Arc<dyn HttpPort>,
         Arc::clone(&store) as Arc<dyn CredentialStore>,
         Arc::clone(&process) as Arc<dyn ProcessPort>,
+        Arc::clone(&servers) as Arc<dyn ServerPort>,
         "test-client",
     );
-    Fixture { ash, process, store, tmp }
+    Fixture { ash, process, servers, store, tmp }
 }
 
 fn fixture() -> Fixture {
@@ -460,7 +466,9 @@ async fn feature_gated_arguments_never_reach_the_command_line() {
     // ash turns none of these on. Every one of them is guarded only by a
     // `features` clause, so dropping that clause launches the game in demo
     // mode at a resolution nobody asked for.
-    for unwanted in ["--demo", "--width", "--height", "--quickPlayPath"] {
+    for unwanted in
+        ["--demo", "--width", "--height", "--quickPlayPath", "--quickPlayMultiplayer", "--server"]
+    {
         assert!(!view.args.iter().any(|a| a == unwanted), "{unwanted} should not be passed");
     }
 }
@@ -609,6 +617,7 @@ async fn a_session_microsoft_no_longer_accepts_stops_the_launch() {
             as Arc<dyn HttpPort>,
         Arc::clone(&f.store) as Arc<dyn CredentialStore>,
         Arc::clone(&f.process) as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     );
 
@@ -791,6 +800,7 @@ impl Fixture {
             serving() as Arc<dyn HttpPort>,
             Arc::clone(&self.store) as Arc<dyn CredentialStore>,
             FakeProcessPort::new() as Arc<dyn ProcessPort>,
+            FakeServerPort::new(),
             "test-client",
         )
     }
@@ -893,6 +903,93 @@ async fn a_session_with_no_log_to_go_by_adds_no_time() {
     let session = glance.last_session.unwrap();
     assert_eq!(session.ended_ms, Some(session.started_ms));
     assert_eq!(glance.played_ms, 0, "a guess was counted as play time");
+}
+
+// ---- joining a server ---------------------------------------------------------
+//
+// Join starts the game straight into one of the instance's servers. Each
+// version takes it the way its own `Main` reads it, and the fixtures declare
+// what the real version documents declare: 1.21.11 the feature-gated
+// `--quickPlayMultiplayer`, 1.8.9 nothing at all.
+
+/// The list 1.21.11's own serialiser wrote; 1.8.9 reads the same shape.
+const SERVERS: &[u8] = include_bytes!("fixtures/servers-1.21.11.dat");
+
+impl Fixture {
+    fn list_servers(&self, id: &InstanceId) {
+        std::fs::write(self.ash.game_directory(id).join("servers.dat"), SERVERS).unwrap();
+    }
+
+    async fn join(&self, id: &InstanceId, address: &str) -> ash_core::InvocationView {
+        self.ash.join(id, address, &NullSink, &Cancel::new()).await.expect("join")
+    }
+}
+
+#[tokio::test]
+async fn joining_on_1_21_11_hands_the_game_the_address_as_written() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.list_servers(&id);
+    // The game resolves this itself, so ash must not.
+    f.servers.redirect("mc.hypixel.net", "proxy.example", 25599);
+
+    let view = f.join(&id, "mc.hypixel.net").await;
+
+    assert_eq!(value_of(&view.args, "--quickPlayMultiplayer"), Some("mc.hypixel.net"));
+    assert!(!view.args.iter().any(|a| a == "--server"), "both ways of joining were passed");
+}
+
+#[tokio::test]
+async fn joining_on_1_8_9_hands_the_game_a_host_and_a_port() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+    f.list_servers(&id);
+
+    let view = f.join(&id, "localhost:25570").await;
+
+    assert_eq!(value_of(&view.args, "--server"), Some("localhost"));
+    assert_eq!(value_of(&view.args, "--port"), Some("25570"));
+    assert!(!view.args.iter().any(|a| a == "--quickPlayMultiplayer"));
+}
+
+#[tokio::test]
+async fn joining_on_1_8_9_follows_an_srv_record_the_game_would_not() {
+    let f = fixture();
+    let id = f.ready_legacy().await;
+    f.list_servers(&id);
+    f.servers.redirect("mc.hypixel.net", "proxy.example", 25599);
+
+    let view = f.join(&id, "mc.hypixel.net").await;
+
+    assert_eq!(value_of(&view.args, "--server"), Some("proxy.example"));
+    assert_eq!(value_of(&view.args, "--port"), Some("25599"));
+}
+
+#[tokio::test]
+async fn joining_a_server_the_instance_does_not_list_starts_nothing() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.list_servers(&id);
+
+    let err =
+        f.ash.join(&id, "evil.example", &NullSink, &Cancel::new()).await.expect_err("unlisted");
+
+    assert_eq!(err.kind(), "server_not_listed");
+    assert!(f.process.spawned().is_empty());
+}
+
+#[tokio::test]
+async fn a_join_is_this_launch_only() {
+    let f = fixture_with(
+        FakeProcessPort::new().set_status(GameStatus::Exited { code: Some(0), clean: true }),
+    );
+    let id = f.ready().await;
+    f.list_servers(&id);
+    f.join(&id, "localhost:25570").await;
+
+    let next = f.launch(&id).await;
+
+    assert!(!next.args.iter().any(|a| a == "--quickPlayMultiplayer"), "the server was remembered");
 }
 
 // ---- 1.8.9 ------------------------------------------------------------------
@@ -1114,6 +1211,7 @@ async fn a_tampered_log4j_configuration_is_refused() {
         http as Arc<dyn HttpPort>,
         Arc::clone(&f.store) as Arc<dyn CredentialStore>,
         Arc::clone(&f.process) as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "test-client",
     );
     ash.begin_sign_in().await.expect("device code");

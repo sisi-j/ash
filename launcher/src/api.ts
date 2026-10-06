@@ -91,6 +91,28 @@ export type Session = {
   ended_ms: number | null;
 };
 
+/** A server in an instance's own list, as the game's multiplayer screen shows it. */
+export type ServerEntry = {
+  name: string;
+  /** As the player typed it: `mc.hypixel.net`, `localhost:25570`. */
+  address: string;
+  /** A base64 PNG, as the game saved it. */
+  icon: string | null;
+};
+
+/** Mirrors `ash_core::ServerStatus`, an internally tagged enum. */
+export type ServerStatus =
+  | {
+      state: "online";
+      players_online: number;
+      players_max: number;
+      version: string;
+      motd: string;
+      /** The icon the server sent, a base64 PNG. */
+      icon: string | null;
+    }
+  | { state: "offline" };
+
 /** Mirrors `ash_core::AshFeatures`, an internally tagged enum. */
 export type AshFeatures =
   | { state: "no_client" }
@@ -282,6 +304,13 @@ export const api = {
 
   /** Returns as soon as the work is scheduled; watch the events for outcome. */
   launch: (id: InstanceId) => invoke<void>("launch", { id }),
+  /** As `launch`, straight into one of the instance's own servers. */
+  join: (id: InstanceId, address: string) => invoke<void>("join", { id, address }),
+  /** The instance's servers, in the player's own order. */
+  servers: (id: InstanceId) => invoke<ServerEntry[]>("servers", { id }),
+  /** Asks the server at most once a minute; sooner, it answers with the last reply. */
+  serverStatus: (id: InstanceId, address: string) =>
+    invoke<ServerStatus>("server_status", { id, address }),
   previewLaunch: (id: InstanceId) => invoke<InvocationView>("preview_launch", { id }),
   gameStatus: (id: InstanceId) => invoke<GameStatus | null>("game_status", { id }),
   gameLog: (id: InstanceId) => invoke<string[]>("game_log", { id }),

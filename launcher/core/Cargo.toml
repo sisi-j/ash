@@ -31,6 +31,12 @@ reqwest = { version = "0.13", default-features = false, features = [
 # decompressing half of deflate: ash reads jars and never writes one, so the
 # compressor the default feature set pulls in would be dead weight.
 zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# The server-list ping: one TCP exchange per server, with a timeout, as the
+# game sends it. reqwest already runs ash on Tokio, so this names it.
+tokio = { version = "1", features = ["net", "time", "io-util", "rt"] }
+# `_minecraft._tcp` SRV records, read through the system's own DNS settings,
+# as the game resolves them.
+hickory-resolver = "0.26"
 
 [dev-dependencies]
 tokio.workspace = true

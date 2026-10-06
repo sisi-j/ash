@@ -83,6 +83,30 @@ const STATES: State[] = [
   },
   { name: "playing", shows: "Playing now" },
   {
+    name: "servers",
+    shows: "31,542 online",
+    verify: async (page) => {
+      const card = page.locator(".servers-card");
+      const open = await card.locator(".join:not(:disabled)").count();
+      const offline = await card.getByRole("button", { name: "Join Old SMP" }).isDisabled();
+      return open === 2 && offline ? null : `expected two servers to join and Old SMP not to be (${open} open)`;
+    },
+  },
+  {
+    name: "servers-join",
+    shows: "DOWNLOADING",
+    reach: (page) => page.getByRole("button", { name: "Join Hypixel" }).click(),
+    verify: async (page) => {
+      const joined = await page.evaluate(() => (window as unknown as { joined?: string }).joined);
+      return joined === "mc.hypixel.net" ? null : `joined ${joined ?? "nothing"}`;
+    },
+  },
+  {
+    name: "servers-empty",
+    shows: "No servers yet",
+    reach: (page) => page.getByRole("option", { name: /Vanilla/ }).click(),
+  },
+  {
     name: "glance-ash",
     shows: "Toggle sprint",
     verify: async (page) => ((await page.locator(".glance-card").getByText("Sodium").count()) === 1 ? null : "the player's mod was not shown"),

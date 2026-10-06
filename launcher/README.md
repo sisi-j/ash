@@ -40,9 +40,12 @@ cargo test --workspace
 ```
 
 No test touches the network or spawns a process. Outbound access goes through
-a port (`ash_core::http::HttpPort` today) and tests supply `FakeHttp`, which
-serves recorded fixtures and panics on an unrouted URL rather than inventing a
-plausible 404. Depot and instance roots are plain config values pointed at a
+a port, and tests supply its fake:
+- `HttpPort` gets `FakeHttp`, which serves recorded fixtures and panics on an
+  unrouted URL rather than inventing a plausible 404.
+- `ServerPort`, which reaches game servers, gets `FakeServerPort`. It runs
+  scripted servers over in-memory pipes and refuses any address it has no
+  server for. Depot and instance roots are plain config values pointed at a
 `TempDir`, which is why `ash-core` never reads the environment itself —
 resolving a real path is the adapter's job.
 
@@ -57,7 +60,8 @@ npm run check:ui
 Builds the real screens as the app builds them, but with
 `ui-check/fake-api.ts` in place of `src/api.ts`, and renders each state that
 matters in Chromium: signed out, no instances, idle, the account menu,
-preparing (with launch sounds on and off), playing, the "This instance" card
+preparing (with launch sounds on and off), playing, the Servers card (online
+and offline servers, a Join, and an instance with none), the "This instance" card
 (for an ash instance and a vanilla one, and its shortcut to the instance page),
 a failed launch, a crash,
 an instance that could not be checked, Download only, a degradation notice,

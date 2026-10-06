@@ -9,18 +9,22 @@ import {
   type Instance,
   type InstanceGlance,
   type InstanceId,
+  type ServerEntry,
+  type ServerStatus,
   type Session,
 } from "./api";
 import { Icon } from "./icons";
 import type { Launch } from "./launch";
 import { LaunchArea } from "./LaunchArea";
+import { playLaunchSound } from "./sound";
 import { Face } from "./TitleBar";
 
 /**
  * The launcher's home: who is playing, LAUNCH GAME for the selected
  * instance, and below it the instances to choose from.
  *
- * The servers card holds its place until recent servers (#74, #75) fill it.
+ * The servers card lists the game's own server list; #75 puts the ones
+ * played most recently first.
  */
 export function PlayPage(props: {
   player: Account | null;
@@ -75,12 +79,7 @@ export function PlayPage(props: {
       )}
 
       <div className="cards">
-        <div className="card">
-          <h3>
-            Recent servers <small>{selected.name}</small>
-          </h3>
-          <p className="hint">Your servers, with Join, are coming soon.</p>
-        </div>
+        <ServersCard instance={selected} launch={launch} sounds={props.sounds} />
         <ThisInstanceCard instance={selected} phase={launch.phase.at} onOpen={props.onOpen} />
         <InstancesCard
           instances={props.instances}
@@ -95,6 +94,117 @@ export function PlayPage(props: {
         />
       </div>
     </section>
+  );
+}
+
+/**
+ * How often the servers are asked again while the page shows. ash-core will
+ * not ask any one server more often than this whatever the page does.
+ */
+const SERVER_REFRESH_MS = 60_000;
+
+/**
+ * The selected instance's servers, from the game's own list in the player's
+ * order, each with how it is and a Join that starts the game straight into it.
+ */
+function ServersCard(props: { instance: Instance; launch: Launch; sounds: boolean }) {
+  const { instance, launch } = props;
+  const [servers, setServers] = useState<ServerEntry[] | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, ServerStatus>>({});
+
+  // Read again when a game ends too: the player may have added a server in it.
+  const playing = launch.phase.at === "running";
+  useEffect(() => {
+    let live = true;
+    setStatuses({});
+    api
+      .servers(instance.id)
+      .then((list) => live && setServers(list))
+      .catch(() => live && setServers([]));
+    return () => {
+      live = false;
+    };
+  }, [instance.id, playing]);
+
+  useEffect(() => {
+    if (!servers) return;
+    let live = true;
+    const ask = () =>
+      servers.forEach((server) =>
+        api
+          .serverStatus(instance.id, server.address)
+          .catch((): ServerStatus => ({ state: "offline" }))
+          .then((status) => live && setStatuses((all) => ({ ...all, [server.address]: status }))),
+      );
+    ask();
+    const timer = setInterval(ask, SERVER_REFRESH_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [instance.id, servers]);
+
+  const join = (address: string) => {
+    if (props.sounds) playLaunchSound("click");
+    launch.join(address);
+  };
+
+  return (
+    <div className="card servers-card">
+      <h3>
+        Servers <small>{instance.name}</small>
+      </h3>
+      {servers && servers.length === 0 && (
+        <p className="hint">No servers yet. Add one in the game's Multiplayer screen.</p>
+      )}
+      {servers && servers.length > 0 && (
+        <>
+          <div className="server-rows">
+            {servers.map((server) => {
+              const status = statuses[server.address];
+              const online = status?.state === "online" ? status : null;
+              return (
+                <div key={server.address} className="server-row">
+                  <ServerIcon name={server.name} icon={server.icon ?? online?.icon ?? null} />
+                  <span className="server-text">
+                    <b>{server.name || server.address}</b>
+                    <small title={online?.motd || undefined}>
+                      <i className={`server-dot${online ? " is-online" : status ? "" : " is-checking"}`} />
+                      <span className="numeric">
+                        {online ? `${online.players_online.toLocaleString()} online` : status ? "Offline" : "Checking…"}
+                      </span>
+                      {" · "}
+                      {server.address}
+                    </small>
+                  </span>
+                  <button
+                    className="join"
+                    disabled={!online || launch.phase.at !== "idle"}
+                    aria-label={`Join ${server.name || server.address}`}
+                    onClick={() => join(server.address)}
+                  >
+                    Join
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="hint">Join starts {instance.name} straight into the server.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The server's own icon, or its initial on a tile when it has none. */
+function ServerIcon(props: { name: string; icon: string | null }) {
+  if (props.icon) {
+    return <img className="server-icon" src={`data:image/png;base64,${props.icon}`} alt="" />;
+  }
+  return (
+    <span className="server-icon server-initial" aria-hidden>
+      {(props.name.trim()[0] ?? "?").toUpperCase()}
+    </span>
   );
 }
 

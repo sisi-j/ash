@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::loader::{self, LoaderPin};
 
@@ -39,6 +40,12 @@ pub struct Config {
     /// [`Config::rooted_at`]'s guess is only good enough for a test that puts
     /// everything in one temporary directory.
     pub client_root: PathBuf,
+    /// How long a server gets to answer a status request, from looking up
+    /// its address to the last byte of its answer. Past this it is offline.
+    ///
+    /// The game's own list gives up after a few seconds too. A value so a
+    /// test of a server that never answers waits a moment, not seconds.
+    pub server_timeout: Duration,
 }
 
 impl Config {
@@ -63,6 +70,7 @@ impl Config {
             data_root: base.join("data"),
             loaders: loader::PINS,
             client_root: base.join("client"),
+            server_timeout: Duration::from_secs(3),
         }
     }
 }

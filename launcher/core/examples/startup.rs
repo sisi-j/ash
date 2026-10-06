@@ -17,6 +17,7 @@ use std::time::Instant;
 use ash_core::credentials::OsCredentialStore;
 use ash_core::http::{HttpPort, ReqwestHttp};
 use ash_core::process::{FakeProcessPort, ProcessPort};
+use ash_core::servers::FakeServerPort;
 use ash_core::{Ash, Config};
 
 #[tokio::main]
@@ -27,6 +28,7 @@ async fn main() {
         Arc::new(OsCredentialStore::new()),
         // Nothing here launches anything; the fake makes that structural.
         FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
         "startup-timing",
     );
 

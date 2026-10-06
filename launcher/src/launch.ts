@@ -74,6 +74,10 @@ export type Launch = {
    */
   runningAs: string | null;
   start: (what: Goal) => void;
+  /** Play, straight into one of the instance's servers. */
+  join: (address: string) => void;
+  /** Do again what just failed: the same goal, into the same server if there was one. */
+  retry: () => void;
   cancel: () => void;
   stop: () => void;
   /** Check the instance again: after a failure or a crash has been read, or a check that failed. */
@@ -241,13 +245,18 @@ export function useLaunch(id: InstanceId | null): Launch {
     };
   }, [replan]);
 
-  const start = useCallback(
-    (what: Goal) => {
+  // The server the last play was going into, so trying again goes there too.
+  const server = useRef<string | null>(null);
+
+  const begin = useCallback(
+    (what: Goal, into: string | null) => {
       if (id === null) return;
       goal.current = what;
+      server.current = into;
       setCommand(null);
       setPhase({ at: "working", goal: what, progress: START });
-      const call = what === "play" ? api.launch(id) : api.prepareInstance(id);
+      const call =
+        what === "prepare" ? api.prepareInstance(id) : into ? api.join(id, into) : api.launch(id);
       call.catch((e) => setPhase({ at: "failed", error: e as UiError, goal: what }));
     },
     [id],
@@ -257,7 +266,9 @@ export function useLaunch(id: InstanceId | null): Launch {
     phase,
     notice,
     runningAs: command ? argumentAfter(command.args, "--username") : null,
-    start,
+    start: (what) => begin(what, null),
+    join: (address) => begin("play", address),
+    retry: () => begin(phase.at === "failed" ? phase.goal : "play", server.current),
     cancel: () => id !== null && void api.cancelPreparation(id),
     stop: () => id !== null && void api.stopGame(id),
     dismiss: () => void replan(),
