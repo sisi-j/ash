@@ -88,7 +88,9 @@ final class OptionsPage {
             } else if (option instanceof Colour) {
                 rows.add(new Row(Kind.SWATCHES, option, option.label()));
                 rows.add(new Row(Kind.HEX, option, ""));
-                rows.add(new Row(Kind.OPACITY, option, "Opacity"));
+                if (((Colour) option).withOpacity()) {
+                    rows.add(new Row(Kind.OPACITY, option, "Opacity"));
+                }
             } else if (option instanceof OnOff) {
                 rows.add(new Row(Kind.FLAG, option, option.label()));
             }

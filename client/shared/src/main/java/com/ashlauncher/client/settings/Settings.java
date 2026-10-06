@@ -117,6 +117,20 @@ public final class Settings {
             "Show your ping to the server beneath the frame rate: the number the server reports, never measured"
                     + " by ash. Hidden in singleplayer. true or false.");
 
+    public static final OnOff HIT_COLOUR = new OnOff(Feature.HIT_COLOUR, Category.PVP,
+            "The colour an entity flashes when it is hurt. Only you see it.", "hit-colour.enabled", true,
+            "Choose the colour and strength of the flash an entity shows when hurt; off, it is the game's own."
+                    + " Changes only what you see. true or false.");
+
+    // Its defaults are the game's own flash exactly: red at 30 per cent.
+
+    public static final Colour HIT_COLOUR_COLOUR = new Colour(Feature.HIT_COLOUR, "hit-colour.colour", "Colour",
+            0xFFFF0000, false, "The flash's colour, as #RRGGBB. Its strength is hit-colour.strength.");
+
+    public static final Whole HIT_COLOUR_STRENGTH = new Whole(Feature.HIT_COLOUR, "hit-colour.strength",
+            "Strength", 30, 0, 100, 5, "%",
+            "How strongly the flash colours the entity, in per cent: a whole number from 0 to 100. 30 is the game's.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
@@ -127,7 +141,8 @@ public final class Settings {
     private static final List<Setting<?>> DECLARED = Collections.unmodifiableList(Arrays.<Setting<?>>asList(
             FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
-            HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT));
+            HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
+            HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;

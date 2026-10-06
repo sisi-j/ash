@@ -147,8 +147,8 @@ class SettingsTest {
         assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
                 Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
                 Settings.CROSSHAIR_OUTLINE, Settings.HIT_INDICATOR, Settings.HIT_INDICATOR_COLOUR,
-                Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT),
-                Settings.declared());
+                Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT,
+                Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH), Settings.declared());
 
         Settings.load(configDir);
 
@@ -189,7 +189,15 @@ class SettingsTest {
                         + "snaplook.enabled=true\n"
                         + "# Show your ping to the server beneath the frame rate: the number the server reports, never"
                         + " measured by ash. Hidden in singleplayer. true or false.\n"
-                        + "ping-readout.enabled=true\n",
+                        + "ping-readout.enabled=true\n"
+                        + "# Choose the colour and strength of the flash an entity shows when hurt; off, it is the game's"
+                        + " own. Changes only what you see. true or false.\n"
+                        + "hit-colour.enabled=true\n"
+                        + "# The flash's colour, as #RRGGBB. Its strength is hit-colour.strength.\n"
+                        + "hit-colour.colour=#FF0000\n"
+                        + "# How strongly the flash colours the entity, in per cent: a whole number from 0 to 100. 30 is"
+                        + " the game's.\n"
+                        + "hit-colour.strength=30\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 
@@ -457,8 +465,10 @@ class SettingsTest {
             return value;
         }
         if (setting instanceof Colour) {
-            settings.set((Colour) setting, 0xC04DC3FF);
-            return 0xC04DC3FF;
+            // A colour with no opacity of its own is always kept opaque.
+            int value = ((Colour) setting).withOpacity() ? 0xC04DC3FF : 0xFF4DC3FF;
+            settings.set((Colour) setting, value);
+            return value;
         }
         throw new AssertionError("a kind of setting this test does not know: " + setting);
     }

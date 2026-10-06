@@ -7,6 +7,7 @@ import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
+import com.ashlauncher.client.hit.HitColour;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hud.Marker;
@@ -48,6 +49,7 @@ import net.minecraft.client.gui.Gui;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.KeyboardInput;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.apache.logging.log4j.LogManager;
@@ -89,6 +91,8 @@ public final class AshClient implements ClientModInitializer {
     private static final String FREELOOK_CAMERA_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.CameraMixin";
 
     private static final String FREELOOK_MOUSE_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.MouseHandlerMixin";
+
+    private static final String HIT_COLOUR_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.OverlayTextureAccess";
 
     /**
      * The FPS readout this session draws, so the real-game test can ask it -
@@ -223,6 +227,17 @@ public final class AshClient implements ClientModInitializer {
             landed.remove(Feature.FREELOOK);
         }
         ClientTickEvents.END_CLIENT_TICK.register(client -> currentServer.tick());
+
+        // Hit colour: the overlay texture's red rows, rewritten when the
+        // colour changes. Off, or before any change, they hold the game's own.
+        boolean hitColourLanded = MixinFeature.landed(() -> OverlayTexture.class, HIT_COLOUR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_COLOUR.displayName(), why)));
+        if (hitColourLanded) {
+            HitColourTexture hitColour = new HitColourTexture(new HitColour(settings));
+            ClientTickEvents.END_CLIENT_TICK.register(client -> hitColour.tick());
+        } else {
+            landed.remove(Feature.HIT_COLOUR);
+        }
 
         // Snaplook: the game's own front view while Z is held, Z being a key
         // the game binds to nothing. No mixin, so nothing to land: the key

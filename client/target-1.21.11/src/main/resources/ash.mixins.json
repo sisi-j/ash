@@ -9,7 +9,8 @@
     "ClientPacketListenerMixin",
     "GuiCrosshairMixin",
     "KeyboardInputMixin",
-    "MouseHandlerMixin"
+    "MouseHandlerMixin",
+    "OverlayTextureAccess"
   ],
   "injectors": {
     "defaultRequire": 0

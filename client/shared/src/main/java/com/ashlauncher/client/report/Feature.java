@@ -15,6 +15,7 @@ public enum Feature {
     FREELOOK("freelook", "Freelook"),
     SNAPLOOK("snaplook", "Snaplook"),
     PING_READOUT("ping-readout", "Ping readout"),
+    HIT_COLOUR("hit-colour", "Hit colour"),
     /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can

@@ -203,6 +203,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
             "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
             "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
+            "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -301,6 +302,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             fail("ash's crosshair is on but drew nothing");
         }
 
+        clearMobs(client);
         Frame none = frame(client, "ash-crosshair-none.png", true);
         Frame ash = frame(client, "ash-crosshair.png", false);
         for (int[] at : new int[][] {{0, 0}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}}) {
@@ -333,6 +335,32 @@ public final class AshSmokeTest implements ClientModInitializer {
         expectFileSays(fileSays);
         keyIntoScreen(client, screen, settingsKey.getCode());
         await("close ash's settings after the crosshair", () -> client.currentScreen == null ? client : null);
+    }
+
+    /**
+     * Every entity but the player, removed on the server, so nothing walks
+     * behind the crosshair between frames whose pixels are compared. Peaceful
+     * alone did not do it: a mob on the horizon once crossed an arm tip
+     * between the frame without a crosshair and the one with the game's.
+     */
+    private static void clearMobs(MinecraftClient client) {
+        IntegratedServer server = client.getServer();
+        onServer(server, () -> {
+            for (net.minecraft.entity.Entity entity : new ArrayList<>(server.worlds[0].loadedEntities)) {
+                if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
+                    entity.remove();
+                }
+            }
+            return Boolean.TRUE;
+        });
+        await("see the mobs go", () -> {
+            for (Object entity : onClient(client, () -> new ArrayList<>(client.world.loadedEntities))) {
+                if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
+                    return null;
+                }
+            }
+            return client;
+        });
     }
 
     /**
