@@ -177,9 +177,21 @@ function emit<T>(handlers: Set<(value: T) => void>, value: T) {
   handlers.forEach((handler) => handler(value));
 }
 
-/** What a launch does in each state: stall partway through downloading, or fail. */
+/** States whose launch gets the game up, for what the launcher does then. */
+const starts = state === "minimise-on-start" || state === "close-on-start";
+
+/** What the launcher was set to do once the game starts, in each state. */
+const onGameStart: real.OnGameStart =
+  state === "close-on-start" ? "close" : state === "minimise-on-start" || state === "failed-launch" ? "minimise" : "keep_open";
+
+/** What a launch does in each state: stall partway through downloading, fail, or start the game. */
 function launch() {
   window.setTimeout(() => {
+    if (starts) {
+      emit(progress, { event: "done", version_id: "1.21.11" });
+      emit(launched, { ok: true, invocation: { program: "java", args: ["--username", "Steve"], working_directory: "" }, error: null });
+      return;
+    }
     if (state === "failed-launch") {
       emit(launched, {
         ok: false,
@@ -271,7 +283,10 @@ export const api: typeof real.api = {
       ? Promise.reject({ kind: "invalid_setting", message: "Window size must be between 320 and 15360 pixels.", retryable: false })
       : resolve(settings),
   defaultMemoryMb: () => resolve(4096),
-  launcherPreferences: () => resolve({ launch_sounds: state !== "sounds-off" }),
+  launcherPreferences: () => resolve({ launch_sounds: state !== "sounds-off", on_game_start: onGameStart }),
+  ashDefaultMemoryMb: () => resolve(2048),
+  machineDefaults: () => resolve({ memory_mb: state === "settings-memory" ? 6144 : null }),
+  setMachineDefaults: (defaults) => resolve(defaults),
   setLauncherPreferences: (preferences) => resolve(preferences),
 
   instances: () => resolve(instances),
@@ -292,13 +307,18 @@ export const api: typeof real.api = {
   chooseJava: () => resolve(String.raw`C:\Program Files\Java\jdk-21\bin\javaw.exe`),
 };
 
-/** No window to move: the buttons do nothing here, which is all a screenshot needs. */
+/** No window to move: minimise and close are only noted, so the check can ask what was done. */
 export const appWindow: typeof real.appWindow = {
-  minimise: nothing,
+  minimise: async () => windowDid("minimise"),
   toggleMaximise: nothing,
-  close: nothing,
+  close: async () => windowDid("close"),
 };
 
 export const onPrepareProgress: typeof real.onPrepareProgress = (handler) => subscribe(progress, handler);
 export const onPrepareFinished: typeof real.onPrepareFinished = (handler) => subscribe(prepared, handler);
 export const onLaunchFinished: typeof real.onLaunchFinished = (handler) => subscribe(launched, handler);
+
+/** What the launcher did to its own window, for the check to read back. */
+function windowDid(what: "minimise" | "close") {
+  (window as unknown as { windowDid?: string }).windowDid = what;
+}

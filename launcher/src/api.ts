@@ -208,9 +208,23 @@ export type MachineOverrides = {
  * Mirrors `ash_core::LauncherPreferences`: the launcher's own settings, not
  * any one instance's.
  */
+/** Mirrors `ash_core::OnGameStart`. */
+export type OnGameStart = "keep_open" | "minimise" | "close";
+
+/**
+ * This machine's defaults for every instance. Machine-local, like the
+ * overrides, and so never among the preferences, which sync.
+ */
+export type MachineDefaults = {
+  /** `null` means ash's own default. */
+  memory_mb: number | null;
+};
+
 export type LauncherPreferences = {
   /** A short sound when LAUNCH GAME is clicked, and a quieter one when the game starts. */
   launch_sounds: boolean;
+  /** What the launcher does once a launch has started the game; never after a failed one. */
+  on_game_start: OnGameStart;
 };
 
 export type PrepareOutcome = {
@@ -293,7 +307,13 @@ export const api = {
   instanceGlance: (id: InstanceId) => invoke<InstanceGlance>("instance_glance", { id }),
   setOverrides: (id: InstanceId, settings: MachineOverrides) =>
     invoke<MachineOverrides>("set_overrides", { id, settings }),
+  /** What an instance with no memory of its own is given on this machine. */
   defaultMemoryMb: () => invoke<number>("default_memory_mb"),
+  /** ash's own default, which this machine's Automatic follows. */
+  ashDefaultMemoryMb: () => invoke<number>("ash_default_memory_mb"),
+  machineDefaults: () => invoke<MachineDefaults>("machine_defaults"),
+  setMachineDefaults: (defaults: MachineDefaults) =>
+    invoke<MachineDefaults>("set_machine_defaults", { defaults }),
 
   launcherPreferences: () => invoke<LauncherPreferences>("launcher_preferences"),
   setLauncherPreferences: (preferences: LauncherPreferences) =>

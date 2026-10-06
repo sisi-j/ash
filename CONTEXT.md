@@ -135,11 +135,11 @@ The per-account blob that follows a player between machines — feature settings
 _Avoid_: config, preferences, sync blob
 
 **Launcher preferences**:
-The launcher's own settings, as opposed to any one instance's: launch sounds today, then what ash does when the game starts and its language. Kept by ash-core under the data root. Unlike a machine-local override, a preference means the same on any machine, so synced settings will carry it.
+The launcher's own settings, as opposed to any one instance's: launch sounds, and what the launcher does when the game starts (keep open, minimise or close). Language joins them when there is a second one to choose. Kept by ash-core under the data root. Unlike a machine-local override, a preference means the same on any machine, so synced settings will carry it. The Settings page's default memory is therefore not one.
 _Avoid_: launcher settings, app settings, config
 
 **Machine-local override**:
-A field deliberately excluded from sync because it only makes sense on one machine: memory allocation, Java path, window resolution.
+A field deliberately excluded from sync because it only makes sense on one machine: memory allocation, Java path, window resolution. Also this machine's default memory for every instance, which an instance's own memory overrides.
 _Avoid_: local config, machine settings, device settings
 
 **Server entry**:

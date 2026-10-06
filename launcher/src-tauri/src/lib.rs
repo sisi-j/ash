@@ -12,7 +12,8 @@ use ash_core::process::OsProcessPort;
 use ash_core::{
     Account, Accounts, Ash, Cancel, Catalogue, Config, DegradationNotice, DeletionPreview,
     GameStatus, Instance, InstanceGlance, InstanceId, InvocationView, LauncherPreferences, Loader,
-    MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime, SignInStatus,
+    MachineDefaults, MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime,
+    SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -245,9 +246,29 @@ struct PrepareOutcome {
 ///
 /// Served rather than duplicated in the UI: a hardcoded copy that drifts
 /// would show a player one figure while the JVM got another.
+/// What an instance with no memory of its own is given on this machine.
 #[tauri::command]
-async fn default_memory_mb() -> Result<u32, UiError> {
+async fn default_memory_mb(state: tauri::State<'_, AppState>) -> Result<u32, UiError> {
+    Ok(state.ash.default_memory_mb())
+}
+
+/// ash's own default, which a machine with no default of its own follows.
+#[tauri::command]
+async fn ash_default_memory_mb() -> Result<u32, UiError> {
     Ok(ash_core::DEFAULT_MEMORY_MB)
+}
+
+#[tauri::command]
+async fn machine_defaults(state: tauri::State<'_, AppState>) -> Result<MachineDefaults, UiError> {
+    Ok(state.ash.machine_defaults())
+}
+
+#[tauri::command]
+async fn set_machine_defaults(
+    state: tauri::State<'_, AppState>,
+    defaults: MachineDefaults,
+) -> Result<MachineDefaults, UiError> {
+    state.ash.set_machine_defaults(defaults).map_err(UiError::from)
 }
 
 #[tauri::command]
@@ -535,6 +556,9 @@ pub fn run() {
             degradation_notice,
             instance_glance,
             default_memory_mb,
+            ash_default_memory_mb,
+            machine_defaults,
+            set_machine_defaults,
             reveal_log
         ])
         .run(tauri::generate_context!())

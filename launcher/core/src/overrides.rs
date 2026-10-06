@@ -61,10 +61,48 @@ pub struct MachineOverrides {
     pub resolution: Option<Resolution>,
 }
 
-impl MachineOverrides {
-    /// The heap size to actually pass, defaulted.
+/// This machine's defaults for every instance: what one with no memory of its
+/// own is given.
+///
+/// Machine-local for the same reason an instance's own memory is, so it lives
+/// beside the overrides and never among the launcher preferences, which sync.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MachineDefaults {
+    /// `None` means ash's own default, [`DEFAULT_MEMORY_MB`], and keeps
+    /// following it if that ever changes.
+    #[serde(default)]
+    pub memory_mb: Option<u32>,
+}
+
+impl MachineDefaults {
+    /// The memory an instance with none of its own is given.
     pub fn memory_mb_or_default(&self) -> u32 {
         self.memory_mb.unwrap_or(DEFAULT_MEMORY_MB)
+    }
+
+    pub fn validate(&self) -> Result<(), AshError> {
+        self.memory_mb.map_or(Ok(()), check_memory)
+    }
+}
+
+fn check_memory(memory: u32) -> Result<(), AshError> {
+    if MEMORY_RANGE.contains(&memory) {
+        return Ok(());
+    }
+    Err(AshError::InvalidSetting {
+        detail: format!(
+            "memory must be between {} and {} MB",
+            MEMORY_RANGE.start(),
+            MEMORY_RANGE.end()
+        ),
+    })
+}
+
+impl MachineOverrides {
+    /// The heap size to actually pass: this instance's own, or else this
+    /// machine's default for every instance.
+    pub fn memory_mb_or(&self, defaults: &MachineDefaults) -> u32 {
+        self.memory_mb.unwrap_or_else(|| defaults.memory_mb_or_default())
     }
 
     /// Reject anything that would produce a JVM that cannot start.
@@ -73,15 +111,7 @@ impl MachineOverrides {
     /// player finds out while looking at the field they just typed in.
     pub fn validate(&self) -> Result<(), AshError> {
         if let Some(memory) = self.memory_mb {
-            if !MEMORY_RANGE.contains(&memory) {
-                return Err(AshError::InvalidSetting {
-                    detail: format!(
-                        "memory must be between {} and {} MB",
-                        MEMORY_RANGE.start(),
-                        MEMORY_RANGE.end()
-                    ),
-                });
-            }
+            check_memory(memory)?;
         }
 
         if let Some(resolution) = self.resolution {
@@ -152,15 +182,39 @@ pub(crate) fn forget(data_root: &Path, id: &InstanceId) {
     let _ = fs::remove_file(path(data_root, id));
 }
 
+/// Beside the per-instance files rather than among them: those are named by
+/// instance id, and an instance is free to be called "defaults".
+fn defaults_path(data_root: &Path) -> PathBuf {
+    data_root.join("machine-defaults.json")
+}
+
+/// This machine's defaults. Absent, unreadable or corrupt: ash's own.
+pub(crate) fn load_defaults(data_root: &Path) -> MachineDefaults {
+    fs::read(defaults_path(data_root))
+        .ok()
+        .and_then(|raw| serde_json::from_slice(&raw).ok())
+        .unwrap_or_default()
+}
+
+pub(crate) fn save_defaults(data_root: &Path, defaults: &MachineDefaults) -> Result<(), AshError> {
+    fs::create_dir_all(data_root).map_err(AshError::writing("creating ash's data directory"))?;
+    let encoded = serde_json::to_vec_pretty(defaults)
+        .map_err(|e| AshError::Storage { detail: format!("encoding machine defaults: {e}") })?;
+    fs::write(defaults_path(data_root), encoded)
+        .map_err(AshError::writing("writing machine defaults"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn an_unset_memory_figure_falls_back_to_ashs_default() {
-        assert_eq!(MachineOverrides::default().memory_mb_or_default(), DEFAULT_MEMORY_MB);
+    fn an_unset_memory_figure_falls_back_to_the_machines_default_then_ashs() {
+        let none = MachineOverrides::default();
+        assert_eq!(none.memory_mb_or(&MachineDefaults::default()), DEFAULT_MEMORY_MB);
+        assert_eq!(none.memory_mb_or(&MachineDefaults { memory_mb: Some(6144) }), 6144);
         let chosen = MachineOverrides { memory_mb: Some(8192), ..Default::default() };
-        assert_eq!(chosen.memory_mb_or_default(), 8192);
+        assert_eq!(chosen.memory_mb_or(&MachineDefaults { memory_mb: Some(6144) }), 8192);
     }
 
     #[test]

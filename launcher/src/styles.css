@@ -1273,7 +1273,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 40rem;
+  max-width: 44rem;
 }
 
 .option {
@@ -1757,4 +1757,9 @@ button {
     animation: none;
     opacity: 0.6;
   }
+}
+
+/* Settings: the launcher's own rows sit under the switch, at its width. */
+.launcher-settings {
+  margin-top: 6px;
 }

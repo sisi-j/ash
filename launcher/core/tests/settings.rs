@@ -14,8 +14,8 @@ use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::{
-    Ash, Cancel, Config, InstanceId, Loader, MachineOverrides, NullSink, Resolution,
-    DEFAULT_MEMORY_MB, VERSION_MANIFEST_URL,
+    Ash, Cancel, Config, InstanceId, Loader, MachineDefaults, MachineOverrides, NullSink,
+    Resolution, DEFAULT_MEMORY_MB, VERSION_MANIFEST_URL,
 };
 
 mod common;
@@ -141,6 +141,32 @@ async fn an_instance_nobody_has_tuned_still_gets_a_heap_size() {
     // Mojang's metadata never states one, so leaving it out would hand the
     // game whatever fraction of RAM the JVM felt like.
     assert!(args.contains(&format!("-Xmx{DEFAULT_MEMORY_MB}M")));
+}
+
+#[tokio::test]
+async fn an_instance_with_no_memory_of_its_own_gets_this_machine_s_default() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.ash.set_machine_defaults(MachineDefaults { memory_mb: Some(6144) }).expect("set");
+
+    let args = f.launch(&id).await;
+
+    assert!(args.contains(&"-Xmx6144M".to_owned()), "{args:?}");
+}
+
+#[tokio::test]
+async fn an_instance_s_own_memory_wins_over_this_machine_s_default() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.ash.set_machine_defaults(MachineDefaults { memory_mb: Some(6144) }).expect("set");
+    f.ash
+        .set_overrides(&id, MachineOverrides { memory_mb: Some(3072), ..Default::default() })
+        .expect("set");
+
+    let args = f.launch(&id).await;
+
+    assert!(args.contains(&"-Xmx3072M".to_owned()), "{args:?}");
+    assert_eq!(args.iter().filter(|a| a.starts_with("-Xmx")).count(), 1);
 }
 
 #[tokio::test]

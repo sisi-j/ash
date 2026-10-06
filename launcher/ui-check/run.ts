@@ -40,6 +40,9 @@ const launchGame = (page: Page) => page.locator('.launch-button[aria-disabled="f
 const openInstance = (page: Page) => page.getByRole("button", { name: "1.21.11 settings" }).click();
 const openPage = (label: string) => (page: Page) => page.getByRole("navigation").getByRole("button", { name: label }).click();
 
+/** What the launcher did to its own window, if anything: minimise or close. */
+const windowDid = (page: Page) => page.evaluate(() => (window as unknown as { windowDid?: string }).windowDid);
+
 /** How many audio contexts the page made: one the first time a sound plays, none if none ever does. */
 const soundsMade = (page: Page) => page.evaluate(() => (window as unknown as { audioContexts?: number }).audioContexts ?? 0);
 
@@ -99,7 +102,25 @@ const STATES: State[] = [
     shows: "Window size",
     reach: (page) => page.getByRole("button", { name: "Instance settings" }).click(),
   },
-  { name: "failed-launch", shows: "Java could not start the game.", reach: launchGame },
+  {
+    name: "failed-launch",
+    shows: "Java could not start the game.",
+    reach: launchGame,
+    // Set to minimise once the game starts: a launch that failed must leave ash where the player can read why.
+    verify: async (page) => ((await windowDid(page)) === undefined ? null : `ash ${await windowDid(page)}d after a failed launch`),
+  },
+  {
+    name: "minimise-on-start",
+    shows: "PLAYING",
+    reach: launchGame,
+    verify: async (page) => ((await windowDid(page)) === "minimise" ? null : "ash did not minimise once the game started"),
+  },
+  {
+    name: "close-on-start",
+    shows: "PLAYING",
+    reach: launchGame,
+    verify: async (page) => ((await windowDid(page)) === "close" ? null : "ash did not close once the game started"),
+  },
   { name: "crashed", shows: "OutOfMemoryError" },
   {
     name: "unchecked",
@@ -177,7 +198,13 @@ const STATES: State[] = [
   { name: "new-instance", shows: "Built for", reach: (page) => page.getByRole("button", { name: "New", exact: true }).click() },
   { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
   { name: "news", shows: "News is coming soon", reach: openPage("News") },
-  { name: "settings", shows: "Launch sounds", reach: openPage("Settings") },
+  { name: "settings", shows: "When the game starts", reach: openPage("Settings") },
+  {
+    name: "settings-memory",
+    shows: "6 GB",
+    reach: openPage("Settings"),
+    verify: async (page) => ((await page.locator('input[type="range"]').count()) === 1 ? null : "a custom default memory showed no slider"),
+  },
 ];
 
 /** The bundled weights, by the names their files give them. */
