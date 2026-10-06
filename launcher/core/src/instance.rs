@@ -53,6 +53,25 @@ pub struct Instance {
     pub loader: Loader,
     pub created_at_ms: u64,
     pub last_played_ms: Option<u64>,
+    /// Every finished session's length, added together. A session still
+    /// open in [`Instance::last_session`] is not in it yet.
+    ///
+    /// Defaulted on read, like `loader`: an instance from before ash kept
+    /// play time has played for no time ash knows of, which is not corrupt.
+    #[serde(default)]
+    pub played_ms: u64,
+    /// The latest session, open until it is seen to end.
+    #[serde(default)]
+    pub last_session: Option<Session>,
+}
+
+/// One run of the game, from ash starting it to its exit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Session {
+    pub started_ms: u64,
+    /// `None` while the game runs - or after it stopped without ash seeing
+    /// it, which [`unseen_end`] settles.
+    pub ended_ms: Option<u64>,
 }
 
 /// What deleting an instance would destroy.
@@ -193,6 +212,8 @@ pub(crate) fn create(
         loader,
         created_at_ms: now_ms(),
         last_played_ms: None,
+        played_ms: 0,
+        last_session: None,
     };
     write_metadata(instances_root, &instance)?;
     Ok(instance)
@@ -245,6 +266,63 @@ pub(crate) fn mark_played(instances_root: &Path, id: &InstanceId) -> Result<Inst
     instance.last_played_ms = Some(now_ms());
     write_metadata(instances_root, &instance)?;
     Ok(instance)
+}
+
+/// Start a session at `started_ms`.
+///
+/// A session still open from before is closed first. Nothing was seen to end
+/// it, which happens when the launcher was closed while the game ran, so it is
+/// closed when the game last wrote its log.
+pub(crate) fn begin_session(
+    instances_root: &Path,
+    id: &InstanceId,
+    started_ms: u64,
+) -> Result<Instance, AshError> {
+    let mut instance = read_metadata(instances_root, id)?;
+    if let Some(Session { started_ms: before, ended_ms: None }) = instance.last_session {
+        close(&mut instance, before, unseen_end(instances_root, id, before));
+    }
+    instance.last_session = Some(Session { started_ms, ended_ms: None });
+    instance.last_played_ms = Some(started_ms);
+    write_metadata(instances_root, &instance)?;
+    Ok(instance)
+}
+
+/// End the session that began at `started_ms`, if it is still the open one.
+///
+/// Matched by its start, so news of an old game ending can never close a
+/// newer session.
+pub(crate) fn end_session(
+    instances_root: &Path,
+    id: &InstanceId,
+    started_ms: u64,
+    ended_ms: u64,
+) -> Result<(), AshError> {
+    let mut instance = read_metadata(instances_root, id)?;
+    if instance.last_session == Some(Session { started_ms, ended_ms: None }) {
+        close(&mut instance, started_ms, ended_ms);
+        write_metadata(instances_root, &instance)?;
+    }
+    Ok(())
+}
+
+fn close(instance: &mut Instance, started_ms: u64, ended_ms: u64) {
+    // A clock set back mid-session would otherwise make the session negative.
+    let ended_ms = ended_ms.max(started_ms);
+    instance.played_ms += ended_ms - started_ms;
+    instance.last_session = Some(Session { started_ms, ended_ms: Some(ended_ms) });
+}
+
+/// When a session nobody saw end most likely ended: the last time the game
+/// wrote `logs/latest.log`, which both version targets write to until they
+/// exit. The session's start if that log is missing or older than it, so a
+/// session ash cannot account for adds no time rather than a guess.
+pub(crate) fn unseen_end(instances_root: &Path, id: &InstanceId, started_ms: u64) -> u64 {
+    fs::metadata(game_dir(instances_root, id).join("logs").join("latest.log"))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map_or(started_ms, |written| (written.as_millis() as u64).max(started_ms))
 }
 
 /// The one directory a loader reads, made if it is not there yet.

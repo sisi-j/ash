@@ -64,6 +64,10 @@ _Avoid_: store (reserved for the cosmetics storefront), cache, library folder
 The per-instance folder holding saves, config, resource packs, screenshots and mods. Never shared between instances.
 _Avoid_: .minecraft, instance folder
 
+**Session**:
+One run of the game, from the launcher starting it to its exit, kept in the instance's own metadata. Play time is every session added together. A session the launcher did not see end, because it was closed while the game ran, is taken to have ended when the game last wrote its log.
+_Avoid_: playthrough, run (ambiguous with a CI run)
+
 ### Client
 
 **Feature**:

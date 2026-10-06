@@ -81,7 +81,24 @@ const STATES: State[] = [
     // The proof that nothing plays: no audio is ever set up.
     verify: async (page) => ((await soundsMade(page)) === 0 ? null : "a sound played with launch sounds off"),
   },
-  { name: "playing", shows: "PLAYING" },
+  { name: "playing", shows: "Playing now" },
+  {
+    name: "glance-ash",
+    shows: "Toggle sprint",
+    verify: async (page) => ((await page.locator(".glance-card").getByText("Sodium").count()) === 1 ? null : "the player's mod was not shown"),
+  },
+  {
+    name: "glance-vanilla",
+    shows: "Vanilla, no ash client",
+    reach: (page) => page.getByRole("option", { name: /Vanilla/ }).click(),
+    verify: async (page) =>
+      (await page.locator(".glance-card").getByText("Never played").count()) === 1 ? null : "the card did not follow the selected instance",
+  },
+  {
+    name: "glance-open",
+    shows: "Window size",
+    reach: (page) => page.getByRole("button", { name: "Instance settings" }).click(),
+  },
   { name: "failed-launch", shows: "Java could not start the game.", reach: launchGame },
   { name: "crashed", shows: "OutOfMemoryError" },
   {

@@ -204,6 +204,28 @@ impl LoadReport {
         self.features.iter().any(|f| f.status == FeatureStatus::Degraded)
     }
 
+    /// The features that are on, by the name the client gave them.
+    ///
+    /// `switch` is a feature's `<id>.enabled` value in the client's settings,
+    /// which is newer than the report when the player edits the file between
+    /// sessions. A feature with no switch, such as the settings screen, is
+    /// not something a player turns on, so it is never listed.
+    pub(crate) fn on(&self, switch: impl Fn(&str) -> Option<String>) -> Vec<String> {
+        self.features
+            .iter()
+            .filter(|f| f.status != FeatureStatus::Degraded)
+            .filter(|f| match switch(&f.id.0).as_deref() {
+                None => false,
+                Some("true") => true,
+                Some("false") => false,
+                // A value the client cannot read, so it fell back to its own
+                // default, and the report says which way that went.
+                Some(_) => f.status == FeatureStatus::Loaded,
+            })
+            .map(|f| f.name.clone())
+            .collect()
+    }
+
     /// One line for ash's log: `client=0.1.0 fps-readout=loaded toggle-sprint=degraded`.
     ///
     /// Built only from the validated id and version, never from the display
