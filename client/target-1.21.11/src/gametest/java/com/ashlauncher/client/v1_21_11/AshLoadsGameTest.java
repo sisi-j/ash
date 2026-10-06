@@ -95,6 +95,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             "{ \"id\": \"freelook\", \"name\": \"Freelook\", \"status\": \"loaded\" }",
             "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
             "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
+            "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             assertReportSays(feature);
@@ -140,6 +141,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             crosshairOptionsWork(context);
             crosshairWorks(context);
             hitIndicatorWorks(context, server);
+            hitColourWorks(context, server);
             panelIsCrispAtEveryGuiScale(context);
         }
     }
@@ -633,6 +635,52 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     }
 
     /** Moves the real cursor onto a feature's switch on ash's panel and clicks, as a player would. */
+    /**
+     * Hit colour, set on ash's panel with the mouse: blue at 60 per cent
+     * reaches the overlay texture's red rows at once, a hurt pig on the test's
+     * server flashes it, and switching the feature off puts back the game's
+     * own red exactly.
+     */
+    private static void hitColourWorks(ClientGameTestContext context, TestDedicatedServerContext server) {
+        if (context.computeOnClient(c -> HitColourTexture.redRowTexel()) != HitColourTexture.GAME_TEXEL) {
+            throw new AssertionError("before any change, the flash is not the game's own red");
+        }
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickOn(context, "hit colour's options link", panel -> panel.optionsLinkOf(Feature.HIT_COLOUR));
+        clickOn(context, "the blue swatch", panel -> panel.swatchOf(Settings.HIT_COLOUR_COLOUR, 0x4DC3FF));
+        clickOn(context, "60 on the strength slider", panel -> panel.sliderAt(Settings.HIT_COLOUR_STRENGTH, 60));
+        assertFileSays("hit-colour.colour=#4DC3FF");
+        assertFileSays("hit-colour.strength=60");
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+
+        // 60 per cent blue keeps 40 per cent of the entity's colour: 102 of 255.
+        int texel = context.computeOnClient(c -> HitColourTexture.redRowTexel());
+        if (texel != 0x664DC3FF) {
+            throw new AssertionError("the flash's texel is " + Integer.toHexString(texel) + ", not 664dc3ff");
+        }
+
+        // By eye: a pig in front of the player, flashing blue.
+        server.runCommand("execute as @a at @s run tp @s ~ ~ ~ ~ 20");
+        server.runCommand("execute as @a at @s rotated ~ 0 run summon minecraft:pig ^ ^ ^3 {NoAI:1b,Tags:[\"ash_flash\"]}");
+        context.waitTicks(10);
+        server.runCommand("damage @e[tag=ash_flash,limit=1] 1");
+        context.waitTicks(2);
+        context.takeScreenshot("ash-hit-colour");
+        server.runCommand("kill @e[tag=ash_flash]");
+
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickSwitch(context, Feature.HIT_COLOUR);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        if (context.computeOnClient(c -> HitColourTexture.redRowTexel()) != HitColourTexture.GAME_TEXEL) {
+            throw new AssertionError("switching hit colour off did not put back the game's own red");
+        }
+    }
+
     private static void clickSwitch(ClientGameTestContext context, Feature feature) {
         clickOn(context, feature + "'s switch", panel -> panel.switchOf(feature));
     }

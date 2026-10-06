@@ -7,6 +7,8 @@ import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
+import com.ashlauncher.client.hit.HitColour;
+import com.ashlauncher.client.hit.HitColourHook;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hit.RecentAttacks;
@@ -45,6 +47,7 @@ import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,6 +81,8 @@ public final class AshClient implements ClientModInitializer {
     private static final String FREELOOK_TICK_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientFreelookMixin";
 
     private static final String SNAPLOOK_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.MinecraftClientSnaplookMixin";
+
+    private static final String HIT_COLOUR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.LivingEntityRendererHitColourMixin";
 
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
@@ -203,6 +208,16 @@ public final class AshClient implements ClientModInitializer {
             FreelookKey.install(freelookKey, freelook);
         } else {
             landed.remove(Feature.FREELOOK);
+        }
+
+        // Hit colour: the renderer's hurt flash, refilled per draw from the
+        // settings, so a change shows on the next frame.
+        boolean hitColourLanded = MixinFeature.landed(() -> LivingEntityRenderer.class, HIT_COLOUR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_COLOUR.displayName(), why)));
+        if (hitColourLanded) {
+            HitColourHook.install(new HitColour(settings));
+        } else {
+            landed.remove(Feature.HIT_COLOUR);
         }
 
         // Snaplook: the game's own front view while Z is held, Z being a key

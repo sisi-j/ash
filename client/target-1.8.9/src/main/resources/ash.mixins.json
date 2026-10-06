@@ -12,6 +12,7 @@
     "GameRendererFreelookMixin",
     "InGameHudMixin",
     "InGameHudPanelMixin",
+    "LivingEntityRendererHitColourMixin",
     "MinecraftClientAccess",
     "MinecraftClientFreelookMixin",
     "MinecraftClientMixin",
