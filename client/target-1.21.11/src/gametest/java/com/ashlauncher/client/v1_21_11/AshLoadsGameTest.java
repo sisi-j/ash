@@ -332,6 +332,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             context.waitTicks(3);
             context.getInput().pressKey(settingsKey);
             context.waitTicks(5);
+            settle(context);
             Rect[] areas = context.computeOnClient(client -> {
                 if (!(client.screen instanceof AshSettingsScreen screen)) {
                     throw new AssertionError("ash's settings did not open at GUI scale " + scale);
@@ -779,9 +780,27 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.waitTicks(3);
     }
 
+    /**
+     * Waits until ash's panel has stopped moving (#66) - opening, a page
+     * changing, tiles arriving - as a player's eye waits for things to land
+     * before clicking. By the clock rather than by ticks, since the framework
+     * decides how fast ticks pass.
+     */
+    private static void settle(ClientGameTestContext context) {
+        long deadline = System.nanoTime() + 10_000_000_000L;
+        while (context.computeOnClient(client ->
+                client.screen instanceof AshSettingsScreen screen && screen.panel().animating())) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("ash's panel was still moving after 10 seconds");
+            }
+            context.waitTicks(1);
+        }
+    }
+
     /** Where the cursor goes to be over something on ash's panel, in window coordinates. */
     private static double[] cursorAt(ClientGameTestContext context, String what,
             java.util.function.Function<Panel, Rect> where) {
+        settle(context);
         return context.computeOnClient(client -> {
             if (!(client.screen instanceof AshSettingsScreen screen)) {
                 throw new AssertionError("ash's settings are not open");

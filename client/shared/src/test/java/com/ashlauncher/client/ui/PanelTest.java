@@ -51,6 +51,7 @@ class PanelTest {
         settings = Settings.load(configDir);
         model = new SettingsScreen(settings, landed, () -> reported.add("report"));
         Panel panel = new Panel(model, () -> closed.add("closed"), now::get);
+        panel.setAnimations(false);
         panel.resize(width, height);
         return panel;
     }
