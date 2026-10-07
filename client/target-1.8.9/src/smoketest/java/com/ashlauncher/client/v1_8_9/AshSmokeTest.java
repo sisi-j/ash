@@ -142,6 +142,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         hitIndicatorWorks(client);
         moveReadoutsWorks(client);
         panelIsCrispAtEveryGuiScale(client);
+        ashSettingsWork(client);
 
         System.out.println("ash smoke test: a 1.8.9 client is up, ash is loaded, wrote its settings,"
                 + " drew its HUD in a world, toggle sprint started and stopped a sprint, freelook turned the view and drew the terrain behind,"
@@ -896,6 +897,34 @@ public final class AshSmokeTest implements ClientModInitializer {
      * offers scales 1 and 2, and Auto; the 1.21.11 test, which can resize its
      * window, covers 3 as well.
      */
+    /**
+     * ash's own settings (#69), changed on the gear's page as a player
+     * changes them: background blur off and on again, and the interface size
+     * up and back - each saved the moment it changes.
+     */
+    private static void ashSettingsWork(MinecraftClient client) {
+        KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
+        tap(client, settingsKey.getCode());
+        AshSettingsScreen screen = await("open ash's settings for its own settings", () ->
+                client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
+        clickOn(client, screen, "the gear", Panel::gearButton);
+        clickOn(client, screen, "background blur's switch", panel -> panel.switchOf(Settings.PANEL_BLUR));
+        expectFileSays("panel.blur=false");
+        pause(300L);
+        // By eye: the panel darker, over the world unblurred.
+        screenshot(client, "ash-settings-no-blur.png");
+        clickOn(client, screen, "background blur's switch", panel -> panel.switchOf(Settings.PANEL_BLUR));
+        expectFileSays("panel.blur=true");
+        clickOn(client, screen, "130% on interface size", panel -> panel.sliderAt(Settings.PANEL_SIZE, 130));
+        expectFileSays("panel.size=130");
+        // By eye: the panel's contents larger, its frame where it was.
+        screenshot(client, "ash-settings-130.png");
+        clickOn(client, screen, "100% on interface size", panel -> panel.sliderAt(Settings.PANEL_SIZE, 100));
+        expectFileSays("panel.size=100");
+        keyIntoScreen(client, screen, settingsKey.getCode());
+        await("close ash's settings after its own settings", () -> client.currentScreen == null ? client : null);
+    }
+
     private static void panelIsCrispAtEveryGuiScale(MinecraftClient client) {
         KeyBinding settingsKey = binding(client, SettingsScreen.BINDING_NAME);
         java.util.Set<Long> first = null;

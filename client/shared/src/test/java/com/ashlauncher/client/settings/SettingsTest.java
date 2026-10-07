@@ -151,7 +151,8 @@ class SettingsTest {
                 Settings.CROSSHAIR_OUTLINE, Settings.HIT_INDICATOR, Settings.HIT_INDICATOR_COLOUR,
                 Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT,
                 Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH,
-                Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION), Settings.declared());
+                Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION, Settings.PANEL_SIZE,
+                Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR), Settings.declared());
 
         Settings.load(configDir);
 
@@ -208,7 +209,14 @@ class SettingsTest {
                         + "# Where your ping sits, written as fps-readout.position is. Left here, it takes the frame"
                         + " rate's place whenever the frame rate is not there. Easiest set with Edit HUD in ash's"
                         + " settings.\n"
-                        + "ping-readout.position=top-left 4 15\n",
+                        + "ping-readout.position=top-left 4 15\n"
+                        + "# How large ash's settings panel draws, in per cent: a whole number from 80 to 130.\n"
+                        + "panel.size=100\n"
+                        + "# Whether ash's settings panel moves as it opens, closes and changes pages. true or false.\n"
+                        + "panel.animations=true\n"
+                        + "# Whether the game blurs behind ash's settings panel; off, the panel is darker instead."
+                        + " true or false.\n"
+                        + "panel.blur=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

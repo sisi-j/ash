@@ -8,6 +8,8 @@ import com.mojang.blaze3d.platform.GLX;
 import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.gl.ShaderEffect;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.options.ControlsOptionsScreen;
+import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.Window;
 import net.minecraft.util.Identifier;
@@ -49,6 +51,10 @@ public final class AshSettingsScreen extends Screen {
     AshSettingsScreen(SettingsScreen settingsScreen, KeyBinding key) {
         this.key = key;
         this.panel = new Panel(settingsScreen, () -> client.setScreen(null));
+        // ash's own page shows the key as the game names it, and sends the
+        // player to the game's own Controls to change it.
+        panel.setOpenKey(() -> GameOptions.getFormattedNameForKeyCode(key.getCode()),
+                () -> client.setScreen(new ControlsOptionsScreen(this, client.options)));
     }
 
     /** The panel this screen shows, so the smoke test can find a switch and click it. */
@@ -111,7 +117,7 @@ public final class AshSettingsScreen extends Screen {
             // No blur in Edit HUD, where the readouts have to be seen as they
             // will be: the shader is switched off, not unloaded, so leaving
             // Edit HUD has it back on the next frame.
-            ((GameRendererAccess) client.gameRenderer).ash$setShadersEnabled(!panel.editingHud());
+            ((GameRendererAccess) client.gameRenderer).ash$setShadersEnabled(!panel.editingHud() && panel.blurWanted());
         }
         GlStateManager.pushMatrix();
         GlStateManager.scale(1.0F / scale, 1.0F / scale, 1.0F);
