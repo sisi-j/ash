@@ -234,6 +234,16 @@ public final class Panel {
         return result;
     }
 
+    /** The colours picked lately, read once, the first time a page needs them. */
+    private RecentColours recentColours;
+
+    private RecentColours recentColours() {
+        if (recentColours == null) {
+            recentColours = RecentColours.load(model.settings().folder());
+        }
+        return recentColours;
+    }
+
     /** A refused action: the tile that refused shakes, briefly. */
     private void shake(Feature feature) {
         shaking = feature;
@@ -359,7 +369,8 @@ public final class Panel {
     }
 
     private void open(SettingsScreen.Row row) {
-        changeView(new OptionsPage(model, row, () -> changeView(null, false), clock, this::say, () -> animations),
+        changeView(new OptionsPage(model, row, () -> changeView(null, false), clock, this::say, () -> animations,
+                recentColours()),
                 false);
     }
 
@@ -816,15 +827,40 @@ public final class Panel {
         return pagePixels("hex:" + colour.key());
     }
 
-    public Rect opacitySlider(Colour colour) {
-        return pagePixels("opacity:" + colour.key());
+    /** A colour's chip, which folds its picker open and shut (#68). */
+    public Rect colourChipOf(Colour colour) {
+        return pagePixels("chip:" + colour.key());
     }
 
-    /** The point along a colour's opacity slider that stands for {@code percent}. */
+    /** The opacity bar in a colour's open picker. */
+    public Rect opacitySlider(Colour colour) {
+        return pagePixels("alpha:" + colour.key());
+    }
+
+    /** The point along a colour's opacity bar that stands for {@code percent}: 100 at the top. */
     public Rect opacityAt(Colour colour, int percent) {
-        int min = (int) Math.round(Colour.MIN_ALPHA * 100 / 255.0);
-        return page == null ? null
-                : nonEmpty((page.pointOn("opacity:" + colour.key(), percent, min, 100)));
+        return page == null ? null : nonEmpty(page.opacityPoint(colour.key(), percent));
+    }
+
+    /** The point on a colour's saturation and brightness square for a saturation and brightness from 0 to 1. */
+    public Rect colourSquareAt(Colour colour, float saturation, float brightness) {
+        Rect square = pagePixels("square:" + colour.key());
+        if (square == null) {
+            return null;
+        }
+        return new Rect(square.x + Math.round(saturation * (square.width - 1)),
+                square.y + Math.round((1 - brightness) * (square.height - 1)), 1, 1);
+    }
+
+    /** The point on a colour's hue bar for a hue in degrees. */
+    public Rect hueAt(Colour colour, float degrees) {
+        Rect bar = pagePixels("hue:" + colour.key());
+        return bar == null ? null : new Rect(bar.x, bar.y + Math.round(degrees / 360f * (bar.height - 1)), bar.width, 1);
+    }
+
+    /** A colour among the recent ones in a colour's open picker. */
+    public Rect recentOf(Colour colour, int rgb) {
+        return pagePixels("recent:" + colour.key() + ":" + OptionsPage.hex(rgb));
     }
 
     public Rect resetToDefaults() {

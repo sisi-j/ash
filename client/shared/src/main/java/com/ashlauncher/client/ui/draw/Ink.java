@@ -401,6 +401,113 @@ public final class Ink {
         return shapes;
     }
 
+    // ---- the colour picker (#68) ----
+
+    /** The checkerboard behind a colour that can be see-through: the mockup's two greys. */
+    private static final int CHECK_LIGHT = 0xFF888888;
+    private static final int CHECK_DARK = 0xFF555555;
+
+    /**
+     * The picker's square for one hue: saturation from none at the left to
+     * full at the right, brightness from full at the top to none at the
+     * bottom, {@code width} by {@code height}, its corners rounded by
+     * {@code radius}.
+     */
+    public static synchronized Raster colourSquare(int hue, int width, int height, int radius) {
+        return cached("square/" + hue + "/" + width + "x" + height + "/" + radius, () -> {
+            int[] pixels = new int[width * height];
+            for (int y = 0; y < height; y++) {
+                float v = 1f - y / (float) Math.max(1, height - 1);
+                for (int x = 0; x < width; x++) {
+                    float s = x / (float) Math.max(1, width - 1);
+                    pixels[y * width + x] = 0xFF000000 | Hsv.toRgb(hue, s, v);
+                }
+            }
+            return rounded(new Raster(width, height, pixels, 0, 0, null), radius);
+        });
+    }
+
+    /** The picker's hue bar: every hue from the top to the bottom, red at both ends. */
+    public static synchronized Raster hueBar(int width, int height, int radius) {
+        return cached("hue/" + width + "x" + height + "/" + radius, () -> {
+            int[] pixels = new int[width * height];
+            for (int y = 0; y < height; y++) {
+                int rgb = 0xFF000000 | Hsv.toRgb(360f * y / Math.max(1, height - 1), 1f, 1f);
+                java.util.Arrays.fill(pixels, y * width, (y + 1) * width, rgb);
+            }
+            return rounded(new Raster(width, height, pixels, 0, 0, null), radius);
+        });
+    }
+
+    /**
+     * The picker's opacity bar for a colour: the colour solid at the top,
+     * fading to nothing at the bottom, over a checkerboard of {@code cell}
+     * pixels so see-through looks it.
+     */
+    public static synchronized Raster opacityBar(int rgb, int width, int height, int radius, int cell) {
+        return cached("alpha/" + Integer.toHexString(rgb & 0xFFFFFF) + "/" + width + "x" + height + "/" + radius
+                + "/" + cell, () -> {
+            int[] pixels = new int[width * height];
+            for (int y = 0; y < height; y++) {
+                float alpha = 1f - y / (float) Math.max(1, height - 1);
+                for (int x = 0; x < width; x++) {
+                    pixels[y * width + x] = over(rgb, alpha, checker(x, y, cell));
+                }
+            }
+            return rounded(new Raster(width, height, pixels, 0, 0, null), radius);
+        });
+    }
+
+    /** A colour as the picker's chip shows it: over a checkerboard, so its opacity shows too. */
+    public static synchronized Raster colourChip(int argb, int size, int radius, int cell) {
+        return cached("chip/" + Integer.toHexString(argb) + "/" + size + "/" + radius + "/" + cell, () -> {
+            int[] pixels = new int[size * size];
+            float alpha = (argb >>> 24) / 255f;
+            for (int y = 0; y < size; y++) {
+                for (int x = 0; x < size; x++) {
+                    pixels[y * size + x] = over(argb & 0xFFFFFF, alpha, checker(x, y, cell));
+                }
+            }
+            return rounded(new Raster(size, size, pixels, 0, 0, null), radius);
+        });
+    }
+
+    private static int checker(int x, int y, int cell) {
+        int size = Math.max(1, cell);
+        return ((x / size + y / size) % 2 == 0) ? CHECK_LIGHT : CHECK_DARK;
+    }
+
+    /** {@code rgb} at {@code alpha} over an opaque {@code under}. */
+    private static int over(int rgb, float alpha, int under) {
+        int r = Math.round(((rgb >> 16) & 0xFF) * alpha + ((under >> 16) & 0xFF) * (1 - alpha));
+        int g = Math.round(((rgb >> 8) & 0xFF) * alpha + ((under >> 8) & 0xFF) * (1 - alpha));
+        int b = Math.round((rgb & 0xFF) * alpha + (under & 0xFF) * (1 - alpha));
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
+    /** The raster with its corners cut round, softly at the edge, to {@code radius}. */
+    private static Raster rounded(Raster raster, int radius) {
+        if (radius <= 0) {
+            return raster;
+        }
+        int width = raster.width();
+        int height = raster.height();
+        int[] pixels = raster.argb();
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                double cx = x < radius ? radius - 0.5 : x >= width - radius ? width - radius - 0.5 : x;
+                double cy = y < radius ? radius - 0.5 : y >= height - radius ? height - radius - 0.5 : y;
+                double out = Math.hypot(x - cx, y - cy) - (radius - 0.5);
+                if (out > -0.5) {
+                    float keep = (float) Math.max(0, Math.min(1, 0.5 - out));
+                    int alpha = Math.round((pixels[y * width + x] >>> 24) * keep);
+                    pixels[y * width + x] = (alpha << 24) | (pixels[y * width + x] & 0xFFFFFF);
+                }
+            }
+        }
+        return raster;
+    }
+
     // ---- the cache ----
 
     private static Raster cached(String key, Supplier<Raster> make) {

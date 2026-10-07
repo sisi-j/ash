@@ -12,6 +12,7 @@ import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.settings.Whole;
 import com.ashlauncher.client.ui.draw.Canvas;
+import com.ashlauncher.client.ui.draw.Hsv;
 import com.ashlauncher.client.ui.draw.Ink;
 import com.ashlauncher.client.ui.draw.Paint;
 import java.util.ArrayList;
@@ -61,6 +62,10 @@ final class OptionsPage {
     private static final int SCENE_LABEL = 0xD9FFFFFF;
     /** Its shadow: black at 50%. */
     private static final int SCENE_SHADOW = 0x80000000;
+    /** The faint edge round a colour chip or swatch, so a dark one shows on the dark panel: white at 20%. */
+    private static final int CHIP_EDGE = 0x33FFFFFF;
+    /** The dark edge round a picker's markers, so they show on white as on black. */
+    private static final int MARKER_EDGE = 0x66000000;
 
     /** What a click on something does, given where in it the click landed. */
     private interface Action {
@@ -81,7 +86,7 @@ final class OptionsPage {
     }
 
     /** What one row of the page holds. */
-    private enum Kind { CHOICE, WHOLE, COLOUR, OPACITY, FLAG }
+    private enum Kind { CHOICE, WHOLE, COLOUR, FLAG }
 
     private static final class Row {
         final Kind kind;
@@ -105,6 +110,11 @@ final class OptionsPage {
     private final Map<String, Long> switchedAt = new HashMap<>();
     /** When the colour box last refused what was typed in it, so it shakes. */
     private long hexRefusedAt = Long.MIN_VALUE;
+    private final RecentColours recent;
+    /** The colour whose picker is open, by its key, or {@code null}: one at a time. */
+    private String openPicker;
+    /** Each colour's place in the picker, by key, kept so grey and black do not lose the hue they had. */
+    private final Map<String, float[]> hsv = new HashMap<>();
     private final List<Row> rows = new ArrayList<>();
     private final List<Target> targets = new ArrayList<>();
     private final HitIndicator previewHit;
@@ -120,15 +130,17 @@ final class OptionsPage {
      * @param clock nanoseconds, only ever going forward: for the hit indicator's preview and for motion
      * @param say puts a message up over the panel
      * @param animated whether the page moves: its switches ease, a refused code shakes
+     * @param recent the colours the player has picked lately, for the picker's Recent row
      */
     OptionsPage(SettingsScreen model, SettingsScreen.Row feature, Runnable back, LongSupplier clock,
-            Consumer<String> say, BooleanSupplier animated) {
+            Consumer<String> say, BooleanSupplier animated, RecentColours recent) {
         this.model = model;
         this.feature = feature;
         this.back = back;
         this.clock = clock;
         this.say = say;
         this.animated = animated;
+        this.recent = recent;
         for (Setting<?> option : model.optionsOf(feature.feature())) {
             if (option instanceof Choice) {
                 rows.add(new Row(Kind.CHOICE, option, option.label()));
@@ -136,9 +148,6 @@ final class OptionsPage {
                 rows.add(new Row(Kind.WHOLE, option, option.label()));
             } else if (option instanceof Colour) {
                 rows.add(new Row(Kind.COLOUR, option, option.label()));
-                if (((Colour) option).withOpacity()) {
-                    rows.add(new Row(Kind.OPACITY, option, "Opacity"));
-                }
             } else if (option instanceof OnOff) {
                 rows.add(new Row(Kind.FLAG, option, option.label()));
             }
@@ -165,7 +174,7 @@ final class OptionsPage {
             return false;
         }
         hit.action.at(x, y);
-        if (hit.id.startsWith("slider:") || hit.id.startsWith("opacity:")) {
+        if (hit.id.startsWith("slider:") || isPickerPart(hit.id)) {
             dragging = hit;
         }
         return true;
@@ -177,7 +186,11 @@ final class OptionsPage {
         }
     }
 
+    /** A drag's end: a colour picked on the square or a bar is remembered among the recent ones. */
     void release() {
+        if (dragging != null && isPickerPart(dragging.id)) {
+            rememberColourOf(dragging.id);
+        }
         dragging = null;
     }
 
@@ -378,6 +391,12 @@ final class OptionsPage {
         return area.y + height + units(1.2);
     }
 
+    /** A row's height: one line, or for a colour with its picker open, the picker under it too. */
+    private int rowHeight(Row row) {
+        boolean picking = row.kind == Kind.COLOUR && row.setting.key().equals(openPicker);
+        return units(3) + (picking ? units(PICKER_HEIGHT) + units(0.9) : 0);
+    }
+
     private void drawRows(Canvas canvas, Rect list, int mouseX, int mouseY) {
         List<Row> shown = new ArrayList<>();
         for (Row row : rows) {
@@ -385,23 +404,41 @@ final class OptionsPage {
                 shown.add(row);
             }
         }
-        int rowHeight = units(3);
         int gap = units(0.35);
         int resetHeight = units(2.3);
-        int capacity = Math.max(1, (list.height - resetHeight - units(0.6) + gap) / (rowHeight + gap));
-        maxScroll = Math.max(0, shown.size() - capacity);
+        int bottom = list.y + list.height - resetHeight - units(0.6);
+
+        // As many rows from the first on view as fit; scrolling moves the first.
+        maxScroll = 0;
+        for (int first = 0; first < shown.size(); first++) {
+            int y = list.y;
+            int i = first;
+            while (i < shown.size() && y + rowHeight(shown.get(i)) <= bottom) {
+                y += rowHeight(shown.get(i)) + gap;
+                i++;
+            }
+            if (i == shown.size()) {
+                maxScroll = first;
+                break;
+            }
+        }
         scroll = Math.min(scroll, maxScroll);
         int width = list.width - (maxScroll > 0 ? units(1) : 0);
 
         int y = list.y;
-        for (int i = scroll; i < shown.size() && i < scroll + capacity; i++) {
-            Rect row = new Rect(list.x, y, width, rowHeight);
-            drawRow(canvas, shown.get(i), row, mouseX, mouseY);
-            y += rowHeight + gap;
+        int drawn = 0;
+        for (int i = scroll; i < shown.size(); i++) {
+            int height = rowHeight(shown.get(i));
+            if (y + height > bottom && drawn > 0) {
+                break;
+            }
+            drawRow(canvas, shown.get(i), new Rect(list.x, y, width, height), mouseX, mouseY);
+            y += height + gap;
+            drawn++;
         }
         if (maxScroll > 0) {
-            int height = capacity * (rowHeight + gap) - gap;
-            int thumb = Math.max(units(2), height * capacity / shown.size());
+            int height = Math.max(units(2), y - gap - list.y);
+            int thumb = Math.max(units(2), height * drawn / shown.size());
             int barX = list.x + list.width - units(0.3);
             Paint.roundRect(canvas, barX, list.y, units(0.3), height, units(0.15), Palette.RAISED, 1f);
             Paint.roundRect(canvas, barX, list.y + (height - thumb) * scroll / maxScroll, units(0.3), thumb,
@@ -429,9 +466,10 @@ final class OptionsPage {
         float size = textSize(0.92f);
         int padX = units(0.9);
         Ink.text(Panel.fit(row.label, Ink.Weight.REGULAR, size, units(9.5)), Ink.Weight.REGULAR, size, Palette.MUTED)
-                .drawAt(canvas, at.x + padX, at.y + (at.height - Ink.lineHeight(Ink.Weight.REGULAR, size)) / 2, 1f);
+                .drawAt(canvas, at.x + padX, at.y + (units(3) - Ink.lineHeight(Ink.Weight.REGULAR, size)) / 2, 1f);
         int controlX = at.x + padX + units(9.5) + units(1);
-        Rect control = new Rect(controlX, at.y, at.x + at.width - padX - controlX, at.height);
+        // The control sits on the first line; an open picker folds out under it.
+        Rect control = new Rect(controlX, at.y, at.x + at.width - padX - controlX, units(3));
 
         switch (row.kind) {
             case CHOICE:
@@ -450,23 +488,8 @@ final class OptionsPage {
                 break;
             }
             case COLOUR:
-                drawColour(canvas, (Colour) row.setting, control);
+                drawColour(canvas, (Colour) row.setting, at, control, mouseX, mouseY);
                 break;
-            case OPACITY: {
-                Colour colour = (Colour) row.setting;
-                // Rounded both ways, so the faintest colour reads as the
-                // slider's lowest step and that step sets exactly it.
-                int minPercent = (int) Math.round(Colour.MIN_ALPHA * 100 / 255.0);
-                int percent = Math.max(minPercent, (int) Math.round((model.value(colour) >>> 24) * 100 / 255.0));
-                drawSlider(canvas, "opacity:" + colour.key(), control, percent, minPercent, 100, 1, "%", value -> {
-                    int alpha = Math.max(Colour.MIN_ALPHA, (int) Math.round(value * 255 / 100.0));
-                    int wanted = (alpha << 24) | (model.value(colour) & 0xFFFFFF);
-                    if (model.value(colour) != wanted) {
-                        model.change(colour, wanted);
-                    }
-                });
-                break;
-            }
             case FLAG: {
                 OnOff flag = (OnOff) row.setting;
                 Rect toggle = new Rect(control.x, control.y + (control.height - units(1.7)) / 2, units(3.1), units(1.7));
@@ -538,36 +561,142 @@ final class OptionsPage {
         }));
     }
 
-    /** A colour's swatches, the chosen one ringed, then its code in a box that takes typing. */
-    private void drawColour(Canvas canvas, Colour colour, Rect area) {
-        int side = units(1.6);
+    /** The picker's height, in units, under its colour's line. */
+    private static final float PICKER_HEIGHT = 10f;
+
+    /**
+     * A colour (#68): on its line, a chip of it over a checkerboard and its
+     * code and opacity; pressed, the picker folds out under them - the
+     * saturation and brightness square, the hue bar, the opacity bar for a
+     * colour that has one, and beside them the code box, the presets and the
+     * colours picked lately.
+     */
+    private void drawColour(Canvas canvas, Colour colour, Rect row, Rect line, int mouseX, int mouseY) {
         int current = model.value(colour);
-        int x = area.x;
-        int y = area.y + (area.height - side) / 2;
-        for (int rgb : SWATCHES) {
-            if ((current & 0xFFFFFF) == rgb) {
-                int ring = Math.max(2, units(0.18));
-                Paint.outline(canvas, x - ring, y - ring, side + 2 * ring, side + 2 * ring, units(0.45) + ring,
-                        Palette.TEXT);
-            }
-            Paint.roundRect(canvas, x, y, side, side, units(0.45), 0xFF000000 | rgb, 1f);
-            Rect swatch = new Rect(x, y, side, side);
-            targets.add(new Target("swatch:" + colour.key() + ":" + hex(rgb), swatch,
-                    (cx, cy) -> model.change(colour, (model.value(colour) & 0xFF000000) | rgb)));
-            x += side + units(0.4);
+        int chipSide = units(2.1);
+        Rect chip = new Rect(line.x, line.y + (line.height - chipSide) / 2, chipSide, chipSide);
+        canvas.draw(Ink.colourChip(current, chipSide, units(0.55), units(0.35)), chip.x, chip.y, 1f);
+        Paint.outline(canvas, chip.x, chip.y, chip.width, chip.height, units(0.55), CHIP_EDGE);
+        float size = textSize(0.92f);
+        String code = "#" + hex(current & 0xFFFFFF)
+                + (colour.withOpacity() ? " · " + Math.round((current >>> 24) * 100 / 255f) + "%" : "");
+        int codeX = chip.x + chip.width + units(0.7);
+        Ink.text(code, Ink.Weight.SEMIBOLD, size, Palette.MUTED)
+                .drawAt(canvas, codeX, line.y + (line.height - Ink.lineHeight(Ink.Weight.SEMIBOLD, size)) / 2, 1f);
+        Rect toggle = new Rect(chip.x, chip.y, codeX - chip.x + Ink.width(code, Ink.Weight.SEMIBOLD, size), chipSide);
+        targets.add(new Target("chip:" + colour.key(), toggle, (cx, cy) -> {
+            openPicker = colour.key().equals(openPicker) ? null : colour.key();
+            editing = null;
+        }));
+        if (!colour.key().equals(openPicker)) {
+            return;
         }
 
+        float[] place = hsvOf(colour);
+        int padX = units(0.9);
+        int top = row.y + units(3) + units(0.3);
+        int height = units(PICKER_HEIGHT);
+        int radius = units(0.6);
+
+        // Saturation across, brightness down, for the hue the bar is at.
+        Rect square = new Rect(row.x + padX, top, units(13), height);
+        canvas.draw(Ink.colourSquare(Math.round(place[0]) % 360, square.width, square.height, radius), square.x,
+                square.y, 1f);
+        ring(canvas, square.x + Math.round(place[1] * (square.width - 1)),
+                square.y + Math.round((1 - place[2]) * (square.height - 1)), units(1), current | 0xFF000000);
+        targets.add(new Target("square:" + colour.key(), square, (x, y) -> {
+            float[] at = hsvOf(colour);
+            at[1] = fraction(x - square.x, square.width);
+            at[2] = 1 - fraction(y - square.y, square.height);
+            setRgb(colour, Hsv.toRgb(at[0], at[1], at[2]));
+        }));
+
+        Rect hue = new Rect(square.x + square.width + units(0.8), top, units(1.4), height);
+        canvas.draw(Ink.hueBar(hue.width, hue.height, radius), hue.x, hue.y, 1f);
+        barMarker(canvas, hue, hue.y + Math.round(place[0] / 360f * (hue.height - 1)));
+        targets.add(new Target("hue:" + colour.key(), hue, (x, y) -> {
+            float[] at = hsvOf(colour);
+            at[0] = Math.min(359.9f, fraction(y - hue.y, hue.height) * 360f);
+            setRgb(colour, Hsv.toRgb(at[0], at[1], at[2]));
+        }));
+
+        int sideX = hue.x + hue.width + units(0.8);
+        if (colour.withOpacity()) {
+            Rect alpha = new Rect(sideX, top, units(1.4), height);
+            canvas.draw(Ink.opacityBar(current, alpha.width, alpha.height, radius, units(0.35)), alpha.x, alpha.y, 1f);
+            barMarker(canvas, alpha, alpha.y + Math.round((1 - (current >>> 24) / 255f) * (alpha.height - 1)));
+            targets.add(new Target("alpha:" + colour.key(), alpha, (x, y) -> {
+                int percent = Math.round((1 - fraction(y - alpha.y, alpha.height)) * 100);
+                // Never fainter than both targets draw alike.
+                int a = Math.max(Colour.MIN_ALPHA, Math.round(percent * 255 / 100f));
+                int wanted = (a << 24) | (model.value(colour) & 0xFFFFFF);
+                if (model.value(colour) != wanted) {
+                    model.change(colour, wanted);
+                }
+            }));
+            sideX = alpha.x + alpha.width + units(0.8);
+        }
+
+        // The code box, then the presets, then the colours picked lately.
+        Rect side = new Rect(sideX, top, row.x + row.width - padX - sideX, height);
+        drawCodeBox(canvas, colour, side.x, side.y);
+        float labelSize = textSize(0.68f);
+        int labelHeight = Ink.lineHeight(Ink.Weight.SEMIBOLD, labelSize);
+        int y = side.y + units(2.2) + units(0.6);
+        Ink.text("PRESETS", Ink.Weight.SEMIBOLD, labelSize, Palette.PLACEHOLDER, 0.06f).drawAt(canvas, side.x, y, 1f);
+        y += labelHeight + units(0.3);
+        y = drawSwatches(canvas, colour, "swatch", toList(SWATCHES), side, y) + units(0.6);
+        Ink.text("RECENT", Ink.Weight.SEMIBOLD, labelSize, Palette.PLACEHOLDER, 0.06f).drawAt(canvas, side.x, y, 1f);
+        y += labelHeight + units(0.3);
+        if (recent.colours().isEmpty()) {
+            Ink.text("Colours you use show here", Ink.Weight.REGULAR, textSize(0.74f), Palette.PLACEHOLDER)
+                    .drawAt(canvas, side.x, y, 1f);
+        } else {
+            drawSwatches(canvas, colour, "recent", recent.colours(), side, y);
+        }
+    }
+
+    /** A row of swatches, wrapping inside {@code side}, the current colour's ringed. Returns where the next thing goes. */
+    private int drawSwatches(Canvas canvas, Colour colour, String kind, List<Integer> colours, Rect side, int top) {
+        int size = units(1.6);
+        int gap = units(0.4);
+        int current = model.value(colour) & 0xFFFFFF;
+        int x = side.x;
+        int y = top;
+        for (int rgb : colours) {
+            if (x + size > side.x + side.width && x > side.x) {
+                x = side.x;
+                y += size + gap;
+            }
+            if (current == rgb) {
+                int ring = Math.max(2, units(0.18));
+                Paint.outline(canvas, x - ring, y - ring, size + 2 * ring, size + 2 * ring, units(0.45) + ring,
+                        Palette.TEXT);
+            }
+            Paint.roundRect(canvas, x, y, size, size, units(0.45), 0xFF000000 | rgb, 1f);
+            Paint.outline(canvas, x, y, size, size, units(0.45), CHIP_EDGE);
+            targets.add(new Target(kind + ":" + colour.key() + ":" + hex(rgb), new Rect(x, y, size, size), (cx, cy) -> {
+                setRgb(colour, rgb);
+                recent.remember(rgb);
+            }));
+            x += size + gap;
+        }
+        return y + size;
+    }
+
+    /** The box a colour's code is typed into: it applies as soon as it is whole, and shakes if it never is. */
+    private void drawCodeBox(Canvas canvas, Colour colour, int x, int y) {
         boolean typing = editing == colour;
         float size = textSize(0.92f);
         // Refused, it shakes; the place it is clicked is where it settles.
         long sinceRefused = hexRefusedAt == Long.MIN_VALUE ? Long.MAX_VALUE : clock.getAsLong() - hexRefusedAt;
         int shake = animated.getAsBoolean() ? units(Motion.shake(sinceRefused)) : 0;
-        Rect box = new Rect(x + units(0.5) + shake, area.y + (area.height - units(2.2)) / 2, units(8.5), units(2.2));
+        Rect box = new Rect(x + shake, y, units(8.5), units(2.2));
         Paint.roundRect(canvas, box.x, box.y, box.width, box.height, units(0.55), Palette.RAISED_HOVER, 1f);
         if (typing) {
             Paint.outline(canvas, box.x, box.y, box.width, box.height, units(0.55), Palette.FOCUS);
         }
-        String text = typing ? hexText : "#" + hex(current & 0xFFFFFF);
+        String text = typing ? hexText : "#" + hex(model.value(colour) & 0xFFFFFF);
         int lineHeight = Ink.lineHeight(Ink.Weight.SEMIBOLD, size);
         int textY = box.y + (box.height - lineHeight) / 2;
         Ink.text(text, Ink.Weight.SEMIBOLD, size, Palette.TEXT).drawAt(canvas, box.x + units(0.7), textY, 1f);
@@ -583,7 +712,84 @@ final class OptionsPage {
         }));
     }
 
-    /** On and off: a pill, green when on, its knob at the end it is set to. */
+    /** A marker on the square: a white ring with a dark edge, round the colour it points at. */
+    private void ring(Canvas canvas, int x, int y, int diameter, int argb) {
+        int r = diameter / 2;
+        Paint.roundRect(canvas, x - r - 1, y - r - 1, diameter + 2, diameter + 2, r + 1, MARKER_EDGE, 1f);
+        Paint.roundRect(canvas, x - r, y - r, diameter, diameter, r, Palette.TEXT, 1f);
+        int inner = Math.max(2, diameter - 2 * Math.max(2, units(0.18)));
+        Paint.roundRect(canvas, x - inner / 2, y - inner / 2, inner, inner, inner / 2, argb, 1f);
+    }
+
+    /** A marker on a bar: a white pill across it, a little wider, at {@code y}. */
+    private void barMarker(Canvas canvas, Rect bar, int y) {
+        int height = units(0.5);
+        int over = units(0.2);
+        Paint.roundRect(canvas, bar.x - over - 1, y - height / 2 - 1, bar.width + 2 * over + 2, height + 2,
+                height / 2 + 1, MARKER_EDGE, 1f);
+        Paint.roundRect(canvas, bar.x - over, y - height / 2, bar.width + 2 * over, height, height / 2, Palette.TEXT, 1f);
+    }
+
+    /** {@code along} pixels into something {@code size} long, as 0 to 1. */
+    private static float fraction(int along, int size) {
+        return Math.max(0f, Math.min(1f, along / (float) Math.max(1, size - 1)));
+    }
+
+    /** A colour's RGB set, its opacity kept, and saved if it changed. */
+    private void setRgb(Colour colour, int rgb) {
+        int wanted = (model.value(colour) & 0xFF000000) | (rgb & 0xFFFFFF);
+        if (model.value(colour) != wanted) {
+            model.change(colour, wanted);
+        }
+    }
+
+    /**
+     * Where a colour is in the picker: its hue, saturation and brightness,
+     * from its RGB - except that grey and black keep the hue and saturation
+     * they were dragged through, so the bar does not jump back to red.
+     */
+    private float[] hsvOf(Colour colour) {
+        int rgb = model.value(colour) & 0xFFFFFF;
+        float[] kept = hsv.get(colour.key());
+        if (kept == null || Hsv.toRgb(kept[0], kept[1], kept[2]) != rgb) {
+            kept = Hsv.fromRgb(rgb, kept);
+            hsv.put(colour.key(), kept);
+        }
+        return kept;
+    }
+
+    private static boolean isPickerPart(String id) {
+        return id.startsWith("square:") || id.startsWith("hue:") || id.startsWith("alpha:");
+    }
+
+    /** The colour a picker part's target is for, remembered among the recent ones. */
+    private void rememberColourOf(String id) {
+        String key = id.substring(id.indexOf(':') + 1);
+        for (Row row : rows) {
+            if (row.kind == Kind.COLOUR && row.setting.key().equals(key)) {
+                recent.remember(model.value((Colour) row.setting));
+            }
+        }
+    }
+
+    /** Where on a colour's opacity bar {@code percent} is, as a one-pixel-high rectangle; null when closed. */
+    Rect opacityPoint(String key, int percent) {
+        Rect bar = target("alpha:" + key);
+        if (bar == null) {
+            return null;
+        }
+        int y = bar.y + Math.round((100 - percent) / 100f * (bar.height - 1));
+        return new Rect(bar.x, y, bar.width, 1);
+    }
+
+    private static List<Integer> toList(int[] values) {
+        List<Integer> list = new ArrayList<>();
+        for (int value : values) {
+            list.add(value);
+        }
+        return list;
+    }
+
     /**
      * How far a switch on the page is towards on just now: eased since its
      * last press (#66) - an ENABLED button's colour over its own time, a
