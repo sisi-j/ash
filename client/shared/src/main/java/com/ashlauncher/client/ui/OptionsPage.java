@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 /**
  * A feature's page of options in ash's panel, in place of the tiles, as the
@@ -86,7 +87,7 @@ final class OptionsPage {
     }
 
     /** What one row of the page holds. */
-    private enum Kind { CHOICE, WHOLE, COLOUR, FLAG }
+    private enum Kind { CHOICE, WHOLE, COLOUR, FLAG, KEY }
 
     private static final class Row {
         final Kind kind;
@@ -101,7 +102,15 @@ final class OptionsPage {
     }
 
     private final SettingsScreen model;
+    /** The feature the page is for, by its switch's row; {@code null} on ash's own page, which has no switch. */
     private final SettingsScreen.Row feature;
+    /** Whose options these are, what the header calls it, and its icon. */
+    private final Feature subject;
+    private final String title;
+    private final Ink.Icon icon;
+    /** On ash's own page: the key that opens the panel, by name, and the way to change it. */
+    private final Supplier<String> keyName;
+    private final Runnable changeKey;
     private final Runnable back;
     private final LongSupplier clock;
     private final Consumer<String> say;
@@ -134,14 +143,42 @@ final class OptionsPage {
      */
     OptionsPage(SettingsScreen model, SettingsScreen.Row feature, Runnable back, LongSupplier clock,
             Consumer<String> say, BooleanSupplier animated, RecentColours recent) {
+        this(model, feature, feature.feature(), feature.name(), Panel.iconOf(feature.feature()), back, clock, say,
+                animated, recent, null, null);
+    }
+
+    /**
+     * ash's own page, behind the gear (#69): the key that opens the panel,
+     * then ash's own settings - interface size, animations, blur.
+     *
+     * @param keyName the key that opens the panel, as the game names it
+     * @param changeKey takes the player to the game's Controls, where it is changed
+     */
+    static OptionsPage ash(SettingsScreen model, Runnable back, LongSupplier clock, Consumer<String> say,
+            BooleanSupplier animated, RecentColours recent, Supplier<String> keyName, Runnable changeKey) {
+        return new OptionsPage(model, null, Feature.SETTINGS_SCREEN, "ash settings", Ink.Icon.GEAR, back, clock,
+                say, animated, recent, keyName, changeKey);
+    }
+
+    private OptionsPage(SettingsScreen model, SettingsScreen.Row feature, Feature subject, String title,
+            Ink.Icon icon, Runnable back, LongSupplier clock, Consumer<String> say, BooleanSupplier animated,
+            RecentColours recent, Supplier<String> keyName, Runnable changeKey) {
         this.model = model;
         this.feature = feature;
+        this.subject = subject;
+        this.title = title;
+        this.icon = icon;
+        this.keyName = keyName;
+        this.changeKey = changeKey;
+        if (keyName != null) {
+            rows.add(new Row(Kind.KEY, null, "Open ash settings"));
+        }
         this.back = back;
         this.clock = clock;
         this.say = say;
         this.animated = animated;
         this.recent = recent;
-        for (Setting<?> option : model.optionsOf(feature.feature())) {
+        for (Setting<?> option : model.optionsOf(subject)) {
             if (option instanceof Choice) {
                 rows.add(new Row(Kind.CHOICE, option, option.label()));
             } else if (option instanceof Whole) {
@@ -159,7 +196,7 @@ final class OptionsPage {
     }
 
     Feature feature() {
-        return feature.feature();
+        return subject;
     }
 
     // ---- input, in real pixels ----
@@ -336,11 +373,15 @@ final class OptionsPage {
 
         boolean preview = hasPreview();
         int previewWidth = preview ? units(16) : 0;
-        Rect list = new Rect(area.x, headerBottom, area.width - previewWidth - (preview ? units(1.6) : 0),
-                area.y + area.height - headerBottom);
+        int listWidth = area.width - previewWidth - (preview ? units(1.6) : 0);
+        if (feature == null) {
+            // ash's own page is a short list, kept narrow as the mockup keeps it.
+            listWidth = Math.min(listWidth, units(52));
+        }
+        Rect list = new Rect(area.x, headerBottom, listWidth, area.y + area.height - headerBottom);
         if (rows.isEmpty()) {
             float size = textSize(0.92f);
-            Ink.text(feature.name() + " has no options yet.", Ink.Weight.REGULAR, size, Palette.MUTED)
+            Ink.text(title + " has no options yet.", Ink.Weight.REGULAR, size, Palette.MUTED)
                     .drawAt(canvas, list.x + units(0.2), list.y + units(1.2), 1f);
         } else {
             drawRows(canvas, list, mouseX, mouseY);
@@ -352,7 +393,7 @@ final class OptionsPage {
     }
 
     private boolean hasPreview() {
-        return feature.feature() == Feature.CROSSHAIR || feature.feature() == Feature.HIT_INDICATOR;
+        return subject == Feature.CROSSHAIR || subject == Feature.HIT_INDICATOR;
     }
 
     /** Back, the feature's icon and name, and its ENABLED button. Returns where the rows start. */
@@ -367,7 +408,6 @@ final class OptionsPage {
         targets.add(new Target("back", backButton, (x, y) -> back.run()));
 
         int x = backButton.x + backButton.width + units(0.8);
-        Ink.Icon icon = Panel.iconOf(feature.feature());
         if (icon != null) {
             int glyph = units(1.8);
             canvas.draw(Ink.icon(icon, glyph, Palette.ICON), x, area.y + (height - glyph) / 2, 1f);
@@ -377,10 +417,15 @@ final class OptionsPage {
         Rect toggle = new Rect(area.x + area.width - units(8.5), area.y + (height - units(2.3)) / 2, units(8.5),
                 units(2.3));
         float nameSize = textSize(1.25f);
-        String name = Panel.fit(feature.name(), Ink.Weight.BOLD, nameSize, toggle.x - units(0.8) - x);
+        int room = (feature == null ? area.x + area.width : toggle.x - units(0.8)) - x;
+        String name = Panel.fit(title, Ink.Weight.BOLD, nameSize, room);
         Ink.text(name, Ink.Weight.BOLD, nameSize, Palette.TEXT)
                 .drawAt(canvas, x, area.y + (height - Ink.lineHeight(Ink.Weight.BOLD, nameSize)) / 2, 1f);
 
+        if (feature == null) {
+            // ash itself has no switch: it cannot be turned off from its own panel.
+            return area.y + height + units(1.2);
+        }
         String switchId = "switch:" + feature.feature().id();
         Panel.drawToggle(canvas, toggle, feature.available(), feature.on(), eased(switchId, feature.on(), true),
                 units(0.55), textSize(0.74f), 1f);
@@ -445,7 +490,11 @@ final class OptionsPage {
                     units(0.15), Palette.MUTED, 1f);
         }
 
-        // Reset to defaults: a quiet link under the rows.
+        // Reset to defaults: a quiet link under the rows - on a feature's
+        // page; ash's own has none, as the mockup has it.
+        if (feature == null) {
+            return;
+        }
         String text = "Reset to defaults";
         float size = textSize(0.92f);
         int padX = units(0.9);
@@ -457,7 +506,7 @@ final class OptionsPage {
         }
         Ink.text(text, Ink.Weight.SEMIBOLD, size, over ? Palette.TEXT : Palette.MUTED).drawAt(canvas, link.x + padX,
                 link.y + (link.height - Ink.lineHeight(Ink.Weight.SEMIBOLD, size)) / 2, 1f);
-        targets.add(new Target("reset", link, (cx, cy) -> model.resetToDefaults(feature.feature())));
+        targets.add(new Target("reset", link, (cx, cy) -> model.resetToDefaults(subject)));
     }
 
     /** One option: a rounded row, its name on the left in a column of its own, its control after it. */
@@ -477,7 +526,8 @@ final class OptionsPage {
                 break;
             case WHOLE: {
                 Whole whole = (Whole) row.setting;
-                String unitText = whole.unit().isEmpty() ? "" : " " + whole.unit();
+                // A per cent sign sits against its number, as in "100%"; other units are a word apart.
+                String unitText = whole.unit().isEmpty() ? "" : whole.unit().equals("%") ? "%" : " " + whole.unit();
                 drawSlider(canvas, "slider:" + whole.key(), control, model.value(whole), whole.min(), whole.max(),
                         whole.step(), unitText, value -> {
                             // Only when it moves: a drag along one value is not a save per frame.
@@ -490,6 +540,20 @@ final class OptionsPage {
             case COLOUR:
                 drawColour(canvas, (Colour) row.setting, at, control, mouseX, mouseY);
                 break;
+            case KEY: {
+                // The key as the game names it; pressed, the game's Controls, where keys are changed.
+                String name = keyName.get();
+                float keySize = textSize(0.92f);
+                int lineHeight = Ink.lineHeight(Ink.Weight.SEMIBOLD, keySize);
+                Rect chip = new Rect(control.x, control.y + (control.height - lineHeight - 2 * units(0.45)) / 2,
+                        Ink.width(name, Ink.Weight.SEMIBOLD, keySize) + 2 * units(0.9), lineHeight + 2 * units(0.45));
+                Paint.roundRect(canvas, chip.x, chip.y, chip.width, chip.height, units(0.55),
+                        chip.contains(mouseX, mouseY) ? Palette.RAISED_STRONG : Palette.RAISED_HOVER, 1f);
+                Ink.text(name, Ink.Weight.SEMIBOLD, keySize, Palette.TEXT)
+                        .drawAt(canvas, chip.x + units(0.9), chip.y + units(0.45), 1f);
+                targets.add(new Target("key", chip, (x, y) -> changeKey.run()));
+                break;
+            }
             case FLAG: {
                 OnOff flag = (OnOff) row.setting;
                 Rect toggle = new Rect(control.x, control.y + (control.height - units(1.7)) / 2, units(3.1), units(1.7));
@@ -820,7 +884,7 @@ final class OptionsPage {
      * around it every so often, and on "Test a hit".
      */
     private void drawPreview(Canvas canvas, Rect column, int mouseX, int mouseY) {
-        boolean hits = feature.feature() == Feature.HIT_INDICATOR;
+        boolean hits = subject == Feature.HIT_INDICATOR;
         long now = clock.getAsLong();
         if (hits && (lastHit == Long.MIN_VALUE || now - lastHit >= REPLAY_NANOS)) {
             showHit(now);

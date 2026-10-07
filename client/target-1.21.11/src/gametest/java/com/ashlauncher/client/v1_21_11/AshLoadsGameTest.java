@@ -157,6 +157,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             hitColourWorks(context, server);
             moveReadoutsWorks(context);
             panelIsCrispAtEveryGuiScale(context);
+            ashSettingsWork(context);
         }
     }
 
@@ -317,6 +318,32 @@ public class AshLoadsGameTest implements FabricClientGameTest {
      * pixels at scales 1, 2, 3 and Auto. The window is made 1280 by
      * 720 first, the smallest at which the game offers scale 3.
      */
+    /**
+     * ash's own settings (#69), changed on the gear's page as a player
+     * changes them: background blur off and on again, and the interface size
+     * up and back - each saved the moment it changes.
+     */
+    private static void ashSettingsWork(ClientGameTestContext context) {
+        KeyMapping settingsKey = binding(context, SettingsScreen.BINDING_NAME);
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+        clickOn(context, "the gear", Panel::gearButton);
+        clickOn(context, "background blur's switch", panel -> panel.switchOf(Settings.PANEL_BLUR));
+        assertFileSays("panel.blur=false");
+        // By eye: the panel darker, over the game unblurred.
+        context.takeScreenshot("ash-settings-no-blur");
+        clickOn(context, "background blur's switch", panel -> panel.switchOf(Settings.PANEL_BLUR));
+        assertFileSays("panel.blur=true");
+        clickOn(context, "130% on interface size", panel -> panel.sliderAt(Settings.PANEL_SIZE, 130));
+        assertFileSays("panel.size=130");
+        // By eye: the panel's contents larger, its frame where it was.
+        context.takeScreenshot("ash-settings-130");
+        clickOn(context, "100% on interface size", panel -> panel.sliderAt(Settings.PANEL_SIZE, 100));
+        assertFileSays("panel.size=100");
+        context.getInput().pressKey(settingsKey);
+        context.waitTicks(5);
+    }
+
     private static void panelIsCrispAtEveryGuiScale(ClientGameTestContext context) {
         int[] before = context.computeOnClient(client -> new int[] {
             client.getWindow().getScreenWidth(), client.getWindow().getScreenHeight()});

@@ -151,6 +151,18 @@ public final class Settings {
             "Where your ping sits, written as fps-readout.position is. Left here, it takes the frame rate's place"
                     + " whenever the frame rate is not there. Easiest set with Edit HUD in ash's settings.");
 
+    // ash's own settings, behind the gear on the panel's strip (#69): how the
+    // panel itself looks and moves, not any feature.
+
+    public static final Whole PANEL_SIZE = new Whole(Feature.SETTINGS_SCREEN, "panel.size", "Interface size", 100, 80,
+            130, 5, "%", "How large ash's settings panel draws, in per cent: a whole number from 80 to 130.");
+
+    public static final OnOff PANEL_ANIMATIONS = new OnOff(Feature.SETTINGS_SCREEN, "panel.animations", "Animations",
+            true, "Whether ash's settings panel moves as it opens, closes and changes pages. true or false.");
+
+    public static final OnOff PANEL_BLUR = new OnOff(Feature.SETTINGS_SCREEN, "panel.blur", "Background blur", true,
+            "Whether the game blurs behind ash's settings panel; off, the panel is darker instead. true or false.");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
@@ -162,7 +174,8 @@ public final class Settings {
             FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
             HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
-            HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION));
+            HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION,
+            PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;

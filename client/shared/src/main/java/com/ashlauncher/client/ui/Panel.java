@@ -7,6 +7,7 @@ import com.ashlauncher.client.settings.Category;
 import com.ashlauncher.client.settings.Choice;
 import com.ashlauncher.client.settings.Colour;
 import com.ashlauncher.client.settings.OnOff;
+import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.settings.Whole;
 import com.ashlauncher.client.ui.draw.Canvas;
@@ -74,7 +75,7 @@ public final class Panel {
     private float grabY;
 
     /** Whether the panel moves as the mockup does (#66): on unless ash's own settings say otherwise (#69). */
-    private boolean animations = true;
+    private Boolean animations;
     /** When the panel first drew, on the clock, so its opening runs from then; -1 before. */
     private long openedAt = -1;
     /** When closing was asked for, so the panel closes once it has sunk away; -1 while open. */
@@ -142,6 +143,38 @@ public final class Panel {
         this.animations = animations;
     }
 
+    /** Whether the panel moves: as told, or else as the player has set it on ash's own page (#69). */
+    boolean animations() {
+        return animations != null ? animations : model.value(Settings.PANEL_ANIMATIONS);
+    }
+
+    /**
+     * Whether the player wants the game blurred behind the panel (#69). Off,
+     * the screen blurs nothing and the panel darkens what is behind it more.
+     */
+    public boolean blurWanted() {
+        return model.value(Settings.PANEL_BLUR);
+    }
+
+    /** The key that opens the panel, by the game's name for it, and what takes the player to change it. */
+    private java.util.function.Supplier<String> keyName = () -> "Right Shift";
+    private Runnable changeKey = () -> say("Change it in Options, Controls.");
+
+    /**
+     * Tells the panel the key that opens it, as the game names it, and how to
+     * take the player to the game's Controls, where it is changed: for ash's
+     * own page.
+     */
+    public void setOpenKey(java.util.function.Supplier<String> name, Runnable change) {
+        this.keyName = name;
+        this.changeKey = change;
+    }
+
+    private OptionsPage ashPage() {
+        return OptionsPage.ash(model, () -> changeView(null, false), clock, this::say, this::animations,
+                recentColours(), keyName, changeKey);
+    }
+
     /**
      * Asks the panel to close: it sinks and fades away, and then closes the
      * screen. What the screen's own key and Escape do; asking again while it
@@ -151,7 +184,7 @@ public final class Panel {
         if (closingAt >= 0) {
             return;
         }
-        if (!animations || editingHud) {
+        if (!animations() || editingHud) {
             runClose();
             return;
         }
@@ -171,8 +204,8 @@ public final class Panel {
      * a player's eye waits for things to land.
      */
     public boolean animating() {
-        if (!animations || openedAt < 0) {
-            return animations && openedAt < 0;
+        if (!animations() || openedAt < 0) {
+            return animations() && openedAt < 0;
         }
         long now = clock.getAsLong();
         return now - openedAt < Motion.OPEN
@@ -189,7 +222,7 @@ public final class Panel {
      */
     private void changeView(OptionsPage nextPage, boolean nextAshSettings) {
         long now = clock.getAsLong();
-        if (animations) {
+        if (animations()) {
             leavingPage = page;
             leavingAshSettings = ashSettings;
             viewChangedAt = now;
@@ -202,7 +235,7 @@ public final class Panel {
     }
 
     private void showTiles(long at, boolean staggered) {
-        if (animations) {
+        if (animations()) {
             tilesShownAt = at;
             tilesStaggered = staggered;
         }
@@ -211,7 +244,7 @@ public final class Panel {
     /** How far a feature's ENABLED button is from red to green just now: eased since its last press. */
     float onness(Feature feature, boolean on, long now) {
         Long pressed = toggledAt.get(feature);
-        if (!animations || pressed == null) {
+        if (!animations() || pressed == null) {
             return on ? 1f : 0f;
         }
         return Motion.toggle(on, now - pressed);
@@ -252,7 +285,7 @@ public final class Panel {
 
     /** How far below its place the panel is just now, in pixels: rising as it opens, sinking as it closes. */
     private int panelOffset(long now) {
-        if (!animations) {
+        if (!animations()) {
             return 0;
         }
         if (closingAt >= 0) {
@@ -263,7 +296,7 @@ public final class Panel {
 
     /** How visible the panel and the overlay are just now. */
     private float panelOpacity(long now) {
-        if (!animations) {
+        if (!animations()) {
             return 1f;
         }
         if (closingAt >= 0) {
@@ -274,14 +307,14 @@ public final class Panel {
 
     /** Where the tile at this place in the order is drawn just now: below its place while it arrives. */
     private int tileOffset(int index, long now) {
-        if (!animations || tilesShownAt < 0) {
+        if (!animations() || tilesShownAt < 0) {
             return 0;
         }
         return units(Motion.tileRise(index, now - tilesShownAt, tilesStaggered));
     }
 
     private float tileOpacity(int index, long now) {
-        if (!animations || tilesShownAt < 0) {
+        if (!animations() || tilesShownAt < 0) {
             return 1f;
         }
         return Motion.tileOpacity(index, now - tilesShownAt, tilesStaggered);
@@ -316,7 +349,11 @@ public final class Panel {
         long now = clock.getAsLong();
         y -= panelOffset(now);
         if (gearButton().contains(x, y)) {
-            changeView(null, !ashSettings);
+            if (ashSettings) {
+                changeView(null, false);
+            } else {
+                changeView(ashPage(), true);
+            }
             return true;
         }
         if (editHudButton().contains(x, y)) {
@@ -369,7 +406,7 @@ public final class Panel {
     }
 
     private void open(SettingsScreen.Row row) {
-        changeView(new OptionsPage(model, row, () -> changeView(null, false), clock, this::say, () -> animations,
+        changeView(new OptionsPage(model, row, () -> changeView(null, false), clock, this::say, this::animations,
                 recentColours()),
                 false);
     }
@@ -501,8 +538,13 @@ public final class Panel {
 
     // ---- where things are, in real pixels ----
 
+    /**
+     * The panel's unit: a hundredth of the screen's width, scaled by the
+     * player's interface size (#69) - so everything in the panel grows or
+     * shrinks together, inside a frame that stays where it is.
+     */
     private float unit() {
-        return width / 100f;
+        return width / 100f * model.value(Settings.PANEL_SIZE) / 100f;
     }
 
     /** {@code amount} of the panel's unit - a hundredth of the screen's width - in whole pixels. */
@@ -872,6 +914,11 @@ public final class Panel {
     }
 
     /** The hit indicator page's "Test a hit" button. */
+    /** ash's own page's key: pressed, it takes the player to the game's Controls. */
+    public Rect openKeyChip() {
+        return pagePixels("key");
+    }
+
     public Rect testHitButton() {
         return pagePixels("testhit");
     }
@@ -907,7 +954,7 @@ public final class Panel {
         }
         scroll = Math.min(scroll, maxScroll());
         long now = clock.getAsLong();
-        if (animations && openedAt < 0) {
+        if (animations() && openedAt < 0) {
             openedAt = now;
             showTiles(now, true);
         }
@@ -919,7 +966,7 @@ public final class Panel {
         // into place as it opens and sinks as it closes.
         float opacity = panelOpacity(now);
         canvas.fill(0, 0, width, height,
-                Paint.fade(blurred ? Palette.OVERLAY : Palette.OVERLAY_UNBLURRED, opacity));
+                Paint.fade(blurred && blurWanted() ? Palette.OVERLAY : Palette.OVERLAY_UNBLURRED, opacity));
         Canvas outer = canvas;
         canvas = MovedCanvas.of(canvas, 0, panelOffset(now), opacity);
         mouseY -= panelOffset(now);
@@ -950,7 +997,7 @@ public final class Panel {
      */
     private void drawMain(Canvas canvas, long now, int mouseX, int mouseY) {
         long sinceChange = viewChangedAt < 0 ? Long.MAX_VALUE : now - viewChangedAt;
-        if (animations && Motion.pageLeaving(sinceChange)) {
+        if (animations() && Motion.pageLeaving(sinceChange)) {
             OptionsPage current = page;
             boolean currentAsh = ashSettings;
             page = leavingPage;
@@ -964,7 +1011,7 @@ public final class Panel {
             }
             return;
         }
-        if (animations && !Motion.pageSettled(sinceChange)) {
+        if (animations() && !Motion.pageSettled(sinceChange)) {
             canvas = MovedCanvas.of(canvas, 0, units(Motion.enteringRise(sinceChange)),
                     Motion.enteringOpacity(sinceChange));
         }
@@ -972,11 +1019,10 @@ public final class Panel {
     }
 
     private void drawView(Canvas canvas, long now, int mouseX, int mouseY) {
+        // ash's own settings are a page too, opened from the gear.
         if (page != null) {
             drawPage(canvas, mouseX, mouseY);
-        } else if (ashSettings) {
-            drawAshSettings(canvas);
-        } else {
+        } else if (!ashSettings) {
             drawTiles(canvas, now, mouseX, mouseY);
         }
     }
@@ -1279,16 +1325,6 @@ public final class Panel {
         int lineHeight = Ink.lineHeight(weight, size);
         Ink.text(label, weight, size, primary ? Palette.PRIMARY_TEXT : Palette.TEXT)
                 .drawAt(canvas, button.x + (button.width - textWidth) / 2, button.y + (button.height - lineHeight) / 2, 1f);
-    }
-
-    /** A placeholder until ash's own settings arrive with #69. */
-    private void drawAshSettings(Canvas canvas) {
-        Rect main = main();
-        float title = textSize(1.35f);
-        Ink.text("ash settings", Ink.Weight.BOLD, title, Palette.TEXT).drawAt(canvas, main.x, main.y, 1f);
-        float body = textSize(0.92f);
-        Ink.text("Coming soon: the open key, interface size, animations and blur.", Ink.Weight.REGULAR, body, Palette.MUTED)
-                .drawAt(canvas, main.x, main.y + Ink.lineHeight(Ink.Weight.BOLD, title) + units(0.8), 1f);
     }
 
     /** Why a change was not saved, or which features did not load: the model's words, under the tiles. */

@@ -7,6 +7,7 @@ import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -29,6 +30,10 @@ final class AshSettingsScreen extends Screen {
         super(Component.literal(SettingsScreen.TITLE));
         this.key = key;
         this.panel = new Panel(settingsScreen, this::onClose);
+        // ash's own page shows the key as the game names it, and sends the
+        // player to the game's own key bindings to change it.
+        panel.setOpenKey(() -> key.getTranslatedKeyMessage().getString(),
+                () -> minecraft.setScreen(new KeyBindsScreen(this, minecraft.options)));
     }
 
     /** The panel this screen shows, so the real-game test can find a switch and click it as a player would. */
@@ -45,11 +50,11 @@ final class AshSettingsScreen extends Screen {
     /**
      * The game's own blur, and none of its darkening: the panel is the dark
      * part. None at all in Edit HUD, where the readouts have to be seen as
-     * they will be.
+     * they will be, nor when the player has turned blur off (#69).
      */
     @Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (!panel.editingHud()) {
+        if (!panel.editingHud() && panel.blurWanted()) {
             renderBlurredBackground(graphics);
         }
     }
