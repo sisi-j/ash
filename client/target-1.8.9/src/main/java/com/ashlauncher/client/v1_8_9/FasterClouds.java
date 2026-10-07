@@ -21,23 +21,29 @@ import org.lwjgl.opengl.GL11;
 
 /**
  * Faster clouds (#45): 1.8.9's fancy clouds, built once a frame instead of
- * twice, and drawn in two calls instead of 128.
+ * twice.
  *
  * <p>The game draws fancy clouds in two passes - depth only, then colour -
  * and in each pass builds the geometry again, one 8 by 8 tile at a time,
  * handing each tile to the driver as a draw of its own. Both passes build the
  * same vertices: nothing they are made from changes between them. So this
- * builds every tile once, into one buffer, and draws that buffer for each
- * pass. The 1.8.9 frame-time baseline put clouds at about a sixth of a frame.
+ * builds every tile once, into one buffer, and draws the tiles from it for
+ * each pass. The 1.8.9 profile put clouds at about a sixth of a frame.
  *
  * <p>Nothing a player sees changes, pixel for pixel. The vertices are the
  * game's own: {@link #render} is the game's {@code renderFancyClouds}, its
  * arithmetic unchanged, with the pass loop taken out of the building and put
- * round the drawing. The same primitives reach the same state in the same
- * order, and only the boundaries between draws move, which change no pixel.
- * The smoke test proves it on a frozen frame: ash's clouds against the game's.
+ * round the drawing. The same draws, of the same vertices, reach the same
+ * state in the same order. The smoke test proves it on a frozen frame: ash's
+ * clouds against the game's.
  */
 public final class FasterClouds {
+
+    /** The 8 by 8 tiles, in the game's order. */
+    private static final int TILES = 64;
+
+    /** Where each tile's vertices end in this frame's buffer, so each can be drawn on its own as the game does. */
+    private static final int[] TILE_ENDS = new int[TILES];
 
     private static BooleanSupplier wanted = () -> false;
 
@@ -114,7 +120,8 @@ public final class FasterClouds {
         GlStateManager.scale(12.0F, 1.0F, 12.0F);
 
         // The game's two passes would each build all of this again; it is
-        // built once, then drawn for each.
+        // built once, then drawn for each, where each tile ends noted.
+        int tile = 0;
         bufferBuilder.begin(7, VertexFormats.POSITION_TEXTURE_COLOR_NORMAL);
         for (int ah = -3; ah <= 4; ah++) {
             for (int ai = -3; ai <= 4; ai++) {
@@ -268,6 +275,7 @@ public final class FasterClouds {
                     }
                 }
 
+                TILE_ENDS[tile++] = bufferBuilder.getVertexCount();
             }
         }
         bufferBuilder.end();
@@ -280,9 +288,27 @@ public final class FasterClouds {
     }
 
     /**
-     * The game's buffer renderer, {@code BufferRenderer.draw}, drawing twice
-     * before it resets the buffer: depth only, then colour through the mask
-     * the game's own pass loop sets for the anaglyph filter.
+     * Each tile as a draw of its own, in order, exactly as the game hands
+     * them over. Drawing them as one call instead is no faster to the eye but
+     * not the same to every renderer: Mesa's software renderer, on CI, then
+     * settled a few dozen ties between two cloud faces at equal depth the
+     * other way.
+     */
+    private static void drawTiles(int mode) {
+        int start = 0;
+        for (int tile = 0; tile < TILES; tile++) {
+            int end = TILE_ENDS[tile];
+            if (end > start) {
+                GL11.glDrawArrays(mode, start, end - start);
+            }
+            start = end;
+        }
+    }
+
+    /**
+     * The game's buffer renderer, {@code BufferRenderer.draw}, drawing every
+     * tile twice before it resets the buffer: depth only, then colour through
+     * the mask the game's own pass loop sets for the anaglyph filter.
      */
     private static void drawBothPasses(BufferBuilder builder, int anaglyphFilter) {
         VertexFormat format = builder.getFormat();
@@ -322,7 +348,7 @@ public final class FasterClouds {
 
         GlStateManager.colorMask(false, false, false, false);
         if (any) {
-            GL11.glDrawArrays(builder.getDrawMode(), 0, builder.getVertexCount());
+            drawTiles(builder.getDrawMode());
         }
         switch (anaglyphFilter) {
             case 0:
@@ -338,7 +364,7 @@ public final class FasterClouds {
                 break;
         }
         if (any) {
-            GL11.glDrawArrays(builder.getDrawMode(), 0, builder.getVertexCount());
+            drawTiles(builder.getDrawMode());
             for (VertexFormatElement element : elements) {
                 switch (element.getType()) {
                     case POSITION:
