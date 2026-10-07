@@ -306,6 +306,15 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
 
         clearMobs(client);
+        // Down at the flat ground, which keeps still. Level, the horizon ran
+        // through the centre, and a pixel's drift between two frames once put
+        // grass where the sky had been under an arm tip.
+        Float pitch = onClient(client, () -> {
+            float was = client.player.pitch;
+            client.player.pitch = 30.0F;
+            client.player.prevPitch = 30.0F;
+            return was;
+        });
         Frame none = frame(client, "ash-crosshair-none.png", true);
         Frame ash = frame(client, "ash-crosshair.png", false);
         for (int[] at : new int[][] {{0, 0}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}}) {
@@ -326,6 +335,11 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
 
         switchCrosshair(client, settingsKey, "crosshair.enabled=true");
+        onClient(client, () -> {
+            client.player.pitch = pitch;
+            client.player.prevPitch = pitch;
+            return null;
+        });
     }
 
     /** Opens ash's settings, presses one switch, checks the file, and closes them again. */
