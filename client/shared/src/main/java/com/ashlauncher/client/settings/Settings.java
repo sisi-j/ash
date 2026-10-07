@@ -174,6 +174,11 @@ public final class Settings {
         this.problems = Collections.unmodifiableList(problems);
     }
 
+    /** The folder the settings file is in: for what ash keeps beside it, such as the colour picker's recent colours. */
+    public Path folder() {
+        return file.getParent();
+    }
+
     /** Every setting there is, in the order the file lists them. */
     public static List<Setting<?>> declared() {
         return DECLARED;

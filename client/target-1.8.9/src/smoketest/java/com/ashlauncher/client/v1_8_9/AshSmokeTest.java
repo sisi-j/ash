@@ -599,6 +599,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         clickOn(client, screen, "the crosshair's options link", panel -> panel.optionsLinkOf(Feature.CROSSHAIR));
         clickOn(client, screen, "the dot", panel -> panel.choiceOf(Settings.CROSSHAIR_SHAPE, "dot"));
         clickOn(client, screen, "size 6 on its slider", panel -> panel.sliderAt(Settings.CROSSHAIR_SIZE, 6));
+        clickOn(client, screen, "the colour's chip", panel -> panel.colourChipOf(Settings.CROSSHAIR_COLOUR));
         clickOn(client, screen, "the red swatch", panel -> panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
         // By eye: the page, with a red dot in all three previews.
         screenshot(client, "ash-crosshair-options.png");
@@ -827,6 +828,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         pause(300L);
         clickOn(client, screen, "the hit indicator's options link", panel -> panel.optionsLinkOf(Feature.HIT_INDICATOR));
         clickOn(client, screen, "1000 ms on its slider", panel -> panel.sliderAt(Settings.HIT_INDICATOR_DURATION, 1000));
+        clickOn(client, screen, "the colour's chip", panel -> panel.colourChipOf(Settings.HIT_INDICATOR_COLOUR));
         clickOn(client, screen, "the green swatch", panel -> panel.swatchOf(Settings.HIT_INDICATOR_COLOUR, 0x4DFF88));
         // By eye: the page, with Duration at 1000 ms and green chosen.
         screenshot(client, "ash-hit-indicator-options.png");

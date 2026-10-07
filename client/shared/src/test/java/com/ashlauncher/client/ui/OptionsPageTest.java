@@ -68,6 +68,33 @@ class OptionsPageTest {
         render();
     }
 
+    /** Opens a colour's picker if it is shut, as a player presses its chip before picking. */
+    private void picker(com.ashlauncher.client.settings.Colour colour) {
+        if (panel.hexBoxOf(colour) == null) {
+            click(panel.colourChipOf(colour));
+        }
+    }
+
+    private Rect swatchIn(com.ashlauncher.client.settings.Colour colour, int rgb) {
+        picker(colour);
+        return panel.swatchOf(colour, rgb);
+    }
+
+    private Rect hexBoxIn(com.ashlauncher.client.settings.Colour colour) {
+        picker(colour);
+        return panel.hexBoxOf(colour);
+    }
+
+    private Rect opacityIn(com.ashlauncher.client.settings.Colour colour, int percent) {
+        picker(colour);
+        return panel.opacityAt(colour, percent);
+    }
+
+    private Rect opacityBarIn(com.ashlauncher.client.settings.Colour colour) {
+        picker(colour);
+        return panel.opacitySlider(colour);
+    }
+
     private String file() throws IOException {
         return Files.readString(configDir.resolve("ash.properties"));
     }
@@ -98,7 +125,7 @@ class OptionsPageTest {
         surface.save(new java.io.File("build/ui/options-crosshair.png"));
 
         for (String line : new String[] {"Crosshair", "ENABLED", "Shape", "Size", "Gap", "Thickness", "Colour",
-                "Opacity", "Outline", "Reset to defaults", "PREVIEW", "Sky", "Snow", "Night"}) {
+                "Outline", "Reset to defaults", "PREVIEW", "Sky", "Snow", "Night"}) {
             assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.texts());
         }
         assertNotNull(panel.switchOf(Feature.CROSSHAIR), "the feature's own switch is not on its page");
@@ -111,7 +138,7 @@ class OptionsPageTest {
         Rect sky = panel.previewScene("Sky");
         assertEquals(0xFFFFFFFF, render().pixel(sky.centreX(), sky.centreY()), "the crosshair's white centre");
 
-        click(panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
+        click(swatchIn(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
 
         assertEquals(0xFFFF4D4D, render().pixel(sky.centreX(), sky.centreY()), "the preview kept the old colour");
     }
@@ -182,7 +209,7 @@ class OptionsPageTest {
         open();
         settings.set(Settings.CROSSHAIR_COLOUR, 0x80FFFFFF);
 
-        click(panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0x4DC3FF));
+        click(swatchIn(Settings.CROSSHAIR_COLOUR, 0x4DC3FF));
 
         assertEquals(0x804DC3FF, (int) settings.get(Settings.CROSSHAIR_COLOUR));
         assertTrue(file().contains("\ncrosshair.colour=#4DC3FF80\n"), file());
@@ -191,10 +218,10 @@ class OptionsPageTest {
     @Test
     void the_opacity_slider_never_goes_below_the_faintest_both_targets_draw_alike() {
         open();
-        Rect opacity = panel.opacitySlider(Settings.CROSSHAIR_COLOUR);
+        Rect opacity = opacityBarIn(Settings.CROSSHAIR_COLOUR);
         click(opacity);
 
-        panel.mouseDragged(-500, opacity.centreY());
+        panel.mouseDragged(opacity.centreX(), 10_000);
 
         assertTrue((settings.get(Settings.CROSSHAIR_COLOUR) >>> 24) >= com.ashlauncher.client.settings.Colour.MIN_ALPHA,
                 Integer.toHexString(settings.get(Settings.CROSSHAIR_COLOUR)));
@@ -204,7 +231,7 @@ class OptionsPageTest {
     void a_colour_typed_into_its_box_applies_as_soon_as_it_is_whole_and_half_of_one_does_not() {
         open();
 
-        click(panel.hexBoxOf(Settings.CROSSHAIR_COLOUR));
+        click(hexBoxIn(Settings.CROSSHAIR_COLOUR));
         for (int i = 0; i < 7; i++) {
             panel.keyPressed(Key.BACKSPACE);
         }
@@ -214,7 +241,7 @@ class OptionsPageTest {
         panel.keyPressed(Key.ENTER);
         assertEquals(0xFFFF4D4D, (int) settings.get(Settings.CROSSHAIR_COLOUR));
 
-        click(panel.hexBoxOf(Settings.CROSSHAIR_COLOUR));
+        click(hexBoxIn(Settings.CROSSHAIR_COLOUR));
         panel.charTyped('z');
         panel.keyPressed(Key.BACKSPACE);
         panel.keyPressed(Key.BACKSPACE);
@@ -231,7 +258,7 @@ class OptionsPageTest {
         panel.resize(width, height);
         render();
         click(panel.optionsLinkOf(Feature.CROSSHAIR));
-        click(panel.hexBoxOf(Settings.CROSSHAIR_COLOUR));
+        click(hexBoxIn(Settings.CROSSHAIR_COLOUR));
 
         panel.keyPressed(Key.ESCAPE);
         assertEquals(java.util.List.of(), closed, "Escape closed the panel mid-typing");
@@ -257,7 +284,7 @@ class OptionsPageTest {
         open();
         click(panel.choiceOf(Settings.CROSSHAIR_SHAPE, "box"));
         click(panel.sliderAt(Settings.CROSSHAIR_THICKNESS, 3));
-        click(panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
+        click(swatchIn(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
         click(panel.switchOf(Feature.CROSSHAIR));
 
         click(panel.resetToDefaults());
@@ -271,7 +298,7 @@ class OptionsPageTest {
     @Test
     void the_preview_shows_the_crosshair_as_set_over_sky_snow_and_night() {
         open();
-        click(panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0x4DFF88));
+        click(swatchIn(Settings.CROSSHAIR_COLOUR, 0x4DFF88));
 
         FakeCanvas surface = render();
 
@@ -314,7 +341,7 @@ class OptionsPageTest {
     void the_opacity_slider_sets_the_opacity_under_the_mouse() {
         open();
 
-        click(panel.opacityAt(Settings.CROSSHAIR_COLOUR, 50));
+        click(opacityIn(Settings.CROSSHAIR_COLOUR, 50));
 
         assertEquals(0x80, settings.get(Settings.CROSSHAIR_COLOUR) >>> 24, "50% is not half opaque");
     }
@@ -327,7 +354,7 @@ class OptionsPageTest {
         settings.set(Settings.CROSSHAIR_COLOUR, 0x80FFFFFF);
         render();
 
-        click(panel.opacityAt(Settings.CROSSHAIR_COLOUR, 50));
+        click(opacityIn(Settings.CROSSHAIR_COLOUR, 50));
 
         assertEquals(0x80FFFFFF, (int) settings.get(Settings.CROSSHAIR_COLOUR));
     }
@@ -368,7 +395,7 @@ class OptionsPageTest {
         click(panel.optionsLinkOf(Feature.HIT_INDICATOR));
         FakeCanvas surface = render();
 
-        for (String line : new String[] {"Hit indicator", "Colour", "Opacity", "Duration", "300 ms"}) {
+        for (String line : new String[] {"Hit indicator", "Colour", "#FF4D4D · 100%", "Duration", "300 ms"}) {
             assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.texts());
         }
         assertFalse(surface.drew("Preview"), "a preview of a crosshair on the hit indicator's page");
@@ -377,7 +404,7 @@ class OptionsPageTest {
             click(panel.sliderAt(Settings.HIT_INDICATOR_DURATION, wanted));
             assertEquals(wanted, settings.get(Settings.HIT_INDICATOR_DURATION), "aiming at " + wanted);
         }
-        click(panel.swatchOf(Settings.HIT_INDICATOR_COLOUR, 0x4DFF88));
+        click(swatchIn(Settings.HIT_INDICATOR_COLOUR, 0x4DFF88));
         assertTrue(file().contains("\nhit-indicator.colour=#4DFF88FF\n"), file());
         assertTrue(file().contains("\nhit-indicator.duration=1000\n"), file());
     }

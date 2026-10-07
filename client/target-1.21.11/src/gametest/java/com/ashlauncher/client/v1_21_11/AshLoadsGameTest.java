@@ -261,6 +261,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.waitTicks(5);
         clickOn(context, "the hit indicator's options link", panel -> panel.optionsLinkOf(Feature.HIT_INDICATOR));
         clickOn(context, "1000 ms on its slider", panel -> panel.sliderAt(Settings.HIT_INDICATOR_DURATION, 1000));
+        clickOn(context, "the colour's chip", panel -> panel.colourChipOf(Settings.HIT_INDICATOR_COLOUR));
         clickOn(context, "the green swatch", panel -> panel.swatchOf(Settings.HIT_INDICATOR_COLOUR, 0x4DFF88));
         // By eye: the page, with Duration at 1000 ms and green chosen.
         context.takeScreenshot("ash-hit-indicator-options");
@@ -633,6 +634,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         clickOn(context, "the crosshair's options link", panel -> panel.optionsLinkOf(Feature.CROSSHAIR));
         clickOn(context, "the dot", panel -> panel.choiceOf(Settings.CROSSHAIR_SHAPE, "dot"));
         clickOn(context, "size 6 on its slider", panel -> panel.sliderAt(Settings.CROSSHAIR_SIZE, 6));
+        clickOn(context, "the colour's chip", panel -> panel.colourChipOf(Settings.CROSSHAIR_COLOUR));
         clickOn(context, "the red swatch", panel -> panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
         // By eye: the page, with a red dot in all three previews.
         context.takeScreenshot("ash-crosshair-options");
@@ -678,6 +680,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.getInput().pressKey(settingsKey);
         context.waitTicks(5);
         clickOn(context, "hit colour's options link", panel -> panel.optionsLinkOf(Feature.HIT_COLOUR));
+        clickOn(context, "the colour's chip", panel -> panel.colourChipOf(Settings.HIT_COLOUR_COLOUR));
         clickOn(context, "the blue swatch", panel -> panel.swatchOf(Settings.HIT_COLOUR_COLOUR, 0x4DC3FF));
         clickOn(context, "60 on the strength slider", panel -> panel.sliderAt(Settings.HIT_COLOUR_STRENGTH, 60));
         assertFileSays("hit-colour.colour=#4DC3FF");

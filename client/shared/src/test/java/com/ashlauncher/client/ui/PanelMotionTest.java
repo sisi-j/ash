@@ -183,6 +183,9 @@ class PanelMotionTest {
         Rect gear = panel.optionsLinkOf(Feature.CROSSHAIR);
         panel.mouseClicked(gear.centreX(), gear.centreY());
         at(panel, 1_500);
+        Rect chip = panel.colourChipOf(Settings.CROSSHAIR_COLOUR);
+        panel.mouseClicked(chip.centreX(), chip.centreY());
+        at(panel, 1_520);
         Rect box = panel.hexBoxOf(Settings.CROSSHAIR_COLOUR);
         panel.mouseClicked(box.centreX(), box.centreY());
         for (int i = 0; i < 7; i++) {
@@ -208,6 +211,9 @@ class PanelMotionTest {
         Rect gear = panel.optionsLinkOf(Feature.CROSSHAIR);
         panel.mouseClicked(gear.centreX(), gear.centreY());
         at(panel, 1_500);
+        Rect chip = panel.colourChipOf(Settings.CROSSHAIR_COLOUR);
+        panel.mouseClicked(chip.centreX(), chip.centreY());
+        at(panel, 1_520);
         Rect box = panel.hexBoxOf(Settings.CROSSHAIR_COLOUR);
         panel.mouseClicked(box.centreX(), box.centreY());
         for (int i = 0; i < 7; i++) {
