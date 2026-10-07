@@ -24,7 +24,7 @@ The maintainer's laptop: a Ryzen 7 8845HS with an RTX 4050 Laptop GPU (driver 59
 
 - **The two runs agree.** They are 0.3% apart, well inside twice their combined uncertainty (2.6%).
 - **This machine can show a change of about 3% or more.** A change smaller than that has not been shown to move the frame rate.
-- **One run was left out.** A first run, straight after switching the power mode, swung 6% between passes. It marked itself not comparable, so it isn't kept.
+- **One run was left out.** A first run, straight after switching the power mode, came out at ±2.8%, over the 2% limit. It marked itself not comparable, so it isn't kept.
 
 The profile, from the game's own profiler, as a share of the frame:
 
