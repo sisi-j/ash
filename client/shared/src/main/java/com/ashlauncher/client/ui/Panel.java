@@ -53,8 +53,6 @@ public final class Panel {
     private int scroll;
     /** The feature whose options are open in place of the tiles, or {@code null}. */
     private OptionsPage page;
-    /** Where the open page was last drawn, so a click and a hook can be turned into its units. */
-    private CanvasScreenSurface pageSurface;
     /** Whether the gear's page - ash's own settings - is open in place of the tiles. */
     private boolean ashSettings;
     /** What has been typed to search the tiles; on the tiles, every key typed goes here. */
@@ -147,7 +145,7 @@ public final class Panel {
             return true;
         }
         if (page != null) {
-            return pageSurface != null && page.click(pageSurface.toUnitsX(x), pageSurface.toUnitsY(y));
+            return page.click(x, y);
         }
         if (ashSettings) {
             return panel().contains(x, y);
@@ -174,7 +172,8 @@ public final class Panel {
                 say(row.whyUnavailable());
             } else if (toggleIn(tile, hasGear(row)).contains(x, y)) {
                 row.press();
-            } else if (row.hasOptions()) {
+            } else {
+                // Every feature has a page, if only to say it has no options yet.
                 open(row);
             }
             return true;
@@ -183,7 +182,7 @@ public final class Panel {
     }
 
     private void open(SettingsScreen.Row row) {
-        page = new OptionsPage(model, row, () -> page = null);
+        page = new OptionsPage(model, row, () -> page = null, clock);
     }
 
     /**
@@ -225,8 +224,8 @@ public final class Panel {
                 layout.drag(dragging, Placement.nearest(left, top, layout.width(dragging), layout.height(dragging),
                         guiWidth(), guiHeight()));
             }
-        } else if (page != null && pageSurface != null) {
-            page.drag(pageSurface.toUnitsX(x), pageSurface.toUnitsY(y));
+        } else if (page != null) {
+            page.drag(x, y);
         }
     }
 
@@ -598,7 +597,7 @@ public final class Panel {
     }
 
     private static boolean hasGear(SettingsScreen.Row row) {
-        return row.hasOptions() && row.available();
+        return row.available();
     }
 
     /** The gear on a feature's tile, which opens its options; {@code null} when it has none, did not load, or is not on view. */
@@ -622,8 +621,8 @@ public final class Panel {
 
     /** The point along a whole number's slider that stands for {@code value}. */
     public Rect sliderAt(Whole whole, int value) {
-        return page == null || pageSurface == null ? null
-                : nonEmpty(pageSurface.toPixels(page.pointOn("slider:" + whole.key(), value, whole.min(), whole.max())));
+        return page == null ? null
+                : nonEmpty((page.pointOn("slider:" + whole.key(), value, whole.min(), whole.max())));
     }
 
     public Rect swatchOf(Colour colour, int rgb) {
@@ -641,8 +640,8 @@ public final class Panel {
     /** The point along a colour's opacity slider that stands for {@code percent}. */
     public Rect opacityAt(Colour colour, int percent) {
         int min = (int) Math.round(Colour.MIN_ALPHA * 100 / 255.0);
-        return page == null || pageSurface == null ? null
-                : nonEmpty(pageSurface.toPixels(page.pointOn("opacity:" + colour.key(), percent, min, 100)));
+        return page == null ? null
+                : nonEmpty((page.pointOn("opacity:" + colour.key(), percent, min, 100)));
     }
 
     public Rect resetToDefaults() {
@@ -653,12 +652,22 @@ public final class Panel {
         return pagePixels("back");
     }
 
+    /** The hit indicator page's "Test a hit" button. */
+    public Rect testHitButton() {
+        return pagePixels("testhit");
+    }
+
+    /** One of the preview's scenes - "Sky", "Snow" or "Night" - on a page that has a preview. */
+    public Rect previewScene(String name) {
+        return pagePixels("preview:" + name);
+    }
+
     private Rect pagePixels(String id) {
-        if (page == null || pageSurface == null) {
+        if (page == null) {
             return null;
         }
         Rect units = page.target(id);
-        return units == null ? null : nonEmpty(pageSurface.toPixels(units));
+        return units == null ? null : nonEmpty(units);
     }
 
     /** At least a pixel each way: a point on a slider is one unit wide, and a unit can round to nothing. */
@@ -861,11 +870,15 @@ public final class Panel {
             drawIconButton(canvas, gearIn(tile), Ink.Icon.GEAR, units(0.55), 0.55f, 1f, mouseX, mouseY);
         }
 
-        Rect toggle = toggleIn(tile, hasGear(row));
-        int colour = !available ? Palette.UNAVAILABLE : row.on() ? Palette.GREEN : Palette.RED;
-        Paint.roundRect(canvas, toggle.x, toggle.y, toggle.width, toggle.height, units(0.55), colour, opacity);
-        String label = !available ? "UNAVAILABLE" : row.on() ? "ENABLED" : "DISABLED";
-        float labelSize = textSize(0.74f);
+        drawToggle(canvas, toggleIn(tile, hasGear(row)), available, row.on(), units(0.55), textSize(0.74f), opacity);
+    }
+
+    /** The ENABLED, DISABLED or UNAVAILABLE button: on a tile, and in an options page's header. */
+    static void drawToggle(Canvas canvas, Rect toggle, boolean available, boolean on, int radius, float labelSize,
+            float opacity) {
+        int colour = !available ? Palette.UNAVAILABLE : on ? Palette.GREEN : Palette.RED;
+        Paint.roundRect(canvas, toggle.x, toggle.y, toggle.width, toggle.height, radius, colour, opacity);
+        String label = !available ? "UNAVAILABLE" : on ? "ENABLED" : "DISABLED";
         // Spaced out a little, as the mockup's capitals are: 0.06 of the size.
         Raster text = Ink.text(label, Ink.Weight.BOLD, labelSize, Palette.TEXT, LABEL_TRACKING);
         int labelWidth = Ink.width(label, Ink.Weight.BOLD, labelSize, LABEL_TRACKING);
@@ -889,11 +902,7 @@ public final class Panel {
     }
 
     private void drawPage(Canvas canvas, int mouseX, int mouseY) {
-        Rect main = main();
-        float scale = 0.105f * unit();
-        pageSurface = new CanvasScreenSurface(canvas, scale, main.x, main.y);
-        Rect area = new Rect(0, 0, (int) Math.floor(main.width / scale), (int) Math.floor(main.height / scale));
-        page.render(pageSurface, area, pageSurface.toUnitsX(mouseX), pageSurface.toUnitsY(mouseY));
+        page.render(canvas, main(), unit(), mouseX, mouseY);
     }
 
     /**
@@ -1029,7 +1038,7 @@ public final class Panel {
     }
 
     /** {@code text}, cut with an ellipsis if it is wider than {@code room}. */
-    private static String fit(String text, Ink.Weight weight, float size, int room) {
+    static String fit(String text, Ink.Weight weight, float size, int room) {
         if (Ink.width(text, weight, size) <= room) {
             return text;
         }

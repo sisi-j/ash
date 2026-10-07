@@ -151,7 +151,7 @@ class PanelTest {
         render(panel);
         Rect gear = panel.optionsLinkOf(Feature.CROSSHAIR);
         assertNotNull(gear, "the crosshair's tile has no gear");
-        assertNull(panel.optionsLinkOf(Feature.FPS_READOUT), "a feature with no options has a gear");
+        assertNotNull(panel.optionsLinkOf(Feature.FPS_READOUT), "every tile has a gear, as the mockup has it");
 
         click(panel, gear);
         render(panel);

@@ -87,6 +87,7 @@ public final class Ink {
 
     /** The icons ash draws: each one of Lucide's, by its Lucide name. */
     public enum Icon {
+        BACK("arrow-left"),
         GEAR("settings"),
         LAYOUT("layout-dashboard"),
         SEARCH("search"),
