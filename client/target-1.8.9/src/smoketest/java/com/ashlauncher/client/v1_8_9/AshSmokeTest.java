@@ -129,6 +129,13 @@ public final class AshSmokeTest implements ClientModInitializer {
         });
         await("join a world", () ->
                 client.world != null && client.player != null && client.currentScreen == null ? client : null);
+        // And on the server itself: on CI the option alone left the world on
+        // its default difficulty, and slimes spawned on the flat world and
+        // killed the player while a step waited for the mobs to go.
+        onServer(client.getServer(), () -> {
+            client.getServer().setDifficulty(net.minecraft.world.Difficulty.PEACEFUL);
+            return Boolean.TRUE;
+        });
 
         pause(IN_WORLD_MS);
         screenshot(client, "ash-in-world.png");
@@ -372,16 +379,12 @@ public final class AshSmokeTest implements ClientModInitializer {
         });
         Settings settings = AshClient.settings;
         settings.set(Settings.FASTER_CLOUDS, false);
-        pause(1_000L);
 
-        Frame game = frame(client, "ash-clouds-game.png", false);
-        Frame again = frame(client, "ash-clouds-game-again.png", false);
-        expectSameSky(again, game, "two frames of the game's own clouds behind a pausing screen differ - the frame"
-                + " did not hold still, so this comparison cannot be made");
+        Frame game = stillFrame(client, "ash-clouds-game.png");
 
         int drawnBefore = FasterClouds.drawn;
         settings.set(Settings.FASTER_CLOUDS, true);
-        Frame ash = frame(client, "ash-clouds-ash.png", false);
+        Frame ash = stillFrame(client, "ash-clouds-ash.png");
         if (FasterClouds.drawn == drawnBefore) {
             fail("faster clouds is on, and ash's clouds never drew - the frame compared is the game's own");
         }
@@ -403,6 +406,27 @@ public final class AshSmokeTest implements ClientModInitializer {
             client.player.prevPitch = pitch;
             return null;
         });
+    }
+
+    /**
+     * A frame the same as the one before it. The sky's colour follows where
+     * the camera looks, and eases there a little every frame, paused or not:
+     * on CI's software renderer, at under 40 frames a second, it was still
+     * moving a second after the camera turned. So frames are taken until two
+     * in a row match, for up to 20 seconds.
+     */
+    private static Frame stillFrame(MinecraftClient client, String name) {
+        Frame previous = frame(client, name, false);
+        for (int tries = 0; tries < 40; tries++) {
+            Frame next = frame(client, name, false);
+            if (sameSky(next, previous) == null) {
+                return next;
+            }
+            previous = next;
+        }
+        fail(name + ": the frame never held still behind a pausing screen, so the clouds cannot be compared ("
+                + sameSky(frame(client, name, false), previous) + ")");
+        return null;
     }
 
     private static void expectSameSky(Frame frame, Frame expected, String what) {
