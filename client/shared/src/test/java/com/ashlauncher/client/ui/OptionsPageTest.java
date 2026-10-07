@@ -33,14 +33,22 @@ class OptionsPageTest {
     private int height = 1080;
 
     private Panel open(int width, int height) {
+        return open(Feature.CROSSHAIR, width, height);
+    }
+
+    private Panel open(Feature feature, int width, int height) {
         settings = Settings.load(configDir);
-        panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> { });
+        panel = new Panel(new SettingsScreen(settings, f -> true, () -> { }), () -> { });
         this.width = width;
         this.height = height;
         panel.resize(width, height);
         render();
-        click(panel.optionsLinkOf(Feature.CROSSHAIR));
+        click(panel.optionsLinkOf(feature));
         return panel;
+    }
+
+    private Panel open(Feature feature) {
+        return open(feature, 1920, 1080);
     }
 
     private Panel open() {
@@ -64,26 +72,68 @@ class OptionsPageTest {
     }
 
     @Test
-    void only_a_feature_with_options_has_an_options_link() {
+    void a_feature_with_no_options_yet_opens_a_page_that_says_so() throws Exception {
         settings = Settings.load(configDir);
         panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> { });
         panel.resize(width, height);
         render();
 
-        assertNotNull(panel.optionsLinkOf(Feature.CROSSHAIR), "the crosshair's card has no options link");
-        assertNull(panel.optionsLinkOf(Feature.FPS_READOUT), "a feature with no options has an options link");
+        Rect gear = panel.optionsLinkOf(Feature.FPS_READOUT);
+        assertNotNull(gear, "every feature's tile has a gear, as the mockup has it");
+        click(gear);
+        FakeCanvas page = render();
+        page.save(new java.io.File("build/ui/options-none.png"));
+
+        assertTrue(page.drew("FPS readout has no options yet."), "drew " + page.texts());
+        assertNotNull(panel.switchOf(Feature.FPS_READOUT), "its ENABLED button is not in the header");
+        assertNotNull(panel.backLink());
     }
 
     @Test
-    void the_page_shows_the_feature_its_switch_every_option_and_a_way_back() {
+    void the_page_shows_the_feature_its_switch_every_option_a_preview_and_a_way_back() throws Exception {
         open();
         FakeCanvas surface = render();
+        surface.save(new java.io.File("build/ui/options-crosshair.png"));
 
-        for (String line : new String[] {"< All features", "Crosshair", "Shape", "Size", "Gap", "Thickness", "Colour",
-                "Opacity", "Outline", "Reset to defaults", "Preview"}) {
+        for (String line : new String[] {"Crosshair", "ENABLED", "Shape", "Size", "Gap", "Thickness", "Colour",
+                "Opacity", "Outline", "Reset to defaults", "PREVIEW", "Sky", "Snow", "Night"}) {
             assertTrue(surface.drew(line), "\"" + line + "\" is not on the page: " + surface.texts());
         }
         assertNotNull(panel.switchOf(Feature.CROSSHAIR), "the feature's own switch is not on its page");
+        assertNotNull(panel.backLink(), "no way back");
+    }
+
+    @Test
+    void the_preview_follows_a_change_at_once() {
+        open();
+        Rect sky = panel.previewScene("Sky");
+        assertEquals(0xFFFFFFFF, render().pixel(sky.centreX(), sky.centreY()), "the crosshair's white centre");
+
+        click(panel.swatchOf(Settings.CROSSHAIR_COLOUR, 0xFF4D4D));
+
+        assertEquals(0xFFFF4D4D, render().pixel(sky.centreX(), sky.centreY()), "the preview kept the old colour");
+    }
+
+    @Test
+    void options_that_do_nothing_for_the_shape_chosen_are_not_on_the_page() {
+        open();
+        assertNotNull(panel.sliderAt(Settings.CROSSHAIR_GAP, 0));
+
+        click(panel.choiceOf(Settings.CROSSHAIR_SHAPE, "dot"));
+
+        assertNull(panel.sliderAt(Settings.CROSSHAIR_GAP, 0), "a dot has no gap, but the slider is still there");
+        assertNull(panel.sliderAt(Settings.CROSSHAIR_THICKNESS, 1), "a dot has no thickness either");
+    }
+
+    @Test
+    void the_hit_indicators_page_previews_a_hit_and_tests_one_on_demand() throws Exception {
+        open(Feature.HIT_INDICATOR);
+        FakeCanvas surface = render();
+        surface.save(new java.io.File("build/ui/options-hit-indicator.png"));
+
+        assertTrue(surface.drew("Test a hit"), "drew " + surface.texts());
+        assertTrue(surface.drew("Duration"));
+        assertNotNull(panel.testHitButton());
     }
 
     @Test

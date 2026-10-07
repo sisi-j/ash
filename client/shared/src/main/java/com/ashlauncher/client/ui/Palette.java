@@ -21,6 +21,8 @@ final class Palette {
     static final int RAISED = 0x0FFFFFFF;
     /** The same, under the mouse. */
     static final int RAISED_HOVER = 0x1AFFFFFF;
+    /** The same again, for something raised on something raised - a button on an options page, under the mouse. */
+    static final int RAISED_STRONG = 0x29FFFFFF;
     /** Hairlines between parts, such as the strip's divider. */
     static final int LINE = 0x17FFFFFF;
     /** Text, and every highlight. */
