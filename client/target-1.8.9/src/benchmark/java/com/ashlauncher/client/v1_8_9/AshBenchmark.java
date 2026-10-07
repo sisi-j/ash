@@ -167,14 +167,15 @@ public final class AshBenchmark implements ClientModInitializer {
     }
 
     /**
-     * The game's profile, three sections deep, keeping each section worth at
-     * least 1% of a frame. Its first answer for a path is the path itself,
-     * which is skipped; "unspecified" is time in a section outside any of
-     * its children.
+     * The game's profile, five sections deep - deep enough to split terrain
+     * setup into its parts - keeping each section worth at least 1% of a
+     * frame. Its first answer for a path is the path itself, which is
+     * skipped; "unspecified" is time in a section outside any of its
+     * children.
      */
     private static void collect(Profiler profiler, String path, int depth, List<Result.Section> into) {
         List<Profiler.Section> sections = profiler.getData(path);
-        if (sections == null || depth >= 3) {
+        if (sections == null || depth >= 5) {
             return;
         }
         for (int i = 1; i < sections.size(); i++) {

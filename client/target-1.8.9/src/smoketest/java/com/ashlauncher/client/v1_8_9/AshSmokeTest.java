@@ -33,6 +33,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.client.util.Window;
@@ -139,6 +140,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         settingsScreenWorks(client);
         crosshairOptionsWork(client);
         crosshairWorks(client);
+        fasterCloudsChangeNoPixel(client);
         hitIndicatorWorks(client);
         moveReadoutsWorks(client);
         panelIsCrispAtEveryGuiScale(client);
@@ -207,6 +209,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
             "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
+            "{ \"id\": \"faster-clouds\", \"name\": \"Faster clouds\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -340,6 +343,100 @@ public final class AshSmokeTest implements ClientModInitializer {
             client.player.prevPitch = pitch;
             return null;
         });
+    }
+
+    /**
+     * Faster clouds draws the game's clouds and not one pixel differently
+     * (#45, ADR-0006): the same frame, with ash's clouds and with the game's,
+     * compared pixel for pixel.
+     *
+     * <p>The clouds drift with every tick, so the frame is held still first:
+     * looking up at them, behind an empty screen that pauses the game - which
+     * stops the ticks and holds the partial tick where it was. Two frames of
+     * the game's own clouds must then match, or the frame did not hold and
+     * nothing after it would mean anything. Then ash's clouds must match the
+     * game's; and with clouds off the frame must differ, or there were no
+     * clouds where the frames were compared. The HUD still draws behind a
+     * screen, and its frame rate changes, so the top of the screen, where the
+     * readouts are, is left out; the rest holds as still as the clouds do.
+     */
+    private static void fasterCloudsChangeNoPixel(MinecraftClient client) {
+        Float pitch = onClient(client, () -> {
+            float was = client.player.pitch;
+            client.player.pitch = -30.0F;
+            client.player.prevPitch = -30.0F;
+            client.options.cloudMode = 2;
+            client.setScreen(new Screen() {
+            });
+            return was;
+        });
+        Settings settings = AshClient.settings;
+        settings.set(Settings.FASTER_CLOUDS, false);
+        pause(1_000L);
+
+        Frame game = frame(client, "ash-clouds-game.png", false);
+        Frame again = frame(client, "ash-clouds-game-again.png", false);
+        expectSameSky(again, game, "two frames of the game's own clouds behind a pausing screen differ - the frame"
+                + " did not hold still, so this comparison cannot be made");
+
+        int drawnBefore = FasterClouds.drawn;
+        settings.set(Settings.FASTER_CLOUDS, true);
+        Frame ash = frame(client, "ash-clouds-ash.png", false);
+        if (FasterClouds.drawn == drawnBefore) {
+            fail("faster clouds is on, and ash's clouds never drew - the frame compared is the game's own");
+        }
+        expectSameSky(ash, game, "ash's clouds differ from the game's");
+
+        onClient(client, () -> {
+            client.options.cloudMode = 0;
+            return null;
+        });
+        Frame none = frame(client, "ash-clouds-none.png", false);
+        if (sameSky(none, game) == null) {
+            fail("the frame with no clouds matches the frame with them - there were no clouds where it compared");
+        }
+
+        onClient(client, () -> {
+            client.options.cloudMode = 2;
+            client.setScreen(null);
+            client.player.pitch = pitch;
+            client.player.prevPitch = pitch;
+            return null;
+        });
+    }
+
+    private static void expectSameSky(Frame frame, Frame expected, String what) {
+        String difference = sameSky(frame, expected);
+        if (difference != null) {
+            fail(frame.name + " against " + expected.name + ": " + what + " (" + difference + ")");
+        }
+    }
+
+    /**
+     * Null if both are the same pixel for pixel below the top tenth of the
+     * screen - clear of the readouts, whose frame rate changes - or the first
+     * difference and how many pixels differ. Overhead, the clouds can have a
+     * gap as wide as the screen, so it is not the middle alone.
+     */
+    private static String sameSky(Frame frame, Frame expected) {
+        BufferedImage a = frame.image;
+        BufferedImage b = expected.image;
+        int differing = 0;
+        String first = null;
+        for (int y = a.getHeight() / 10; y < a.getHeight(); y++) {
+            for (int x = 0; x < a.getWidth(); x++) {
+                int found = a.getRGB(x, y) & 0xFFFFFF;
+                int wanted = b.getRGB(x, y) & 0xFFFFFF;
+                if (found != wanted) {
+                    differing++;
+                    if (first == null) {
+                        first = "#" + Integer.toHexString(found) + " for #" + Integer.toHexString(wanted) + " at " + x
+                                + "," + y;
+                    }
+                }
+            }
+        }
+        return first == null ? null : differing + " pixels differ, the first " + first;
     }
 
     /** Opens ash's settings, presses one switch, checks the file, and closes them again. */

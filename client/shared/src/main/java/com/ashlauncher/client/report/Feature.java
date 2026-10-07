@@ -17,6 +17,12 @@ public enum Feature {
     PING_READOUT("ping-readout", "Ping readout"),
     HIT_COLOUR("hit-colour", "Hit colour"),
     /**
+     * 1.8.9's fancy clouds, drawn with half the work and not a pixel changed
+     * (#45). Only 1.8.9 has it: 1.21.11 draws its clouds another way, and
+     * leaves it out of its report and its settings.
+     */
+    FASTER_CLOUDS("faster-clouds", "Faster clouds"),
+    /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can
      * still fail to load: on 1.8.9 the key is read by a mixin of ash's own.

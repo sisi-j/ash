@@ -48,6 +48,7 @@ import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
@@ -87,6 +88,8 @@ public final class AshClient implements ClientModInitializer {
 
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
+    private static final String FASTER_CLOUDS_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.WorldRendererCloudsMixin";
+
     private static final String HIT_ATTACK_MIXIN =
             "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerInteractionManagerMixin";
 
@@ -103,6 +106,12 @@ public final class AshClient implements ClientModInitializer {
 
     /** The hit indicator this session draws, if both its mixins landed, for the smoke test to ask. */
     static HitIndicator hitIndicator;
+
+    /**
+     * This session's settings, for the smoke test to switch faster clouds
+     * without leaving the paused frame it compares them on.
+     */
+    static Settings settings;
 
     @Override
     public void onInitializeClient() {
@@ -222,6 +231,17 @@ public final class AshClient implements ClientModInitializer {
         } else {
             landed.remove(Feature.HIT_COLOUR);
         }
+
+        // Faster clouds: the game's fancy clouds built once a frame, not twice,
+        // asked each frame so that switching it shows at once.
+        boolean fasterCloudsLanded = MixinFeature.landed(() -> WorldRenderer.class, FASTER_CLOUDS_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.FASTER_CLOUDS.displayName(), why)));
+        if (fasterCloudsLanded) {
+            FasterClouds.install(() -> settings.get(Settings.FASTER_CLOUDS));
+        } else {
+            landed.remove(Feature.FASTER_CLOUDS);
+        }
+        AshClient.settings = settings;
 
         // Snaplook: the game's own front view while Z is held, Z being a key
         // the game binds to nothing; read on the client tick by its own mixin.

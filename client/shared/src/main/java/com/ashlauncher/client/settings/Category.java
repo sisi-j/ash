@@ -7,7 +7,8 @@ package com.ashlauncher.client.settings;
 public enum Category {
     PVP("PvP"),
     HUD("HUD"),
-    MOVEMENT("Movement");
+    MOVEMENT("Movement"),
+    PERFORMANCE("Performance");
 
     private final String displayName;
 
