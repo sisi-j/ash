@@ -115,14 +115,15 @@ final class AshSettingsScreen extends Screen {
     }
 
     /**
-     * The key that opened it closes it. A key binding gets no presses while a
-     * screen is open - the screen is asked first - so the screen has to know
-     * its own key. Backspace, Escape and Enter go to the panel by ash's names.
+     * The key that opened it closes it, through the panel's closing motion. A
+     * key binding gets no presses while a screen is open - the screen is
+     * asked first - so the screen has to know its own key. Backspace, Escape
+     * and Enter go to the panel by ash's names.
      */
     @Override
     public boolean keyPressed(KeyEvent event) {
         if (key.matches(event)) {
-            onClose();
+            panel.requestClose();
             return true;
         }
         if (event.key() == GLFW.GLFW_KEY_BACKSPACE) {

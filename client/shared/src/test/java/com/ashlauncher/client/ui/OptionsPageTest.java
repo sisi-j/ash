@@ -39,6 +39,7 @@ class OptionsPageTest {
     private Panel open(Feature feature, int width, int height) {
         settings = Settings.load(configDir);
         panel = new Panel(new SettingsScreen(settings, f -> true, () -> { }), () -> { });
+        panel.setAnimations(false);
         this.width = width;
         this.height = height;
         panel.resize(width, height);
@@ -75,6 +76,7 @@ class OptionsPageTest {
     void a_feature_with_no_options_yet_opens_a_page_that_says_so() throws Exception {
         settings = Settings.load(configDir);
         panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> { });
+        panel.setAnimations(false);
         panel.resize(width, height);
         render();
 
@@ -225,6 +227,7 @@ class OptionsPageTest {
         java.util.List<String> closed = new java.util.ArrayList<>();
         settings = Settings.load(configDir);
         panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> closed.add("closed"));
+        panel.setAnimations(false);
         panel.resize(width, height);
         render();
         click(panel.optionsLinkOf(Feature.CROSSHAIR));
@@ -348,6 +351,7 @@ class OptionsPageTest {
         settings = Settings.load(configDir);
         panel = new Panel(new SettingsScreen(settings, feature -> feature != Feature.CROSSHAIR, () -> { }),
                 () -> { });
+        panel.setAnimations(false);
         panel.resize(width, height);
         render();
 
@@ -358,6 +362,7 @@ class OptionsPageTest {
     void the_hit_indicator_s_page_sets_its_colour_and_how_long_it_shows_in_steps_of_50_ms() throws IOException {
         settings = Settings.load(configDir);
         panel = new Panel(new SettingsScreen(settings, feature -> true, () -> { }), () -> { });
+        panel.setAnimations(false);
         panel.resize(width, height);
         render();
         click(panel.optionsLinkOf(Feature.HIT_INDICATOR));

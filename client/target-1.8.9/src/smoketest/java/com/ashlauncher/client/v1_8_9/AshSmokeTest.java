@@ -631,6 +631,15 @@ public final class AshSmokeTest implements ClientModInitializer {
         await("close ash's settings after the crosshair's options", () -> client.currentScreen == null ? client : null);
     }
 
+    /**
+     * Waits until ash's panel has stopped moving (#66) - opening, a page
+     * changing, tiles arriving - as a player's eye waits for things to land
+     * before clicking.
+     */
+    private static void settle(MinecraftClient client, AshSettingsScreen screen) {
+        await("see ash's panel stop moving", () -> onClient(client, () -> screen.panel().animating()) ? null : client);
+    }
+
     /** A left click in the middle of a feature's switch on ash's panel, as the game's input loop delivers one. */
     private static void click(MinecraftClient client, AshSettingsScreen screen, Feature feature) {
         clickOn(client, screen, feature + "'s switch", panel -> panel.switchOf(feature));
@@ -643,6 +652,7 @@ public final class AshSmokeTest implements ClientModInitializer {
      */
     private static void clickOn(MinecraftClient client, AshSettingsScreen screen, String what,
             java.util.function.Function<Panel, Rect> where) {
+        settle(client, screen);
         Boolean clicked = onClient(client, () -> {
             Rect target = where.apply(screen.panel());
             if (target == null) {
@@ -897,6 +907,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             AshSettingsScreen screen = await("open ash's settings at GUI scale " + scale, () ->
                     client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
             pause(500L);
+            settle(client, screen);
             Rect letters = onClient(client, () -> screen.panel().lettersArea());
             Rect iconArea = onClient(client, () -> screen.panel().tileIconOf(Feature.CROSSHAIR));
             String name = "ash-panel-gui-scale-" + (scale == 0 ? "auto" : scale) + ".png";

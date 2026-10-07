@@ -17,6 +17,10 @@ import com.ashlauncher.client.ui.draw.Paint;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 
 /**
@@ -95,6 +99,12 @@ final class OptionsPage {
     private final SettingsScreen.Row feature;
     private final Runnable back;
     private final LongSupplier clock;
+    private final Consumer<String> say;
+    private final BooleanSupplier animated;
+    /** When each switch on the page last changed, by its target, so it eases across (#66). */
+    private final Map<String, Long> switchedAt = new HashMap<>();
+    /** When the colour box last refused what was typed in it, so it shakes. */
+    private long hexRefusedAt = Long.MIN_VALUE;
     private final List<Row> rows = new ArrayList<>();
     private final List<Target> targets = new ArrayList<>();
     private final HitIndicator previewHit;
@@ -106,12 +116,19 @@ final class OptionsPage {
     private int maxScroll;
     private float unit = 19.2f;
 
-    /** @param clock nanoseconds, only ever going forward: for the hit indicator's preview */
-    OptionsPage(SettingsScreen model, SettingsScreen.Row feature, Runnable back, LongSupplier clock) {
+    /**
+     * @param clock nanoseconds, only ever going forward: for the hit indicator's preview and for motion
+     * @param say puts a message up over the panel
+     * @param animated whether the page moves: its switches ease, a refused code shakes
+     */
+    OptionsPage(SettingsScreen model, SettingsScreen.Row feature, Runnable back, LongSupplier clock,
+            Consumer<String> say, BooleanSupplier animated) {
         this.model = model;
         this.feature = feature;
         this.back = back;
         this.clock = clock;
+        this.say = say;
+        this.animated = animated;
         for (Setting<?> option : model.optionsOf(feature.feature())) {
             if (option instanceof Choice) {
                 rows.add(new Row(Kind.CHOICE, option, option.label()));
@@ -142,7 +159,7 @@ final class OptionsPage {
     boolean click(int x, int y) {
         Target hit = targetAt(x, y);
         if (editing != null && (hit == null || !hit.id.equals("hex:" + editing.key()))) {
-            editing = null;
+            finishTyping();
         }
         if (hit == null) {
             return false;
@@ -185,7 +202,10 @@ final class OptionsPage {
         if (editing == null) {
             return false;
         }
-        if (key == Key.ENTER || key == Key.ESCAPE) {
+        if (key == Key.ENTER) {
+            finishTyping();
+        } else if (key == Key.ESCAPE) {
+            // Escape is a change of mind: no complaint about what was half typed.
             editing = null;
         } else if (key == Key.BACKSPACE && !hexText.isEmpty()) {
             hexText = hexText.substring(0, hexText.length() - 1);
@@ -200,6 +220,33 @@ final class OptionsPage {
             hexText += (char) codePoint;
             applyWholeColour();
         }
+    }
+
+    /**
+     * Ends typing a colour. A whole colour has already been applied; anything
+     * else is refused - the box shakes, and the panel says what a colour
+     * looks like - and the colour stays as it was.
+     */
+    private void finishTyping() {
+        if (wholeColour(hexText) < 0) {
+            hexRefusedAt = clock.getAsLong();
+            say.accept("That isn't a colour. Use six hex digits, like #FA3A2F.");
+        }
+        editing = null;
+    }
+
+    /** The colour {@code typed} is, as RGB, or -1 when it is not six hex digits with or without a {@code #}. */
+    static int wholeColour(String typed) {
+        String digits = typed.startsWith("#") ? typed.substring(1) : typed;
+        if (digits.length() != 6) {
+            return -1;
+        }
+        for (char c : digits.toCharArray()) {
+            if (Character.digit(c, 16) < 0) {
+                return -1;
+            }
+        }
+        return Integer.parseInt(digits, 16);
     }
 
     /**
@@ -321,8 +368,13 @@ final class OptionsPage {
         Ink.text(name, Ink.Weight.BOLD, nameSize, Palette.TEXT)
                 .drawAt(canvas, x, area.y + (height - Ink.lineHeight(Ink.Weight.BOLD, nameSize)) / 2, 1f);
 
-        Panel.drawToggle(canvas, toggle, feature.available(), feature.on(), units(0.55), textSize(0.74f), 1f);
-        targets.add(new Target("switch:" + feature.feature().id(), toggle, (cx, cy) -> feature.press()));
+        String switchId = "switch:" + feature.feature().id();
+        Panel.drawToggle(canvas, toggle, feature.available(), feature.on(), eased(switchId, feature.on(), true),
+                units(0.55), textSize(0.74f), 1f);
+        targets.add(new Target(switchId, toggle, (cx, cy) -> {
+            feature.press();
+            switchedAt.put(switchId, clock.getAsLong());
+        }));
         return area.y + height + units(1.2);
     }
 
@@ -418,8 +470,12 @@ final class OptionsPage {
             case FLAG: {
                 OnOff flag = (OnOff) row.setting;
                 Rect toggle = new Rect(control.x, control.y + (control.height - units(1.7)) / 2, units(3.1), units(1.7));
-                drawSwitch(canvas, toggle, model.value(flag));
-                targets.add(new Target("flag:" + flag.key(), toggle, (x, y) -> model.change(flag, !model.value(flag))));
+                String flagId = "flag:" + flag.key();
+                drawSwitch(canvas, toggle, eased(flagId, model.value(flag), false));
+                targets.add(new Target(flagId, toggle, (x, y) -> {
+                    model.change(flag, !model.value(flag));
+                    switchedAt.put(flagId, clock.getAsLong());
+                }));
                 break;
             }
             default:
@@ -503,7 +559,10 @@ final class OptionsPage {
 
         boolean typing = editing == colour;
         float size = textSize(0.92f);
-        Rect box = new Rect(x + units(0.5), area.y + (area.height - units(2.2)) / 2, units(8.5), units(2.2));
+        // Refused, it shakes; the place it is clicked is where it settles.
+        long sinceRefused = hexRefusedAt == Long.MIN_VALUE ? Long.MAX_VALUE : clock.getAsLong() - hexRefusedAt;
+        int shake = animated.getAsBoolean() ? units(Motion.shake(sinceRefused)) : 0;
+        Rect box = new Rect(x + units(0.5) + shake, area.y + (area.height - units(2.2)) / 2, units(8.5), units(2.2));
         Paint.roundRect(canvas, box.x, box.y, box.width, box.height, units(0.55), Palette.RAISED_HOVER, 1f);
         if (typing) {
             Paint.outline(canvas, box.x, box.y, box.width, box.height, units(0.55), Palette.FOCUS);
@@ -525,11 +584,27 @@ final class OptionsPage {
     }
 
     /** On and off: a pill, green when on, its knob at the end it is set to. */
-    private void drawSwitch(Canvas canvas, Rect at, boolean on) {
-        Paint.roundRect(canvas, at.x, at.y, at.width, at.height, at.height / 2, on ? Palette.GREEN : SWITCH_OFF, 1f);
+    /**
+     * How far a switch on the page is towards on just now: eased since its
+     * last press (#66) - an ENABLED button's colour over its own time, a
+     * switch's knob over its.
+     */
+    private float eased(String id, boolean on, boolean button) {
+        Long pressed = switchedAt.get(id);
+        if (!animated.getAsBoolean() || pressed == null) {
+            return on ? 1f : 0f;
+        }
+        long elapsed = clock.getAsLong() - pressed;
+        return button ? Motion.toggle(on, elapsed) : Motion.switchPosition(on, elapsed);
+    }
+
+    /** On and off: a pill, green when on, its knob {@code position} of the way across: 0 off, 1 on. */
+    private void drawSwitch(Canvas canvas, Rect at, float position) {
+        Paint.roundRect(canvas, at.x, at.y, at.width, at.height, at.height / 2,
+                Panel.blend(SWITCH_OFF, Palette.GREEN, position), 1f);
         int inset = units(0.2);
         int knob = at.height - 2 * inset;
-        int knobX = on ? at.x + at.width - inset - knob : at.x + inset;
+        int knobX = at.x + inset + Math.round((at.width - 2 * inset - knob) * position);
         Paint.roundRect(canvas, knobX, at.y + inset, knob, knob, knob / 2, Palette.TEXT, 1f);
     }
 

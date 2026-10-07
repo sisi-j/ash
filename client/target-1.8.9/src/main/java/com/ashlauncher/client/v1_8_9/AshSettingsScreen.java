@@ -173,7 +173,7 @@ public final class AshSettingsScreen extends Screen {
     @Override
     protected void keyPressed(char character, int keyCode) {
         if (keyCode == key.getCode()) {
-            client.setScreen(null);
+            panel.requestClose();
         } else if (keyCode == Keyboard.KEY_BACK) {
             panel.keyPressed(Key.BACKSPACE);
         } else if (keyCode == Keyboard.KEY_ESCAPE) {

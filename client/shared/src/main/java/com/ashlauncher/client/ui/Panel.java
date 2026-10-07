@@ -73,6 +73,26 @@ public final class Panel {
     private float grabX;
     private float grabY;
 
+    /** Whether the panel moves as the mockup does (#66): on unless ash's own settings say otherwise (#69). */
+    private boolean animations = true;
+    /** When the panel first drew, on the clock, so its opening runs from then; -1 before. */
+    private long openedAt = -1;
+    /** When closing was asked for, so the panel closes once it has sunk away; -1 while open. */
+    private long closingAt = -1;
+    private boolean closeRun;
+    /** When the tiles were last shown afresh, and whether one after another or all together. */
+    private long tilesShownAt = -1;
+    private boolean tilesStaggered = true;
+    /** When the view last changed - tiles, a page, ash's settings - and what it was, to draw it leaving. */
+    private long viewChangedAt = -1;
+    private OptionsPage leavingPage;
+    private boolean leavingAshSettings;
+    /** The tile shaking for a refused action, and since when; null when none is. */
+    private Feature shaking;
+    private long shakeAt;
+    /** When each feature's ENABLED button last changed, so its colour eases from one to the other. */
+    private final java.util.Map<Feature, Long> toggledAt = new java.util.EnumMap<>(Feature.class);
+
     /** @param close closes the screen the panel is on */
     public Panel(SettingsScreen model, Runnable close) {
         this(model, close, System::nanoTime);
@@ -115,6 +135,148 @@ public final class Panel {
         stopEditingHud();
     }
 
+    // ---- motion (#66) ----
+
+    /** Whether the panel moves: off, everything is simply where it ends up. */
+    public void setAnimations(boolean animations) {
+        this.animations = animations;
+    }
+
+    /**
+     * Asks the panel to close: it sinks and fades away, and then closes the
+     * screen. What the screen's own key and Escape do; asking again while it
+     * closes changes nothing.
+     */
+    public void requestClose() {
+        if (closingAt >= 0) {
+            return;
+        }
+        if (!animations || editingHud) {
+            runClose();
+            return;
+        }
+        closingAt = clock.getAsLong();
+    }
+
+    private void runClose() {
+        if (!closeRun) {
+            closeRun = true;
+            close.run();
+        }
+    }
+
+    /**
+     * Whether anything is still moving: opening, closing, a page changing,
+     * tiles arriving. The real-game tests wait for it before they click, as
+     * a player's eye waits for things to land.
+     */
+    public boolean animating() {
+        if (!animations || openedAt < 0) {
+            return animations && openedAt < 0;
+        }
+        long now = clock.getAsLong();
+        return now - openedAt < Motion.OPEN
+                || closingAt >= 0
+                || (viewChangedAt >= 0 && !Motion.pageSettled(now - viewChangedAt))
+                || (tilesShownAt >= 0 && !Motion.tilesSettled(visibleRows().size(), now - tilesShownAt,
+                        tilesStaggered));
+    }
+
+    /**
+     * Changes what the main area shows - the tiles, a page, ash's settings -
+     * with the old view leaving before the new one arrives; tiles arriving
+     * rise one after another.
+     */
+    private void changeView(OptionsPage nextPage, boolean nextAshSettings) {
+        long now = clock.getAsLong();
+        if (animations) {
+            leavingPage = page;
+            leavingAshSettings = ashSettings;
+            viewChangedAt = now;
+            if (nextPage == null && !nextAshSettings) {
+                showTiles(now + Motion.PAGE_LEAVE, true);
+            }
+        }
+        page = nextPage;
+        ashSettings = nextAshSettings;
+    }
+
+    private void showTiles(long at, boolean staggered) {
+        if (animations) {
+            tilesShownAt = at;
+            tilesStaggered = staggered;
+        }
+    }
+
+    /** How far a feature's ENABLED button is from red to green just now: eased since its last press. */
+    float onness(Feature feature, boolean on, long now) {
+        Long pressed = toggledAt.get(feature);
+        if (!animations || pressed == null) {
+            return on ? 1f : 0f;
+        }
+        return Motion.toggle(on, now - pressed);
+    }
+
+    /** {@code t} of the way from one colour to another, every channel alpha included. */
+    static int blend(int from, int to, float t) {
+        if (t <= 0f) {
+            return from;
+        }
+        if (t >= 1f) {
+            return to;
+        }
+        int result = 0;
+        for (int shift = 0; shift < 32; shift += 8) {
+            int a = (from >>> shift) & 0xFF;
+            int b = (to >>> shift) & 0xFF;
+            result |= Math.round(a + (b - a) * t) << shift;
+        }
+        return result;
+    }
+
+    /** A refused action: the tile that refused shakes, briefly. */
+    private void shake(Feature feature) {
+        shaking = feature;
+        shakeAt = clock.getAsLong();
+    }
+
+    /** How far below its place the panel is just now, in pixels: rising as it opens, sinking as it closes. */
+    private int panelOffset(long now) {
+        if (!animations) {
+            return 0;
+        }
+        if (closingAt >= 0) {
+            return Math.round(Motion.closeSink(now - closingAt) * panel().height);
+        }
+        return openedAt < 0 ? 0 : Math.round(Motion.openRise(now - openedAt) * panel().height);
+    }
+
+    /** How visible the panel and the overlay are just now. */
+    private float panelOpacity(long now) {
+        if (!animations) {
+            return 1f;
+        }
+        if (closingAt >= 0) {
+            return Motion.closeOpacity(now - closingAt);
+        }
+        return openedAt < 0 ? 0f : Motion.openOpacity(now - openedAt);
+    }
+
+    /** Where the tile at this place in the order is drawn just now: below its place while it arrives. */
+    private int tileOffset(int index, long now) {
+        if (!animations || tilesShownAt < 0) {
+            return 0;
+        }
+        return units(Motion.tileRise(index, now - tilesShownAt, tilesStaggered));
+    }
+
+    private float tileOpacity(int index, long now) {
+        if (!animations || tilesShownAt < 0) {
+            return 1f;
+        }
+        return Motion.tileOpacity(index, now - tilesShownAt, tilesStaggered);
+    }
+
     private void startEditingHud() {
         editingHud = true;
         page = null;
@@ -135,9 +297,16 @@ public final class Panel {
         if (editingHud) {
             return hudEditClicked(x, y);
         }
+        if (closingAt >= 0) {
+            // On its way out: nothing on it can be pressed.
+            return true;
+        }
+        // Where things are shown, not where they will settle: the panel may
+        // still be rising into place.
+        long now = clock.getAsLong();
+        y -= panelOffset(now);
         if (gearButton().contains(x, y)) {
-            ashSettings = !ashSettings;
-            page = null;
+            changeView(null, !ashSettings);
             return true;
         }
         if (editHudButton().contains(x, y)) {
@@ -154,6 +323,7 @@ public final class Panel {
             if (tabHere.at.contains(x, y)) {
                 tab = tabHere.category;
                 filtered();
+                showTiles(clock.getAsLong(), true);
                 return true;
             }
         }
@@ -165,13 +335,20 @@ public final class Panel {
         for (int i = 0; i < rows.size(); i++) {
             SettingsScreen.Row row = rows.get(i);
             Rect tile = tileAt(i);
-            if (tile == null || !tile.contains(x, y)) {
+            if (tile == null) {
+                continue;
+            }
+            // And where this tile is shown, if it is still arriving.
+            int ty = y - tileOffset(i - scroll * columns(), now);
+            if (!tile.contains(x, ty)) {
                 continue;
             }
             if (!row.available()) {
                 say(row.whyUnavailable());
-            } else if (toggleIn(tile, hasGear(row)).contains(x, y)) {
+                shake(row.feature());
+            } else if (toggleIn(tile, hasGear(row)).contains(x, ty)) {
                 row.press();
+                toggledAt.put(row.feature(), now);
             } else {
                 // Every feature has a page, if only to say it has no options yet.
                 open(row);
@@ -182,7 +359,8 @@ public final class Panel {
     }
 
     private void open(SettingsScreen.Row row) {
-        page = new OptionsPage(model, row, () -> page = null, clock);
+        changeView(new OptionsPage(model, row, () -> changeView(null, false), clock, this::say, () -> animations),
+                false);
     }
 
     /**
@@ -270,18 +448,17 @@ public final class Panel {
         }
         boolean onAPage = page != null || ashSettings;
         if (onAPage && (key == Key.ESCAPE || key == Key.BACKSPACE)) {
-            page = null;
-            ashSettings = false;
+            changeView(null, false);
         } else if (!onAPage && key == Key.BACKSPACE && !query.isEmpty()) {
             query = query.substring(0, query.offsetByCodePoints(query.length(), -1));
-            filtered();
+            searched();
         } else if (!onAPage && key == Key.ESCAPE && !query.isEmpty()) {
             // A search is cleared first, so Escape never closes on a player
             // who was only looking for something.
             query = "";
-            filtered();
+            searched();
         } else if (key == Key.ESCAPE) {
-            close.run();
+            requestClose();
         }
     }
 
@@ -302,7 +479,7 @@ public final class Panel {
             }
         } else if (!ashSettings && !Character.isISOControl(codePoint) && query.length() < MAX_QUERY) {
             query += new String(Character.toChars(codePoint));
-            filtered();
+            searched();
         }
     }
 
@@ -497,6 +674,12 @@ public final class Panel {
         scroll = 0;
     }
 
+    /** The search changed: back to the top, and the tiles that match arrive together, as the mockup has them. */
+    private void searched() {
+        filtered();
+        showTiles(clock.getAsLong(), false);
+    }
+
     private int columns() {
         return Math.max(1, Math.round(main().width / (15.36f * unit())));
     }
@@ -687,7 +870,23 @@ public final class Panel {
             return;
         }
         scroll = Math.min(scroll, maxScroll());
-        canvas.fill(0, 0, width, height, blurred ? Palette.OVERLAY : Palette.OVERLAY_UNBLURRED);
+        long now = clock.getAsLong();
+        if (animations && openedAt < 0) {
+            openedAt = now;
+            showTiles(now, true);
+        }
+        if (closingAt >= 0 && Motion.closed(now - closingAt)) {
+            runClose();
+            return;
+        }
+        // The overlay and the panel fade together; the panel also rises
+        // into place as it opens and sinks as it closes.
+        float opacity = panelOpacity(now);
+        canvas.fill(0, 0, width, height,
+                Paint.fade(blurred ? Palette.OVERLAY : Palette.OVERLAY_UNBLURRED, opacity));
+        Canvas outer = canvas;
+        canvas = MovedCanvas.of(canvas, 0, panelOffset(now), opacity);
+        mouseY -= panelOffset(now);
 
         Rect panel = panel();
         int radius = units(1.1);
@@ -704,15 +903,46 @@ public final class Panel {
         drawIconButton(canvas, editHudButton(), Ink.Icon.LAYOUT, units(0.65), 0.52f, 1f, mouseX, mouseY);
         drawIconButton(canvas, gearButton(), Ink.Icon.GEAR, units(0.65), 0.52f, 1f, mouseX, mouseY);
 
+        drawMain(canvas, now, mouseX, mouseY);
+        drawNotice(canvas);
+        drawToast(outer, panel);
+    }
+
+    /**
+     * The main area: the view as it is, or - just after a change - the old
+     * one leaving, then the new one rising into place.
+     */
+    private void drawMain(Canvas canvas, long now, int mouseX, int mouseY) {
+        long sinceChange = viewChangedAt < 0 ? Long.MAX_VALUE : now - viewChangedAt;
+        if (animations && Motion.pageLeaving(sinceChange)) {
+            OptionsPage current = page;
+            boolean currentAsh = ashSettings;
+            page = leavingPage;
+            ashSettings = leavingAshSettings;
+            try {
+                drawView(MovedCanvas.of(canvas, 0, units(Motion.leavingDrop(sinceChange)),
+                        Motion.leavingOpacity(sinceChange)), now, -1, -1);
+            } finally {
+                page = current;
+                ashSettings = currentAsh;
+            }
+            return;
+        }
+        if (animations && !Motion.pageSettled(sinceChange)) {
+            canvas = MovedCanvas.of(canvas, 0, units(Motion.enteringRise(sinceChange)),
+                    Motion.enteringOpacity(sinceChange));
+        }
+        drawView(canvas, now, mouseX, mouseY);
+    }
+
+    private void drawView(Canvas canvas, long now, int mouseX, int mouseY) {
         if (page != null) {
             drawPage(canvas, mouseX, mouseY);
         } else if (ashSettings) {
             drawAshSettings(canvas);
         } else {
-            drawTiles(canvas, mouseX, mouseY);
+            drawTiles(canvas, now, mouseX, mouseY);
         }
-        drawNotice(canvas);
-        drawToast(canvas, panel);
     }
 
     private void drawLetters(Canvas canvas, Rect panel) {
@@ -739,7 +969,7 @@ public final class Panel {
                 button.y + (button.height - size) / 2, opacity);
     }
 
-    private void drawTiles(Canvas canvas, int mouseX, int mouseY) {
+    private void drawTiles(Canvas canvas, long now, int mouseX, int mouseY) {
         drawSearch(canvas);
         drawTabs(canvas, mouseX, mouseY);
 
@@ -758,7 +988,13 @@ public final class Panel {
         for (int i = 0; i < rows.size(); i++) {
             Rect tile = tileAt(i);
             if (tile != null) {
-                drawTile(canvas, rows.get(i), tile, mouseX, mouseY);
+                // Arriving, each tile below its place and faint; refused, shaking.
+                int place = i - scroll * columns();
+                SettingsScreen.Row row = rows.get(i);
+                int dx = row.feature() == shaking ? units(Motion.shake(now - shakeAt)) : 0;
+                int dy = tileOffset(place, now);
+                drawTile(MovedCanvas.of(canvas, dx, dy, tileOpacity(place, now)), row, tile, now, mouseX - dx,
+                        mouseY - dy);
             }
         }
         canvas.unclip();
@@ -845,7 +1081,7 @@ public final class Panel {
         }
     }
 
-    private void drawTile(Canvas canvas, SettingsScreen.Row row, Rect tile, int mouseX, int mouseY) {
+    private void drawTile(Canvas canvas, SettingsScreen.Row row, Rect tile, long now, int mouseX, int mouseY) {
         boolean available = row.available();
         float opacity = available ? 1f : 0.45f;
         int fill = available && tile.contains(mouseX, mouseY) ? Palette.RAISED_HOVER : Palette.RAISED;
@@ -870,13 +1106,23 @@ public final class Panel {
             drawIconButton(canvas, gearIn(tile), Ink.Icon.GEAR, units(0.55), 0.55f, 1f, mouseX, mouseY);
         }
 
-        drawToggle(canvas, toggleIn(tile, hasGear(row)), available, row.on(), units(0.55), textSize(0.74f), opacity);
+        drawToggle(canvas, toggleIn(tile, hasGear(row)), available, row.on(), onness(row.feature(), row.on(), now),
+                units(0.55), textSize(0.74f), opacity);
     }
 
     /** The ENABLED, DISABLED or UNAVAILABLE button: on a tile, and in an options page's header. */
     static void drawToggle(Canvas canvas, Rect toggle, boolean available, boolean on, int radius, float labelSize,
             float opacity) {
-        int colour = !available ? Palette.UNAVAILABLE : on ? Palette.GREEN : Palette.RED;
+        drawToggle(canvas, toggle, available, on, on ? 1f : 0f, radius, labelSize, opacity);
+    }
+
+    /**
+     * The same, its colour {@code onness} of the way from red to green: a
+     * press eases from one to the other. Its word is the new one at once.
+     */
+    static void drawToggle(Canvas canvas, Rect toggle, boolean available, boolean on, float onness, int radius,
+            float labelSize, float opacity) {
+        int colour = !available ? Palette.UNAVAILABLE : blend(Palette.RED, Palette.GREEN, onness);
         Paint.roundRect(canvas, toggle.x, toggle.y, toggle.width, toggle.height, radius, colour, opacity);
         String label = !available ? "UNAVAILABLE" : on ? "ENABLED" : "DISABLED";
         // Spaced out a little, as the mockup's capitals are: 0.06 of the size.
