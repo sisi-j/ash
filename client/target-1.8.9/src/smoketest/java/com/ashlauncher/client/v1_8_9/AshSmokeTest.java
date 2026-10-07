@@ -459,21 +459,34 @@ public final class AshSmokeTest implements ClientModInitializer {
      */
     private static void clearMobs(MinecraftClient client) {
         IntegratedServer server = client.getServer();
-        onServer(server, () -> {
-            for (net.minecraft.entity.Entity entity : new ArrayList<>(server.worlds[0].loadedEntities)) {
-                if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
-                    entity.remove();
-                }
-            }
-            return Boolean.TRUE;
-        });
+        AtomicReference<String> lastSeen = new AtomicReference<>("");
         await("see the mobs go", () -> {
+            // Removed again on every look: a chunk still generating can bring
+            // new animals with it after the first sweep.
+            onServer(server, () -> {
+                for (net.minecraft.entity.Entity entity : new ArrayList<>(server.worlds[0].loadedEntities)) {
+                    if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
+                        entity.remove();
+                    }
+                }
+                return Boolean.TRUE;
+            });
+            List<String> left = new ArrayList<>();
             for (Object entity : onClient(client, () -> new ArrayList<>(client.world.loadedEntities))) {
                 if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
-                    return null;
+                    left.add(entity.getClass().getSimpleName());
                 }
             }
-            return client;
+            if (left.isEmpty()) {
+                return client;
+            }
+            // Named whenever what is left changes, so a wait that never ends
+            // says what would not go.
+            Collections.sort(left);
+            if (!left.toString().equals(lastSeen.getAndSet(left.toString()))) {
+                System.out.println("ash smoke test: the client still sees " + left);
+            }
+            return null;
         });
     }
 
