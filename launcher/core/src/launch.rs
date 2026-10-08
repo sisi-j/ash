@@ -112,10 +112,10 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
     // 1.8.9 any JVM argument there switches off the fallback that supplies
     // the classpath, and the game would not start (`docs/research/0005`).
     if let Some(mods) = context.mods {
-        let paths: Vec<String> = mods.add.iter().map(|p| p.display().to_string()).collect();
+        let paths: Vec<String> = mods.add.iter().map(|p| java_path(p)).collect();
         jvm.insert(0, format!("-Dfabric.addMods={}", paths.join(separator)));
         if let Some(folder) = &mods.folder {
-            jvm.insert(0, format!("-Dfabric.modsFolder={}", folder.display()));
+            jvm.insert(0, format!("-Dfabric.modsFolder={}", java_path(folder)));
         }
     }
 
@@ -231,7 +231,7 @@ fn java_executable(context: &LaunchContext) -> Result<PathBuf, AshError> {
 fn logging_argument(context: &LaunchContext) -> Option<String> {
     let client = context.metadata.logging.as_ref()?.client.as_ref()?;
     let path = context.depot_root.join(depot::log_config_path(&client.file.id));
-    Some(client.argument.replace("${path}", &path.display().to_string()))
+    Some(client.argument.replace("${path}", &java_path(&path)))
 }
 
 fn variables(
@@ -241,14 +241,13 @@ fn variables(
     separator: &str,
     assets_index: Option<&str>,
 ) -> HashMap<&'static str, String> {
-    let joined =
-        classpath.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join(separator);
+    let joined = classpath.iter().map(|path| java_path(path)).collect::<Vec<_>>().join(separator);
 
     let mut vars = HashMap::new();
     vars.insert("auth_player_name", context.username.to_owned());
     vars.insert("version_name", context.metadata.id.clone());
-    vars.insert("game_directory", context.game_directory.display().to_string());
-    vars.insert("assets_root", context.depot_root.join("assets").display().to_string());
+    vars.insert("game_directory", java_path(&context.game_directory));
+    vars.insert("assets_root", java_path(&context.depot_root.join("assets")));
     vars.insert("assets_index_name", assets_index.unwrap_or_default().to_owned());
     vars.insert("auth_uuid", context.profile_id.to_owned());
     vars.insert("auth_access_token", context.access_token.to_owned());
@@ -259,18 +258,15 @@ fn variables(
         "version_type",
         context.metadata.version_type.clone().unwrap_or_else(|| "release".to_owned()),
     );
-    vars.insert("natives_directory", natives.display().to_string());
+    vars.insert("natives_directory", java_path(natives));
     vars.insert("launcher_name", LAUNCHER_NAME.to_owned());
     vars.insert("launcher_version", env!("CARGO_PKG_VERSION").to_owned());
     vars.insert("classpath", joined);
     vars.insert("classpath_separator", separator.to_owned());
-    vars.insert("library_directory", context.depot_root.join("libraries").display().to_string());
+    vars.insert("library_directory", java_path(&context.depot_root.join("libraries")));
 
     // Pre-1.13 shapes. Harmless on modern versions, which never ask.
-    vars.insert(
-        "game_assets",
-        context.depot_root.join("assets/virtual/legacy").display().to_string(),
-    );
+    vars.insert("game_assets", java_path(&context.depot_root.join("assets/virtual/legacy")));
     vars.insert("auth_session", format!("token:{}:{}", context.access_token, context.profile_id));
     vars.insert("user_properties", "{}".to_owned());
 
@@ -341,9 +337,52 @@ fn substitute(value: &str, variables: &HashMap<&'static str, String>) -> String 
     out
 }
 
+/// A path as the game's Java can read it, for anything ash puts on its
+/// command line.
+///
+/// Windows has a "verbatim" form of a path, `\\?\C:\...`, which some of its
+/// own APIs hand back - Tauri's resource directory is one, and the installed
+/// launcher's client jars sit under it. Rust reads that form; Java does not.
+/// 1.8.9's Java 8 refused `-Dfabric.addMods` outright with "Illegal character
+/// [?] in path", and the game never started. So the prefix comes off here,
+/// once, for every path: `\\?\C:\x` becomes `C:\x`, and `\\?\UNC\server\x`
+/// becomes `\\server\x`. Anything else is passed through as it is.
+fn java_path(path: &Path) -> String {
+    let shown = path.display().to_string();
+    if let Some(share) = shown.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{share}");
+    }
+    if let Some(local) = shown.strip_prefix(r"\\?\") {
+        return local.to_owned();
+    }
+    shown
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_verbatim_drive_path_reaches_java_without_its_prefix() {
+        assert_eq!(
+            java_path(Path::new(r"\\?\C:\Program Files\ash\client\ash-client-1.8.9.jar")),
+            r"C:\Program Files\ash\client\ash-client-1.8.9.jar"
+        );
+    }
+
+    #[test]
+    fn a_verbatim_network_path_reaches_java_as_a_plain_one() {
+        assert_eq!(
+            java_path(Path::new(r"\\?\UNC\server\share\ash.jar")),
+            r"\\server\share\ash.jar"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_path_is_passed_through_as_it_is() {
+        assert_eq!(java_path(Path::new(r"C:\Users\me\ash.jar")), r"C:\Users\me\ash.jar");
+        assert_eq!(java_path(Path::new("/home/me/ash.jar")), "/home/me/ash.jar");
+    }
 
     fn vars() -> HashMap<&'static str, String> {
         let mut vars = HashMap::new();

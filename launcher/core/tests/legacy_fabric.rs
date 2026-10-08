@@ -597,6 +597,46 @@ async fn the_api_reaches_the_loader_by_path_and_the_classpath_survives() {
     );
 }
 
+/// An installed ash on Windows finds its client jars under a resource
+/// directory Windows gives in its verbatim form, `\\?\C:\...`. Handed to the
+/// game like that, 1.8.9's Java 8 refused `fabric.addMods` with "Illegal
+/// character [?] in path" and the game never started. No argument may carry
+/// the prefix, and the client jar must arrive as a plain drive path.
+#[cfg(windows)]
+#[tokio::test]
+async fn an_installation_in_verbatim_form_reaches_java_as_plain_paths() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let mut config = Config { loaders: pins(), ..Config::rooted_at(tmp.path()) };
+    let plain = config.client_root.clone();
+    config.client_root = std::path::PathBuf::from(format!(r"\\?\{}", plain.display()));
+    install_ash_client(&config.client_root);
+    let http = serving();
+    let f = Fixture {
+        ash: Ash::new(
+            config,
+            Arc::clone(&http) as Arc<dyn HttpPort>,
+            InMemoryCredentialStore::new(),
+            FakeProcessPort::new() as Arc<dyn ProcessPort>,
+            FakeServerPort::new(),
+            "test-client",
+        ),
+        http,
+        tmp,
+    };
+    let id = f.modded().await;
+
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
+
+    for argument in &view.args {
+        assert!(!argument.contains(r"\\?\"), "a verbatim path reached the game: {argument}");
+    }
+    let added = property(&view.args, "fabric.addMods").expect("ash's jars were not handed over");
+    assert!(
+        added.contains(&plain.join(ASH_CLIENT).display().to_string()),
+        "ash's client is not handed over by its plain path: {added}"
+    );
+}
+
 // ---- and vanilla 1.8.9 is untouched -------------------------------------------
 
 #[tokio::test]
