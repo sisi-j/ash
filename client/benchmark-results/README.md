@@ -87,3 +87,18 @@ The same laptop, back to back in one sitting, with faster clouds on throughout a
 - **The scan's own section went** from 7.1% and 7.7% of the frame to under the profile's 1% floor.
 - **The gain is more than the section's share.** The scan saved about 0.23 ms a frame where its section was about 0.15 ms. Most likely the rest is the garbage the scan made every frame, which the collector no longer has to clear; that is not measured.
 - **This scene is its best case.** The camera turns on the spot, so it never leaves its block and the answer is always reused. A player walking moves into a new block a few times a second, and each move costs one scan, as before.
+
+### Faster chunk search (#104), not shipped, 8 October 2026
+
+The same laptop, back to back in one sitting, with faster clouds and faster view scan on throughout. The candidate kept each section's six neighbours instead of looking them up with five integer divisions, tested each frustum plane from its one deciding corner, and kept the search's list of directions instead of copying it per section. It found exactly the game's sections, in the game's order.
+
+| Run | Faster chunk search | Average | Uncertainty | 1% low | Terrain setup's share |
+| --- | --- | --- | --- | --- | --- |
+| `1.8.9-search-off-20261008-023649` | off | 588.1 FPS | ±0.8% | 254.8 FPS | 17.2% |
+| `1.8.9-search-on-20261008-024028` | on | 596.6 FPS | ±0.8% | 260.8 FPS | 17.3% |
+| `1.8.9-search-off-20261008-024406` | off | 595.6 FPS | ±1.4% | 264.2 FPS | 16.5% |
+| `1.8.9-search-on-20261008-024744` | on | 589.4 FPS | ±1.0% | 257.8 FPS | 17.3% |
+
+- **No gain.** The two settings overlap, and terrain setup's share did not move, so the candidate was not shipped. The spec ships an optimisation only on a measured gain.
+- **What it rules out.** The neighbour lookups, the frustum tests and the copied directions are not where the search's time goes.
+- **Where it points instead.** A flight recording of the search (`-Pbench.jfr`) put almost every sample at the step that makes each newly reached section's record: a new object, a new set of directions copied from its parent's, and a new link in the queue. That is the next thing to try, and to measure first.

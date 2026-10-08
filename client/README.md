@@ -232,6 +232,14 @@ The log's last lines say the same in one sentence.
 own settings file, written on the first run. The result records every setting,
 so a run with a feature off is never mistaken for one with it on.
 
+**Inside a section:** the profile says how much of the frame a section takes,
+not which code inside it. `-Pbench.jfr=<file>` also records the run with Java
+Flight Recorder, whose samples name the methods and lines. Read them with the
+JDK's `jfr` tool or `jdk.jfr.consumer`. The game's own code is heavily
+inlined, so samples can pile up on one line of a hot loop; treat the loop,
+not the line, as the cost. A recorded run's frame times are not comparable
+with a plain one's, so don't keep its results.
+
 ## Mixins, and what happens when one stops matching
 
 A feature whose mixin does not land is left out and reported rather than
