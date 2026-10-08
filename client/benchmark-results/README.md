@@ -153,3 +153,26 @@ Every feature is level.
 - one run with everything on, which snaplook and the ping readout leaned on.
 
 None depended on a feature, and nothing recorded explains them. In the second sitting, every run drew 246 to 255 sections, logged at its end, and none came out fast. So the fast runs left out remain unexplained; if they come back, the section count is the first thing to compare.
+
+## Lithium on 1.21.11 (#44), 8 October 2026
+
+The same laptop, in one sitting: Lithium `0.21.4+mc1.21.11` off, on, off, on. First in singleplayer, then on a vanilla dedicated server on this machine (127.0.0.1, `-Pbench.server`), each after a throwaway warm-up run. ash's features were on their defaults throughout. Only the summaries are committed.
+
+| Run | Lithium | Average | Uncertainty | 1% low |
+| --- | --- | --- | --- | --- |
+| singleplayer, first pair | off | 626.1 FPS | ±0.5% | 255.8 FPS |
+| | on | 627.1 FPS | ±1.1% | 248.1 FPS |
+| singleplayer, second pair | off | 656.5 FPS | ±0.9% | 274.6 FPS |
+| | on | 671.5 FPS | ±0.6% | 275.5 FPS |
+| server, first pair | off | 637.1 FPS | ±0.6% | 259.6 FPS |
+| | on | 627.3 FPS | ±0.8% | 244.6 FPS |
+| server, second pair | off | 622.2 FPS | ±0.5% | 252.8 FPS |
+| | on | 644.4 FPS | ±0.7% | 266.3 FPS |
+
+The files, in the table's order:
+- `1.21.11-lithium-sp-off-20261008-141642`, `-sp-on-20261008-142023`, `-sp-off-20261008-142450`, `-sp-on-20261008-142935`;
+- `1.21.11-lithium-server-off-20261008-143654`, `-server-on-20261008-144031`, `-server-off-20261008-144402`, `-server-on-20261008-144749`.
+
+- **No measured gain.** Pair by pair, Lithium moved the frame rate by +0.2% and +2.3% in singleplayer, and by -1.5% and +3.6% on the server. Averaged, it's +1.2% and +1.0%, inside the ±3% the spec counts as no change, with pairs that disagree with each other by more than either moves.
+- **What this doesn't measure.** It measures frame time only. Lithium's own claims are about the built-in server's tick time, which a laptop with cores to spare doesn't feel as frames. Tick time on a weaker machine is a different question from the one #44 asked.
+- **What follows.** Lithium isn't bundled, and ADR-0013 is amended with these numbers.

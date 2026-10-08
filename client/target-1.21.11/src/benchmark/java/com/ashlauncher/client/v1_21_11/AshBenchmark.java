@@ -16,6 +16,9 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.InactivityFpsLimit;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
+import net.minecraft.client.gui.screens.ConnectScreen;
+import net.minecraft.client.multiplayer.ServerData;
+import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
@@ -51,6 +54,23 @@ public final class AshBenchmark implements ClientModInitializer {
     /** The world's folder, deleted and made afresh each run, so every run generates the same terrain. */
     private static final String WORLD = "ash-benchmark";
 
+    /**
+     * {@code -Pbench.server=host:port}: join that server for the scene instead
+     * of making a world - for Lithium (#44), whose gains its own documentation
+     * puts in singleplayer's built-in server, to be measured on a server too.
+     * Empty for singleplayer.
+     */
+    private static final String SERVER = System.getProperty("ash.bench.server", "");
+
+    private static final boolean onServer = !SERVER.isEmpty();
+
+    /**
+     * {@code -Pbench.lithium}: the run must have Lithium loaded, and without
+     * it must not. A run that quietly measured the wrong one would decide
+     * #44 on nothing.
+     */
+    private static final boolean LITHIUM_WANTED = Boolean.getBoolean("ash.bench.lithium");
+
     /** The game's own "unlimited" frame rate. */
     private static final int UNLIMITED = 260;
 
@@ -67,6 +87,14 @@ public final class AshBenchmark implements ClientModInitializer {
     }
 
     private static void start() {
+        boolean lithium = FabricLoader.getInstance().isModLoaded("lithium");
+        if (lithium != LITHIUM_WANTED) {
+            say("Lithium is " + (lithium ? "" : "not ") + "loaded, and this run asked for it " + (LITHIUM_WANTED ? "on" : "off")
+                    + " - stopping rather than measure the wrong thing");
+            Minecraft.getInstance().execute(() -> Minecraft.getInstance().stop());
+            return;
+        }
+        say("Lithium " + (lithium ? "loaded" : "not loaded") + (onServer ? ", on the server at " + SERVER : ", in singleplayer"));
         Minecraft client = waitFor("the title screen", () -> {
             Minecraft c = Minecraft.getInstance();
             return c != null && c.screen != null ? c : null;
@@ -83,6 +111,11 @@ public final class AshBenchmark implements ClientModInitializer {
             options.guiScale().set(Scene.GUI_SCALE);
             options.fullscreen().set(false);
             options.save();
+            if (onServer) {
+                ConnectScreen.startConnecting(client.screen, client, ServerAddress.parseString(SERVER),
+                        new ServerData("ash benchmark", SERVER, ServerData.Type.OTHER), false, null);
+                return;
+            }
             try {
                 LevelStorageSource levels = client.getLevelSource();
                 if (levels.levelExists(WORLD)) {
@@ -100,7 +133,29 @@ public final class AshBenchmark implements ClientModInitializer {
                     new WorldOptions(Scene.SEED, true, false), WorldPresets::createNormalWorldDimensions, client.screen);
         });
         waitFor("the world", () -> client.level != null && client.player != null && client.screen == null
-                && client.getSingleplayerServer() != null ? client : null);
+                && (onServer || client.getSingleplayerServer() != null) ? client : null);
+
+        if (onServer) {
+            // The same scene, set by the same means a player has: commands,
+            // which the server's ops.json lets this player run. The server's
+            // own properties make it spectator, peaceful and seed 4242.
+            client.execute(() -> {
+                for (String command : new String[] {
+                    "gamerule advance_time false",
+                    "gamerule advance_weather false",
+                    "gamerule spawn_mobs false",
+                    "time set " + Scene.TIME_OF_DAY,
+                    "weather clear 1000000",
+                    "tp @s " + Scene.X + " " + Scene.Y + " " + Scene.Z + " 0 " + Scene.PITCH,
+                }) {
+                    client.getConnection().sendCommand(command);
+                }
+            });
+            say("on the server; warming up for at least " + Scene.WARM_UP_SECONDS + " s, until the world settles, then "
+                    + Scene.PASSES + " passes of " + Scene.PASS_SECONDS + " s. Leave the window alone.");
+            run = Benchmark.ofScene(0);
+            return;
+        }
 
         IntegratedServer server = client.getSingleplayerServer();
         server.execute(() -> {
@@ -154,6 +209,11 @@ public final class AshBenchmark implements ClientModInitializer {
      * frames a second as the server went on generating.
      */
     private static boolean settled(Minecraft client) {
+        if (onServer) {
+            // A remote server's chunk work cannot be seen from here; the
+            // sections in view all built, after the warm-up, is what can.
+            return client.levelRenderer.hasRenderedAllSections();
+        }
         IntegratedServer server = client.getSingleplayerServer();
         return server != null && server.overworld().getChunkSource().getPendingTasksCount() == 0
                 && client.levelRenderer.hasRenderedAllSections();

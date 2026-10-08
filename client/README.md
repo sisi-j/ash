@@ -232,6 +232,26 @@ The log's last lines say the same in one sentence.
 own settings file, written on the first run. The result records every setting,
 so a run with a feature off is never mistaken for one with it on.
 
+**Lithium (1.21.11, #44):** `-Pbench.lithium` puts the pinned Lithium jar
+(`gradle.properties`, checked against its SHA-512) in the run's `mods`.
+Without it, the jar is taken out. The run refuses to measure if Lithium's
+presence isn't what was asked for.
+
+**On a server (1.21.11):** the scene can be played on a server rather than in
+singleplayer.
+1. Run `./gradlew :target-1.21.11:prepareBenchmarkServer`. It fetches Mojang's
+   own dedicated server, checked against the version manifest, into
+   `target-1.21.11/build/run/benchmark-server`, and configures it: 127.0.0.1
+   only, offline mode, seed 4242, spectator, peaceful, with the benchmark's
+   player as an operator.
+2. Start it from that folder with `java -jar server.jar nogui`.
+3. Run the benchmark with `-Pbench.server=127.0.0.1:25599`. It joins as
+   `AshBench` and sets the scene by command: time, weather, rules and the
+   spot.
+
+The settle check can't see a remote server's chunk work, so it waits for the
+sections in view instead.
+
 **Inside a section:** the profile says how much of the frame a section takes,
 not which code inside it. `-Pbench.jfr=<file>` also records the run with Java
 Flight Recorder, whose samples name the methods and lines. Read them with the
