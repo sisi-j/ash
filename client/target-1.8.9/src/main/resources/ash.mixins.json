@@ -20,7 +20,8 @@
     "MinecraftClientServerMixin",
     "WorldRendererCloudsMixin",
     "WorldRendererViewScanMixin",
-    "WorldViewScanMixin"
+    "WorldViewScanMixin",
+    "AchievementNotificationPanelMixin"
   ],
   "injectors": {
     "defaultRequire": 0
