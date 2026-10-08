@@ -176,3 +176,19 @@ The files, in the table's order:
 - **No measured gain.** Pair by pair, Lithium moved the frame rate by +0.2% and +2.3% in singleplayer, and by -1.5% and +3.6% on the server. Averaged, it's +1.2% and +1.0%, inside the ±3% the spec counts as no change, with pairs that disagree with each other by more than either moves.
 - **What this doesn't measure.** It measures frame time only. Lithium's own claims are about the built-in server's tick time, which a laptop with cores to spare doesn't feel as frames. Tick time on a weaker machine is a different question from the one #44 asked.
 - **What follows.** Lithium isn't bundled, and ADR-0013 is amended with these numbers.
+
+### Faster clouds writes its own vertices, 8 October 2026
+
+Faster clouds as merged in #106, which builds the clouds with the game's buffer builder, against this version, which writes the same bytes itself. Both are on, with everything else on its defaults. The builds ran alternately in one sitting from two checkouts with identical game options, after a throwaway warm-up. Only the summaries are committed.
+
+| Run | Faster clouds | Average | Uncertainty | 1% low | Clouds' share |
+| --- | --- | --- | --- | --- | --- |
+| `1.8.9-clouds-builder-20261008-152837` | builder | 502.4 FPS | ±1.6% | 231.3 FPS | 9.9% |
+| `1.8.9-clouds-writer-20261008-153217` | writer | 572.0 FPS | ±1.2% | 245.9 FPS | 4.7% |
+| `1.8.9-clouds-builder-20261008-153557` | builder | 510.7 FPS | ±0.7% | 230.7 FPS | 9.9% |
+| `1.8.9-clouds-writer-20261008-153937` | writer | 560.9 FPS | ±0.9% | 248.8 FPS | 4.6% |
+
+- **11.8% faster than the builder version**, against at most 4.0% for twice the combined uncertainty of any pair.
+- **The clouds' share of the frame halved again**, from 9.9% to 4.7%.
+- **The gain is more than the share predicts**, as with faster view scan, and the rest isn't measured.
+- **The mark stays green.** Faster clouds' FPS mark rests on the builder version, which already raised the frame rate.
