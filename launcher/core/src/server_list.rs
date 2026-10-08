@@ -1,8 +1,9 @@
 //! An instance's servers: the game's own list, and each server's status.
 //!
 //! The list is `servers.dat` in the game directory, written by the game's
-//! multiplayer screen in the player's own order. It is the player's file and
-//! the game's, so ash only reads it. See `docs/research/0008`.
+//! multiplayer screen in the player's own order (`docs/research/0008`). ash
+//! reads it, and changes it only while the game is closed, keeping every byte
+//! it does not change: see *changing the list* below, and ADR-0019.
 //!
 //! The status is the game's own server-list ping: a handshake naming the
 //! instance's protocol, then a status request, answered with JSON. ash sends
@@ -130,11 +131,11 @@ impl Nbt<'_> {
         Ok(i32::from_be_bytes([b[0], b[1], b[2], b[3]]))
     }
 
-    /// Java's modified UTF-8. Lossy, so a name with a character Rust would
-    /// spell differently still reads rather than failing the whole list.
+    /// Java's modified UTF-8. Lossy, so a name with a malformed character
+    /// still reads rather than failing the whole list.
     fn string(&mut self) -> Result<String, ()> {
         let len = self.u16()? as usize;
-        Ok(String::from_utf8_lossy(self.bytes(len)?).into_owned())
+        Ok(read_modified_utf8(self.bytes(len)?))
     }
 
     fn servers(&mut self) -> Result<Vec<ServerEntry>, ()> {
@@ -251,6 +252,412 @@ impl Nbt<'_> {
             _ => Err(()),
         }
     }
+}
+
+// ---- changing the list --------------------------------------------------------
+
+/// The longest name and address the game's own Add Server screen accepts.
+/// Kept to, so a server ash adds can be edited in the game afterwards.
+const MAX_NAME: usize = 32;
+const MAX_ADDRESS: usize = 128;
+
+/// What the game calls a server the player gave no name.
+const DEFAULT_NAME: &str = "Minecraft Server";
+
+/// One change to an instance's server list, made the way the game's own
+/// multiplayer screen makes it.
+///
+/// Every change but adding names the server it is about twice: by its
+/// position among the servers the game shows, in the game's order, and by
+/// the address expected there. If the file no longer has that address there,
+/// the change is refused rather than made to whatever is there now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Change {
+    /// Put a server after the last one the game shows, where the game puts a
+    /// new one.
+    Add {
+        name: String,
+        address: String,
+    },
+    Edit {
+        position: usize,
+        expected: String,
+        name: String,
+        address: String,
+    },
+    Remove {
+        position: usize,
+        expected: String,
+    },
+    /// Move a server so that it is shown at `to`.
+    Move {
+        position: usize,
+        expected: String,
+        to: usize,
+    },
+}
+
+/// Why a change was not made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Refused {
+    /// The file is there and could not be read: it is left alone.
+    Unreadable,
+    /// The list is not what the change was made against.
+    Changed,
+    InvalidName,
+    InvalidAddress,
+}
+
+/// Makes `change` to the `servers.dat` in `game_directory`, and keeps
+/// everything else in the file exactly as it was: every other entry byte for
+/// byte, hidden ones included, and every tag ash does not know - an icon, a
+/// resource-pack choice, whatever a later version adds. Within an edited
+/// entry only the name and the address change.
+///
+/// Saved as the game saves it: the old file kept as `servers.dat_old`, and
+/// the new one written beside it and moved into place, so a crash halfway
+/// leaves one or the other whole.
+pub(crate) fn change(game_directory: &Path, change: Change) -> Result<(), ChangeError> {
+    let path = game_directory.join(SERVERS_FILE);
+    let raw = match std::fs::read(&path) {
+        Ok(raw) => Some(raw),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+        Err(e) => return Err(ChangeError::Io(e)),
+    };
+    let updated = match &raw {
+        Some(raw) => {
+            let layout = Layout::of(raw).map_err(|_| ChangeError::Refused(Refused::Unreadable))?;
+            layout.apply(raw, change)?
+        }
+        None => match change {
+            Change::Add { name, address } => fresh_file(&entry_bytes(&name, &address)?),
+            // No file is a list with nothing in it, so nothing is where the
+            // change expected it.
+            _ => return Err(ChangeError::Refused(Refused::Changed)),
+        },
+    };
+    std::fs::create_dir_all(game_directory).map_err(ChangeError::Io)?;
+    if raw.is_some() {
+        std::fs::copy(&path, game_directory.join(format!("{SERVERS_FILE}_old")))
+            .map_err(ChangeError::Io)?;
+    }
+    let temporary = game_directory.join(format!("{SERVERS_FILE}.ash-tmp"));
+    std::fs::write(&temporary, &updated).map_err(ChangeError::Io)?;
+    std::fs::rename(&temporary, &path).map_err(ChangeError::Io)
+}
+
+#[derive(Debug)]
+pub(crate) enum ChangeError {
+    Refused(Refused),
+    Io(io::Error),
+}
+
+impl From<Refused> for ChangeError {
+    fn from(refused: Refused) -> Self {
+        ChangeError::Refused(refused)
+    }
+}
+
+/// The name and address as the game will be given them, or why not. An
+/// empty name becomes the game's own default, as in its Add Server screen.
+pub(crate) fn tidy(name: &str, address: &str) -> Result<(String, String), Refused> {
+    let name = name.trim();
+    let name = if name.is_empty() { DEFAULT_NAME } else { name };
+    // Counted as the game counts a text field: in UTF-16 units.
+    if name.encode_utf16().count() > MAX_NAME {
+        return Err(Refused::InvalidName);
+    }
+    let address = address.trim();
+    if address.is_empty()
+        || address.encode_utf16().count() > MAX_ADDRESS
+        || address.chars().any(char::is_whitespace)
+        || Address::parse(address).is_none()
+    {
+        return Err(Refused::InvalidAddress);
+    }
+    Ok((name.to_owned(), address.to_owned()))
+}
+
+/// Where things are in a `servers.dat`, by byte.
+struct Layout {
+    /// The root compound's closing `TAG_END`.
+    root_end: usize,
+    list: Option<ListAt>,
+}
+
+struct ListAt {
+    /// The list's element type byte, then its four-byte length.
+    element_at: usize,
+    entries: Vec<EntryAt>,
+    /// Just past the last entry: where the list ends.
+    end: usize,
+}
+
+struct EntryAt {
+    /// The entry compound's payload, its closing `TAG_END` included.
+    start: usize,
+    end: usize,
+    /// As the game would show it: `None` for an entry it does not show.
+    shown_address: Option<String>,
+}
+
+impl Layout {
+    fn of(raw: &[u8]) -> Result<Self, ()> {
+        let mut nbt = Nbt { raw, at: 0 };
+        if nbt.u8()? != TAG_COMPOUND {
+            return Err(());
+        }
+        nbt.string()?;
+        let mut list = None;
+        loop {
+            let tag_at = nbt.at;
+            let tag = nbt.u8()?;
+            if tag == TAG_END {
+                return Ok(Layout { root_end: tag_at, list });
+            }
+            let name = nbt.string()?;
+            if name == "servers" && tag == TAG_LIST && list.is_none() {
+                list = Some(nbt.list_at()?);
+            } else {
+                nbt.skip(tag, 0)?;
+            }
+        }
+    }
+
+    fn apply(&self, raw: &[u8], change: Change) -> Result<Vec<u8>, ChangeError> {
+        let Some(list) = &self.list else {
+            return match change {
+                Change::Add { name, address } => {
+                    let entry = entry_bytes(&name, &address)?;
+                    let mut out = raw[..self.root_end].to_vec();
+                    out.extend(list_tag(&[entry]));
+                    out.extend_from_slice(&raw[self.root_end..]);
+                    Ok(out)
+                }
+                _ => Err(Refused::Changed.into()),
+            };
+        };
+        let mut entries: Vec<Vec<u8>> =
+            list.entries.iter().map(|e| raw[e.start..e.end].to_vec()).collect();
+        // Where each server the game shows is, among all the entries.
+        let shown: Vec<usize> =
+            (0..list.entries.len()).filter(|&i| list.entries[i].shown_address.is_some()).collect();
+        let at = |position: usize, expected: &str| -> Result<usize, Refused> {
+            let index = *shown.get(position).ok_or(Refused::Changed)?;
+            match &list.entries[index].shown_address {
+                Some(address) if address == expected => Ok(index),
+                _ => Err(Refused::Changed),
+            }
+        };
+        match change {
+            Change::Add { name, address } => {
+                let after_last_shown = shown.last().map_or(entries.len(), |&i| i + 1);
+                entries.insert(after_last_shown, entry_bytes(&name, &address)?);
+            }
+            Change::Edit { position, expected, name, address } => {
+                let index = at(position, &expected)?;
+                let (name, address) = tidy(&name, &address)?;
+                entries[index] =
+                    edited(&entries[index], &name, &address).map_err(|_| Refused::Unreadable)?;
+            }
+            Change::Remove { position, expected } => {
+                let index = at(position, &expected)?;
+                entries.remove(index);
+            }
+            Change::Move { position, expected, to } => {
+                let index = at(position, &expected)?;
+                if to >= shown.len() {
+                    return Err(Refused::Changed.into());
+                }
+                let moving = entries.remove(index);
+                let rest: Vec<usize> = shown.iter().copied().filter(|&i| i != index).collect();
+                // Before the server now shown at `to`, or after the last shown.
+                let target = match rest.get(to) {
+                    Some(&i) => i,
+                    None => rest.last().map_or(entries.len(), |&i| i + 1),
+                };
+                // Indices past the one taken out have moved back by one.
+                let target = if target > index { target - 1 } else { target };
+                entries.insert(target, moving);
+            }
+        }
+        let mut out = raw[..list.element_at].to_vec();
+        out.push(TAG_COMPOUND);
+        out.extend_from_slice(&(entries.len() as i32).to_be_bytes());
+        for entry in &entries {
+            out.extend_from_slice(entry);
+        }
+        out.extend_from_slice(&raw[list.end..]);
+        Ok(out)
+    }
+}
+
+impl Nbt<'_> {
+    /// The `servers` list, just after its name, by where each entry is.
+    fn list_at(&mut self) -> Result<ListAt, ()> {
+        let element_at = self.at;
+        let element = self.u8()?;
+        let len = self.i32()?;
+        let mut entries = Vec::new();
+        if len > 0 {
+            if element != TAG_COMPOUND {
+                return Err(());
+            }
+            for _ in 0..len {
+                let start = self.at;
+                let shown = self.server()?;
+                entries.push(EntryAt {
+                    start,
+                    end: self.at,
+                    shown_address: shown.map(|s| s.address),
+                });
+            }
+        }
+        Ok(ListAt { element_at, entries, end: self.at })
+    }
+}
+
+/// A new entry's compound payload: its name and address, as the game's own
+/// entry serialiser writes them for a server it has never pinged.
+fn entry_bytes(name: &str, address: &str) -> Result<Vec<u8>, Refused> {
+    let (name, address) = tidy(name, address)?;
+    let mut out = Vec::new();
+    string_tag(&mut out, "name", &name);
+    string_tag(&mut out, "ip", &address);
+    out.push(TAG_END);
+    Ok(out)
+}
+
+/// An entry's payload with its name and address replaced, and every other
+/// tag in it kept byte for byte, in its place.
+fn edited(entry: &[u8], name: &str, address: &str) -> Result<Vec<u8>, ()> {
+    let mut nbt = Nbt { raw: entry, at: 0 };
+    let mut out = Vec::new();
+    let (mut named, mut addressed) = (false, false);
+    loop {
+        let start = nbt.at;
+        let tag = nbt.u8()?;
+        if tag == TAG_END {
+            break;
+        }
+        let key = nbt.string()?;
+        nbt.skip(tag, 1)?;
+        match (tag, key.as_str()) {
+            (TAG_STRING, "name") if !named => {
+                string_tag(&mut out, "name", name);
+                named = true;
+            }
+            (TAG_STRING, "ip") if !addressed => {
+                string_tag(&mut out, "ip", address);
+                addressed = true;
+            }
+            _ => out.extend_from_slice(&entry[start..nbt.at]),
+        }
+    }
+    if !named {
+        string_tag(&mut out, "name", name);
+    }
+    if !addressed {
+        string_tag(&mut out, "ip", address);
+    }
+    out.push(TAG_END);
+    Ok(out)
+}
+
+/// A whole `servers.dat` holding one entry, as the game writes its first.
+fn fresh_file(entry: &[u8]) -> Vec<u8> {
+    let mut out = vec![TAG_COMPOUND];
+    write_modified_utf8(&mut out, "");
+    out.extend(list_tag(&[entry.to_vec()]));
+    out.push(TAG_END);
+    out
+}
+
+fn list_tag(entries: &[Vec<u8>]) -> Vec<u8> {
+    let mut out = vec![TAG_LIST];
+    write_modified_utf8(&mut out, "servers");
+    out.push(TAG_COMPOUND);
+    out.extend_from_slice(&(entries.len() as i32).to_be_bytes());
+    for entry in entries {
+        out.extend_from_slice(entry);
+    }
+    out
+}
+
+fn string_tag(out: &mut Vec<u8>, key: &str, value: &str) {
+    out.push(TAG_STRING);
+    write_modified_utf8(out, key);
+    write_modified_utf8(out, value);
+}
+
+/// Java's modified UTF-8 read back: its one-, two- and three-byte forms give
+/// UTF-16 units, and a character past the basic plane is the pair of halves
+/// it was written as. Read as plain UTF-8, such a character came out as
+/// six replacement marks: a server named with an emoji in the game showed
+/// garbled in the launcher. Anything malformed becomes one replacement mark.
+fn read_modified_utf8(bytes: &[u8]) -> String {
+    let mut units = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        let continuation =
+            |at: usize| bytes.get(at).filter(|&&c| c & 0xC0 == 0x80).map(|&c| u16::from(c & 0x3F));
+        if b & 0x80 == 0 {
+            units.push(u16::from(b));
+            i += 1;
+        } else if b & 0xE0 == 0xC0 {
+            match continuation(i + 1) {
+                Some(low) => {
+                    units.push((u16::from(b & 0x1F) << 6) | low);
+                    i += 2;
+                }
+                None => {
+                    units.push(0xFFFD);
+                    i += 1;
+                }
+            }
+        } else if b & 0xF0 == 0xE0 {
+            match (continuation(i + 1), continuation(i + 2)) {
+                (Some(mid), Some(low)) => {
+                    units.push((u16::from(b & 0x0F) << 12) | (mid << 6) | low);
+                    i += 3;
+                }
+                _ => {
+                    units.push(0xFFFD);
+                    i += 1;
+                }
+            }
+        } else {
+            units.push(0xFFFD);
+            i += 1;
+        }
+    }
+    String::from_utf16_lossy(&units)
+}
+
+/// Java's modified UTF-8, as `DataOutput.writeUTF` writes it and the game
+/// reads it: a two-byte length, then UTF-8 but for the null character, which
+/// takes two bytes, and characters past the basic plane, which go as their
+/// two UTF-16 halves of three bytes each. Names and addresses are capped far
+/// below the length's 65535 bytes.
+fn write_modified_utf8(out: &mut Vec<u8>, text: &str) {
+    let mut bytes = Vec::new();
+    for unit in text.encode_utf16() {
+        match unit {
+            0x0001..=0x007F => bytes.push(unit as u8),
+            0x0000 | 0x0080..=0x07FF => {
+                bytes.push(0xC0 | (unit >> 6) as u8);
+                bytes.push(0x80 | (unit & 0x3F) as u8);
+            }
+            _ => {
+                bytes.push(0xE0 | (unit >> 12) as u8);
+                bytes.push(0x80 | ((unit >> 6) & 0x3F) as u8);
+                bytes.push(0x80 | (unit & 0x3F) as u8);
+            }
+        }
+    }
+    out.extend_from_slice(&(bytes.len() as u16).to_be_bytes());
+    out.extend_from_slice(&bytes);
 }
 
 // ---- addresses --------------------------------------------------------------

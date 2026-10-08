@@ -125,6 +125,8 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
         context.takeScreenshot("ash-loaded");
 
+        serverListAshWroteLoadsInTheGame(context);
+
         // Under Xvfb the window never has focus, and a client that pauses
         // itself for that is not a client in a world.
         context.runOnClient(client -> client.options.pauseOnLostFocus = false);
@@ -162,6 +164,49 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             moveReadoutsWorks(context);
             panelIsCrispAtEveryGuiScale(context);
             ashSettingsWork(context);
+        }
+    }
+
+    /**
+     * A server list ash's launcher wrote loads in the game's own code as ash
+     * meant it. The file is the launcher's test fixture: a list 1.21.11 itself
+     * wrote, hidden entry and all, with a server added - its name past the
+     * basic plane - one edited, one moved and one removed by the launcher. The
+     * game must read every name and address, in order, keep Hypixel's icon,
+     * and still keep the hidden entry hidden.
+     */
+    private static void serverListAshWroteLoadsInTheGame(ClientGameTestContext context) {
+        Path written = Path.of(System.getProperty("ash.test.serversChangedByAsh"));
+        List<String> seen = context.computeOnClient(client -> {
+            Path list = client.gameDirectory.toPath().resolve("servers.dat");
+            try {
+                byte[] before = Files.exists(list) ? Files.readAllBytes(list) : null;
+                Files.copy(written, list, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                net.minecraft.client.multiplayer.ServerList servers = new net.minecraft.client.multiplayer.ServerList(client);
+                servers.load();
+                List<String> entries = new ArrayList<>();
+                for (int i = 0; i < servers.size(); i++) {
+                    net.minecraft.client.multiplayer.ServerData server = servers.get(i);
+                    entries.add(server.name + " | " + server.ip + " | icon " + (server.getIconBytes() != null));
+                }
+                entries.add("hidden kept: " + (servers.get("hidden.example.com") != null));
+                if (before != null) {
+                    Files.write(list, before);
+                } else {
+                    Files.delete(list);
+                }
+                return entries;
+            } catch (IOException unreadable) {
+                throw new AssertionError("could not put ash's server list in place", unreadable);
+            }
+        });
+        List<String> wanted = List.of(
+                "ash ★ 😀 test | play.example.net:25570 | icon false",
+                "Hypixel | mc.hypixel.net | icon true",
+                "Local, renamed | localhost:25571 | icon false",
+                "hidden kept: true");
+        if (!seen.equals(wanted)) {
+            throw new AssertionError("the game read the server list ash wrote as " + seen + ", not " + wanted);
         }
     }
 

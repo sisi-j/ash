@@ -327,8 +327,22 @@ export const api = {
   /** As `launch`, with the player's own mods left out this once. The setting is not changed. */
   launchWithoutThirdPartyMods: (id: InstanceId) =>
     invoke<void>("launch_without_third_party_mods", { id }),
-  /** The instance's servers, in the player's own order. */
+  /** The instance's servers, the most recently joined first, then the rest in the game's order. */
   servers: (id: InstanceId) => invoke<ServerEntry[]>("servers", { id }),
+  /** The servers in the game's own order: what `position` counts in for the changes below. */
+  serverList: (id: InstanceId) => invoke<ServerEntry[]>("server_list", { id }),
+  /**
+   * Changes to the game's own server list. Refused while the instance's game runs, and refused
+   * if the server at `position` is no longer `expected` - read the list again then.
+   */
+  addServer: (id: InstanceId, name: string, address: string) =>
+    invoke<void>("add_server", { id, name, address }),
+  editServer: (id: InstanceId, position: number, expected: string, name: string, address: string) =>
+    invoke<void>("edit_server", { id, position, expected, name, address }),
+  removeServer: (id: InstanceId, position: number, expected: string) =>
+    invoke<void>("remove_server", { id, position, expected }),
+  moveServer: (id: InstanceId, position: number, expected: string, to: number) =>
+    invoke<void>("move_server", { id, position, expected, to }),
   /** Asks the server at most once a minute; sooner, it answers with the last reply. */
   serverStatus: (id: InstanceId, address: string) =>
     invoke<ServerStatus>("server_status", { id, address }),

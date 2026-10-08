@@ -759,6 +759,24 @@ async fn ash_keeps_running_while_the_game_does() {
 }
 
 #[tokio::test]
+async fn the_server_list_is_left_to_the_game_while_it_runs() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.launch(&id).await;
+    let list = f.ash.game_directory(&id).join("servers.dat");
+
+    // The game holds its list in memory and writes it back over the file, so
+    // a change made under it would be lost.
+    let refused = f.ash.add_server(&id, "Hypixel", "mc.hypixel.net").unwrap_err();
+    assert_eq!(refused.kind(), "server_list_in_use");
+    assert!(!list.exists(), "ash wrote the list while the game had it");
+
+    f.ash.stop_game(&id);
+    f.ash.add_server(&id, "Hypixel", "mc.hypixel.net").expect("added once the game had gone");
+    assert_eq!(f.ash.server_list(&id).unwrap()[0].address, "mc.hypixel.net");
+}
+
+#[tokio::test]
 async fn stopping_a_game_ends_it() {
     let f = fixture();
     let id = f.ready().await;

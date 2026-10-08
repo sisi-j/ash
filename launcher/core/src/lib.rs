@@ -920,6 +920,106 @@ impl Ash {
     ///
     /// A list or record ash cannot read counts as empty, as the game treats
     /// its own list, and ash's log says where reading stopped.
+    /// The servers the game shows, in the game's own order: the order the
+    /// player edits the list in, and what a change's `position` counts in.
+    /// [`Ash::servers`] puts the most recently joined first instead.
+    pub fn server_list(&self, id: &InstanceId) -> Result<Vec<ServerEntry>, AshError> {
+        self.instance(id)?;
+        server_list::read(&self.game_directory(id)).map_err(|_| AshError::ServerListUnreadable)
+    }
+
+    /// Adds a server after the last one the game shows, as the game's own
+    /// Add Server screen does. An empty name becomes the game's default.
+    pub fn add_server(&self, id: &InstanceId, name: &str, address: &str) -> Result<(), AshError> {
+        self.change_servers(
+            id,
+            server_list::Change::Add { name: name.to_owned(), address: address.to_owned() },
+        )
+    }
+
+    /// Renames a server or changes its address, keeping everything else
+    /// about it - its icon, its resource-pack choice.
+    pub fn edit_server(
+        &self,
+        id: &InstanceId,
+        position: usize,
+        expected: &str,
+        name: &str,
+        address: &str,
+    ) -> Result<(), AshError> {
+        self.change_servers(
+            id,
+            server_list::Change::Edit {
+                position,
+                expected: expected.to_owned(),
+                name: name.to_owned(),
+                address: address.to_owned(),
+            },
+        )
+    }
+
+    pub fn remove_server(
+        &self,
+        id: &InstanceId,
+        position: usize,
+        expected: &str,
+    ) -> Result<(), AshError> {
+        self.change_servers(
+            id,
+            server_list::Change::Remove { position, expected: expected.to_owned() },
+        )
+    }
+
+    /// Moves a server so that the game shows it at `to`.
+    pub fn move_server(
+        &self,
+        id: &InstanceId,
+        position: usize,
+        expected: &str,
+        to: usize,
+    ) -> Result<(), AshError> {
+        self.change_servers(
+            id,
+            server_list::Change::Move { position, expected: expected.to_owned(), to },
+        )
+    }
+
+    /// One change to the game's `servers.dat`, never while the game is
+    /// running: it holds the list in memory and writes it back over the file,
+    /// so a change made underneath it would be lost, or worse, half-kept.
+    fn change_servers(&self, id: &InstanceId, change: server_list::Change) -> Result<(), AshError> {
+        self.instance(id)?;
+        if matches!(self.game_status(id), Some(GameStatus::Running)) {
+            return Err(AshError::ServerListInUse { id: id.as_str().to_owned() });
+        }
+        let what = match &change {
+            server_list::Change::Add { .. } => "add",
+            server_list::Change::Edit { .. } => "edit",
+            server_list::Change::Remove { .. } => "remove",
+            server_list::Change::Move { .. } => "move",
+        };
+        let (name, address) = match &change {
+            server_list::Change::Add { name, address }
+            | server_list::Change::Edit { name, address, .. } => (name.clone(), address.clone()),
+            _ => (String::new(), String::new()),
+        };
+        match server_list::change(&self.game_directory(id), change) {
+            Ok(()) => {
+                self.diagnostics.info("servers-changed", &format!("instance={id} change={what}"));
+                Ok(())
+            }
+            Err(server_list::ChangeError::Refused(refused)) => Err(match refused {
+                server_list::Refused::Unreadable => AshError::ServerListUnreadable,
+                server_list::Refused::Changed => AshError::ServerListChanged,
+                server_list::Refused::InvalidName => AshError::InvalidServerName { name },
+                server_list::Refused::InvalidAddress => AshError::InvalidServerAddress { address },
+            }),
+            Err(server_list::ChangeError::Io(e)) => {
+                Err(AshError::writing("writing the server list")(e))
+            }
+        }
+    }
+
     pub fn servers(&self, id: &InstanceId) -> Result<Vec<ServerEntry>, AshError> {
         self.instance(id)?;
         let game = self.game_directory(id);

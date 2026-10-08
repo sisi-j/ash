@@ -109,6 +109,44 @@ const STATES: State[] = [
       (await page.locator(".servers-card h3").innerText()).startsWith("Servers") ? null : "an instance that has joined nothing is titled as if it had",
   },
   {
+    name: "servers-edit",
+    shows: "Edit servers",
+    reach: (page) => page.locator(".servers-card .server-edit-open").click(),
+    verify: async (page) => {
+      const card = page.locator(".servers-card");
+      const rows = await card.locator(".server-row").count();
+      const firstUp = await card.getByRole("button", { name: "Move Hypixel up" }).isDisabled();
+      const lastDown = await card.getByRole("button", { name: "Move Old SMP down" }).isDisabled();
+      return rows === 3 && firstUp && lastDown
+        ? null
+        : `expected the three servers in the game's order, the ends unable to move past them (${rows} rows)`;
+    },
+  },
+  {
+    name: "servers-add",
+    shows: "play.example.net",
+    reach: async (page) => {
+      await page.locator(".servers-card .server-edit-open").click();
+      await page.getByRole("button", { name: "Add server" }).click();
+      await page.getByLabel("Address").fill("play.example.net");
+      await page.getByRole("button", { name: "Add", exact: true }).click();
+    },
+    verify: async (page) =>
+      (await page.locator(".servers-card .server-row").count()) === 4 ? null : "the added server is not in the list",
+  },
+  {
+    name: "servers-edit-form",
+    shows: "Save",
+    reach: async (page) => {
+      await page.locator(".servers-card .server-edit-open").click();
+      await page.getByRole("button", { name: "Edit Old SMP" }).click();
+    },
+    verify: async (page) =>
+      (await page.getByLabel("Address").inputValue()) === "smp.example.net:25570"
+        ? null
+        : "the form does not start from the server's own address",
+  },
+  {
     name: "servers-join",
     shows: "DOWNLOADING",
     reach: (page) => page.getByRole("button", { name: "Join Hypixel" }).click(),

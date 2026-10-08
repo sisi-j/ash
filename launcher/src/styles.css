@@ -1873,3 +1873,77 @@ button {
   margin: 0;
   color: var(--text-2);
 }
+
+/* Editing an instance's servers: the game's order, each row with its moves. */
+.servers-card h3 .server-edit-open {
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.server-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.server-edit-actions .button-go {
+  margin-left: auto;
+}
+
+.server-edit-row {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+
+.icon-only {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.icon-only .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-only:hover:not(:disabled) {
+  background: var(--fill-2);
+  color: var(--text);
+}
+
+.icon-only:disabled {
+  opacity: 0.35;
+}
+
+.server-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--fill);
+}
+
+.server-form label {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.server-form-actions {
+  display: flex;
+  gap: 6px;
+}

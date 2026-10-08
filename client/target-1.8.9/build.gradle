@@ -58,6 +58,9 @@ loom {
             // noise; on a headless runner it is the whole diagnosis, and
             // this tier only ever runs headless.
             property 'org.lwjgl.util.Debug', 'true'
+            // A server list ash's launcher wrote, for the game's own code to load.
+            property 'ash.test.serversChangedByAsh',
+                    rootProject.file('../launcher/core/tests/fixtures/servers-1.8.9-changed-by-ash.dat').absolutePath
         }
 
         // The frame-time measurement: `./gradlew :target-1.8.9:runBenchmark`,
