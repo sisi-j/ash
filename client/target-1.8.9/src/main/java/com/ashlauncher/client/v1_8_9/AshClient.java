@@ -48,6 +48,7 @@ import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.world.World;
@@ -91,6 +92,9 @@ public final class AshClient implements ClientModInitializer {
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
     private static final String FASTER_CLOUDS_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.WorldRendererCloudsMixin";
+
+    private static final String FASTER_CLOUDS_OFFSETS_ACCESS =
+            "com.ashlauncher.client.v1_8_9.mixin.BufferBuilderOffsetsAccess";
 
     private static final String VIEW_SCAN_RENDERER_MIXIN =
             "com.ashlauncher.client.v1_8_9.mixin.WorldRendererViewScanMixin";
@@ -242,7 +246,9 @@ public final class AshClient implements ClientModInitializer {
         // Faster clouds: the game's fancy clouds built once a frame, not twice,
         // asked each frame so that switching it shows at once.
         boolean fasterCloudsLanded = MixinFeature.landed(() -> WorldRenderer.class, FASTER_CLOUDS_MIXIN,
-                why -> LOG.warn(MixinFeature.didNotLoad(Feature.FASTER_CLOUDS.displayName(), why)));
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.FASTER_CLOUDS.displayName(), why)))
+                && MixinFeature.landed(() -> BufferBuilder.class, FASTER_CLOUDS_OFFSETS_ACCESS,
+                        why -> LOG.warn(MixinFeature.didNotLoad(Feature.FASTER_CLOUDS.displayName(), why)));
         if (fasterCloudsLanded) {
             FasterClouds.install(() -> settings.get(Settings.FASTER_CLOUDS));
         } else {

@@ -405,6 +405,12 @@ public final class AshSmokeTest implements ClientModInitializer {
             fail("faster clouds is on, and ash's clouds never drew - the frame compared is the game's own");
         }
         expectSameSky(ash, game, "ash's clouds differ from the game's");
+        // And beneath the pixels, the bytes: ash writes the clouds' vertices
+        // itself, and they must be the ones the game's buffer builder writes.
+        String bytes = onClient(client, FasterClouds::lastFrameAgainstTheGame);
+        if (bytes != null) {
+            fail("ash's cloud vertices differ from the game's buffer builder's: " + bytes);
+        }
 
         onClient(client, () -> {
             client.options.cloudMode = 0;
