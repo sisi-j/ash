@@ -19,6 +19,7 @@
     "MinecraftClientSnaplookMixin",
     "MinecraftClientServerMixin",
     "WorldRendererCloudsMixin",
+    "BufferBuilderOffsetsAccess",
     "WorldRendererViewScanMixin",
     "WorldViewScanMixin",
     "AchievementNotificationPanelMixin"
