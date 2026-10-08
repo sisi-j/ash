@@ -622,6 +622,34 @@ fn dirs_next_data_dir() -> std::path::PathBuf {
         .unwrap_or_else(std::env::temp_dir)
 }
 
+/// `ash --self-check <file>`: where to write the installation check's report,
+/// if ash was started for one rather than for a player.
+fn self_check_report() -> Option<std::path::PathBuf> {
+    let mut args = std::env::args_os().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--self-check" {
+            return args.next().map(std::path::PathBuf::from);
+        }
+    }
+    None
+}
+
+/// Checks the installation from where the installed launcher looks - the
+/// client folder as Tauri resolves it, which is where a launch on 8 October
+/// 2026 went wrong - writes the report, and exits: 0 if all is well, 1 if not,
+/// 2 if the report could not be written. ash does nothing else in this mode.
+/// CI installs the real installer and runs it; it also serves to diagnose a
+/// player's installation.
+fn self_check(ash: &Ash, report: &std::path::Path) -> ! {
+    let check = ash.check_installation();
+    let code = match std::fs::write(report, check.report()) {
+        Ok(()) if check.ok => 0,
+        Ok(()) => 1,
+        Err(_) => 2,
+    };
+    std::process::exit(code)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -630,10 +658,11 @@ pub fn run() {
         // In `setup` rather than on the builder, because the client jars live
         // in the installation and only an `AppHandle` knows where that is.
         .setup(|app| {
-            app.manage(AppState {
-                ash: Arc::new(ash_state(client_dir(app.handle()))),
-                preparing: Mutex::new(HashMap::new()),
-            });
+            let ash = Arc::new(ash_state(client_dir(app.handle())));
+            if let Some(report) = self_check_report() {
+                self_check(&ash, &report);
+            }
+            app.manage(AppState { ash, preparing: Mutex::new(HashMap::new()) });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

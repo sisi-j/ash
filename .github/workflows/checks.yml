@@ -206,3 +206,64 @@ jobs:
           name: launcher-ui
           path: launcher/ui-check/screenshots/
           if-no-files-found: ignore
+
+  installed:
+    # The real installer, installed, and asked whether it can start a modded
+    # instance - `ash --self-check`. Only an installation is laid out the way
+    # an installation is: on 8 October 2026 the installed ash handed the game
+    # its client jar in Windows' verbatim form, `\?\C:\...`, which 1.8.9's
+    # Java cannot read, and nothing before this job could have seen it. The
+    # check resolves the client folder exactly as the installed launcher does
+    # and inspects the very argument a launch would send.
+    runs-on: windows-latest
+    needs: client
+    steps:
+      - uses: actions/checkout@v7
+
+      # The jars the installer carries, from the client job, where `build`
+      # would put them.
+      - uses: actions/download-artifact@v7
+        with:
+          name: ash-client
+          path: client
+
+      - run: rustup install --no-self-update
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+      - run: npm ci
+        working-directory: launcher
+
+      # The installer a player gets: `build:installer`, which carries the
+      # client jars.
+      - run: npm run build:installer
+        working-directory: launcher
+
+      # Silently, per machine, as the installer is configured to install;
+      # the runner is an administrator, so there is no prompt to answer.
+      - name: Install
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "the installer exited with $($install.ExitCode)" }
+
+      - name: Self-check
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "$env:ProgramFiles\ash\*.exe" | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          if (-not $exe) { throw "no ash executable in $env:ProgramFiles\ash" }
+          $report = Join-Path $env:RUNNER_TEMP 'self-check.txt'
+          $check = Start-Process -FilePath $exe.FullName -ArgumentList '--self-check', "`"$report`"" -Wait -PassThru
+          if (Test-Path $report) { Get-Content $report } else { Write-Output 'no report was written' }
+          if ($check.ExitCode -ne 0) { throw "the installed ash's self-check exited with $($check.ExitCode)" }
