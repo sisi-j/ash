@@ -20,6 +20,7 @@ mod diagnostics;
 mod error;
 mod gamelog;
 mod glance;
+mod installation;
 mod instance;
 mod launch;
 mod load_report;
@@ -47,6 +48,7 @@ pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use diagnostics::Diagnostics;
 pub use error::AshError;
 pub use glance::{AshFeatures, InstanceGlance, LastSession};
+pub use installation::InstallationCheck;
 pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
@@ -1030,6 +1032,14 @@ impl Ash {
     }
 
     // ---- ash's own jars ---------------------------------------------------
+
+    /// Whether this installation can start a modded instance, checked with
+    /// this launcher's own configuration: `ash --self-check`, which CI runs
+    /// on a freshly installed copy. Reads, and writes one probe file in the
+    /// data folder; nothing else.
+    pub fn check_installation(&self) -> InstallationCheck {
+        installation::check(&self.config)
+    }
 
     /// Every jar of ash's a modded instance loads, as the paths the loader
     /// is given: the bundled mods in the depot, then ash's client in the

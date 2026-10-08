@@ -33,6 +33,24 @@ cd ../launcher && npm run build:installer
 `npm run tauri build` on its own produces an installer with no client in it.
 `build:installer` is the one that carries it - see `client/README.md`.
 
+## Checking an installation
+
+`ash --self-check <report file>` checks an installed ash and exits. It looks
+from where the installed launcher looks, and does nothing else: no window,
+no game, no sign-in. It reports whether:
+- each version's client jar is in the installation and is a jar;
+- the `-Dfabric.addMods` argument a launch would send names that jar by a
+  path Java can read;
+- ash's data folder can be written to.
+
+It exits 0 if all is well and 1 if not, with the findings in the report.
+
+CI's `installed` job builds the real installer, installs it silently on
+Windows and runs this. An installation is the only place some faults exist:
+the installed ash once handed the game its client jar as
+`\\?\C:\Program Files\...`, which 1.8.9's Java cannot read. The same command
+works for diagnosing a player's installation.
+
 ## Testing
 
 ```

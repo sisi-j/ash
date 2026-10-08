@@ -112,8 +112,7 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
     // 1.8.9 any JVM argument there switches off the fallback that supplies
     // the classpath, and the game would not start (`docs/research/0005`).
     if let Some(mods) = context.mods {
-        let paths: Vec<String> = mods.add.iter().map(|p| java_path(p)).collect();
-        jvm.insert(0, format!("-Dfabric.addMods={}", paths.join(separator)));
+        jvm.insert(0, add_mods_argument(&mods.add, separator));
         if let Some(folder) = &mods.folder {
             jvm.insert(0, format!("-Dfabric.modsFolder={}", java_path(folder)));
         }
@@ -335,6 +334,13 @@ fn substitute(value: &str, variables: &HashMap<&'static str, String>) -> String 
 
     out.push_str(rest);
     out
+}
+
+/// `-Dfabric.addMods`: ash's own jars, as the loader is handed them. Shared
+/// with the installation check, so what it checks is what a launch sends.
+pub(crate) fn add_mods_argument(jars: &[PathBuf], separator: &str) -> String {
+    let paths: Vec<String> = jars.iter().map(|jar| java_path(jar)).collect();
+    format!("-Dfabric.addMods={}", paths.join(separator))
 }
 
 /// A path as the game's Java can read it, for anything ash puts on its
