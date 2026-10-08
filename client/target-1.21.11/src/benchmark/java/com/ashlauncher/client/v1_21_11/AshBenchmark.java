@@ -171,6 +171,10 @@ public final class AshBenchmark implements ClientModInitializer {
             Path written = result.write(Runs.outputDirectory(client.gameDirectory.toPath()), Runs.stamp(nowMillis));
             say(result.oneLine());
             say("written to " + written.toAbsolutePath());
+            // How much of the world it drew: the first thing to compare when two
+            // runs of the same build disagree (see benchmark-results, FPS marks).
+            say("drew " + client.levelRenderer.countRenderedSections() + " sections; "
+                    + client.levelRenderer.getSectionStatistics());
         } catch (IOException unwritable) {
             say("could not write the result (" + unwritable + "): " + result.oneLine());
         }

@@ -1,5 +1,7 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.perf.FpsMeasurements;
+import com.ashlauncher.client.report.Target;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.ui.Key;
 import com.ashlauncher.client.ui.Panel;
@@ -34,6 +36,8 @@ final class AshSettingsScreen extends Screen {
         // player to the game's own key bindings to change it.
         panel.setOpenKey(() -> key.getTranslatedKeyMessage().getString(),
                 () -> minecraft.setScreen(new KeyBindsScreen(this, minecraft.options)));
+        // Each tile's FPS mark, as it was measured on this version (#70).
+        panel.setMarks(feature -> FpsMeasurements.markOf(feature, Target.V1_21_11));
     }
 
     /** The panel this screen shows, so the real-game test can find a switch and click it as a player would. */

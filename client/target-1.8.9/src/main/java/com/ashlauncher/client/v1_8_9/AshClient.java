@@ -19,6 +19,7 @@ import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
+import com.ashlauncher.client.report.Target;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.snaplook.Snaplook;
@@ -279,7 +280,7 @@ public final class AshClient implements ClientModInitializer {
         if (settingsKeyLanded) {
             // Freelook's row says why it is off on a listed server, and cannot
             // be switched there, as on 1.21.11.
-            SettingsScreen settingsScreen = new SettingsScreen(settings, feature -> true, landed::contains,
+            SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
                     feature -> {
                         BlockList.Server here = feature == Feature.FREELOOK ? CurrentServer.blockedHere() : null;
                         return here == null ? "" : here.whyOff();
@@ -293,6 +294,11 @@ public final class AshClient implements ClientModInitializer {
         writeReport.run();
     }
 
+    /** Whether this target has a feature at all, as the feature declares it. */
+    private static boolean present(Feature feature) {
+        return feature.existsOn(Target.V1_8_9);
+    }
+
     /**
      * What this session is running, for the launcher - written at startup and
      * again whenever a setting changes, so the report says what the session
@@ -300,7 +306,7 @@ public final class AshClient implements ClientModInitializer {
      */
     private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
-            LoadReport.forSession(clientVersion(), landed::contains, settings::on)
+            LoadReport.forSession(clientVersion(), AshClient::present, landed::contains, settings::on)
                     .withOrigins(modOrigins(), BUNDLED)
                     .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {

@@ -2,6 +2,7 @@ package com.ashlauncher.client.ui;
 
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Placement;
+import com.ashlauncher.client.perf.FpsMark;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.settings.Category;
 import com.ashlauncher.client.settings.Choice;
@@ -168,6 +169,14 @@ public final class Panel {
     public void setOpenKey(java.util.function.Supplier<String> name, Runnable change) {
         this.keyName = name;
         this.changeKey = change;
+    }
+
+    /** Each feature's FPS mark on this target; null where a feature has none, and then no mark is drawn. */
+    private java.util.function.Function<Feature, FpsMark> marks = feature -> null;
+
+    /** Tells the panel each feature's FPS mark on the target it is drawn on (#70). */
+    public void setMarks(java.util.function.Function<Feature, FpsMark> marks) {
+        this.marks = marks;
     }
 
     private OptionsPage ashPage() {
@@ -803,6 +812,34 @@ public final class Panel {
         return new Rect(tile.x + (tile.width - side) / 2, nameBottom + units(0.55 + 0.35), side, side);
     }
 
+    /** Written under every FPS mark, as the mockup has it. */
+    static final String MARK_LABEL = "FPS";
+
+    /** The label's letter-spacing, in em: the mockup's 0.08em. */
+    private static final float MARK_TRACKING = 0.08f;
+
+    /**
+     * Where a tile's FPS mark goes: the mockup's 24 by 18 drawing at 1.55 by
+     * 1.2 units, centred, below the icon as the mockup spaces them - the
+     * icon's own 0.15 below it, then the tile's 0.55 gap. Package-private for
+     * the tests.
+     */
+    Rect markIn(Rect tile) {
+        Rect glyph = glyphIn(tile);
+        int width = units(1.55);
+        int height = units(1.2);
+        return new Rect(tile.x + (tile.width - width) / 2, glyph.y + glyph.height + units(0.15 + 0.55), width, height);
+    }
+
+    /** The label's size: the mockup's 0.8em of the tile's text, whose name is 1.02em at 0.95 units. */
+    private float markLabelSize() {
+        return textSize(0.8f * 0.95f / 1.02f);
+    }
+
+    private static int colourOf(FpsMark mark) {
+        return mark == FpsMark.RAISES ? Palette.GREEN : mark == FpsMark.LOWERS ? Palette.RED : Palette.MARK_LEVEL;
+    }
+
     private Rect gearIn(Rect tile) {
         int side = units(2.3);
         return new Rect(tile.x + units(0.9), tile.y + tile.height - units(0.85) - side, side, side);
@@ -1186,6 +1223,17 @@ public final class Panel {
         if (icon != null) {
             Rect glyph = glyphIn(tile);
             canvas.draw(Ink.icon(icon, glyph.width, Palette.ICON), glyph.x, glyph.y, opacity);
+        }
+
+        FpsMark mark = marks.apply(row.feature());
+        if (mark != null) {
+            Rect shape = markIn(tile);
+            canvas.draw(Ink.fpsMark(mark.direction(), shape.width, shape.height, colourOf(mark)), shape.x, shape.y,
+                    opacity);
+            float labelSize = markLabelSize();
+            int labelWidth = Ink.width(MARK_LABEL, Ink.Weight.BOLD, labelSize, MARK_TRACKING);
+            Ink.text(MARK_LABEL, Ink.Weight.BOLD, labelSize, Palette.MARK_LABEL, MARK_TRACKING)
+                    .drawAt(canvas, tile.x + (tile.width - labelWidth) / 2, shape.y + shape.height + units(0.25), opacity);
         }
 
         if (hasGear(row)) {

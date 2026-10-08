@@ -11,6 +11,7 @@ import com.ashlauncher.client.hud.Anchor;
 import com.ashlauncher.client.hud.FakeHudSurface;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Placement;
+import com.ashlauncher.client.perf.FpsMark;
 import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.settings.Settings;
@@ -371,6 +372,28 @@ class PanelTest {
             assertTrue(canvas.drawn.stream().anyMatch(d -> d.x() == glyph.x && d.y() == glyph.y
                     && d.width() == glyph.width && d.height() == glyph.height),
                     row.name() + "'s icon is not where its tile puts it");
+        }
+    }
+
+    @Test
+    void every_tile_shows_its_fps_mark_under_its_icon_with_fps_written_beneath() throws Exception {
+        Panel panel = panel();
+        FakeCanvas unmarked = render(panel);
+        assertFalse(unmarked.drew(Panel.MARK_LABEL), "a mark was drawn with no measurement behind it");
+
+        FpsMark[] marks = FpsMark.values();
+        panel.setMarks(feature -> marks[feature.ordinal() % marks.length]);
+        render(panel).save(new File("build/ui/tiles-with-marks.png"));
+        for (SettingsScreen.Row row : model.rows()) {
+            FakeCanvas canvas = scrolledTo(panel, row.feature());
+            Rect tile = panel.tileOf(row.feature());
+            Rect mark = panel.markIn(tile);
+            assertTrue(canvas.drawn.stream().anyMatch(d -> d.x() == mark.x && d.y() == mark.y
+                    && d.width() == mark.width && d.height() == mark.height),
+                    row.name() + "'s mark is not where its tile puts it");
+            assertTrue(mark.y > panel.glyphIn(tile).y + panel.glyphIn(tile).height, row.name() + "'s mark is not below its icon");
+            assertTrue(canvas.drawn.stream().anyMatch(d -> Panel.MARK_LABEL.equals(d.text()) && d.y() > mark.y
+                    && d.y() < panel.switchOf(row.feature()).y), row.name() + " has no FPS under its mark");
         }
     }
 

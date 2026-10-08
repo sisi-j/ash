@@ -21,13 +21,13 @@ public enum Feature {
      * (#45). Only 1.8.9 has it: 1.21.11 draws its clouds another way, and
      * leaves it out of its report and its settings.
      */
-    FASTER_CLOUDS("faster-clouds", "Faster clouds"),
+    FASTER_CLOUDS("faster-clouds", "Faster clouds", Target.V1_8_9),
     /**
      * 1.8.9's scan of the blocks round the camera, which its chunk culling
      * makes every frame, reused until one of them could have changed (#105).
      * 1.8.9's alone, as faster clouds is.
      */
-    FASTER_VIEW_SCAN("faster-view-scan", "Faster view scan"),
+    FASTER_VIEW_SCAN("faster-view-scan", "Faster view scan", Target.V1_8_9),
     /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can
@@ -40,14 +40,30 @@ public enum Feature {
 
     private final String id;
     private final String displayName;
+    /** The one target that has it, or null for a feature both have. */
+    private final Target only;
 
     Feature(String id, String displayName) {
+        this(id, displayName, null);
+    }
+
+    Feature(String id, String displayName, Target only) {
         this.id = id;
         this.displayName = displayName;
+        this.only = only;
     }
 
     public String id() {
         return id;
+    }
+
+    /**
+     * Whether this target has the feature at all. One it does not has no tile
+     * in its settings and no line in its load report, rather than one that
+     * says it did not load.
+     */
+    public boolean existsOn(Target target) {
+        return only == null || only == target;
     }
 
     public String displayName() {
