@@ -148,6 +148,23 @@ pub enum AshError {
 
     #[error("{address} is not a server address the game can connect to")]
     InvalidServerAddress { address: String },
+
+    /// A change to an instance's server list while its game is running. The
+    /// game keeps the list in memory and writes it back over the file.
+    #[error("instance {id}'s server list is in use by the running game")]
+    ServerListInUse { id: String },
+
+    /// The list is no longer what the change was made against: the game, or
+    /// the player by hand, changed it since it was read.
+    #[error("the server list changed since it was read")]
+    ServerListChanged,
+
+    /// `servers.dat` could not be read, so ash will not write it.
+    #[error("the server list could not be read, so it was left as it is")]
+    ServerListUnreadable,
+
+    #[error("{name:?} is not a server name the game can show")]
+    InvalidServerName { name: String },
 }
 
 /// Windows and Unix both have a distinct error for "the volume is full", and
@@ -219,6 +236,10 @@ impl AshError {
             AshError::AlreadyRunning { .. } => "already_running",
             AshError::ServerNotListed { .. } => "server_not_listed",
             AshError::InvalidServerAddress { .. } => "invalid_server_address",
+            AshError::ServerListInUse { .. } => "server_list_in_use",
+            AshError::ServerListChanged => "server_list_changed",
+            AshError::ServerListUnreadable => "server_list_unreadable",
+            AshError::InvalidServerName { .. } => "invalid_server_name",
         }
     }
 
@@ -358,14 +379,25 @@ impl AshError {
             }
             AshError::AlreadyRunning { .. } => "That instance is already running.".into(),
             AshError::ServerNotListed { .. } => {
-                "That server isn't in this instance's server list. Add it in the game's Multiplayer \
-                 screen."
-                    .into()
+                "That server isn't in this instance's server list. Add it to the list first.".into()
             }
             AshError::InvalidServerAddress { .. } => {
-                "That server's address isn't one the game can connect to. Fix it in the game's \
-                 Multiplayer screen."
+                "That isn't a server address the game can connect to.".into()
+            }
+            AshError::ServerListInUse { .. } => {
+                "Close the game to change its servers. It rewrites its server list itself.".into()
+            }
+            AshError::ServerListChanged => {
+                "The server list changed since ash last read it. Look again and try once more."
                     .into()
+            }
+            AshError::ServerListUnreadable => {
+                "ash couldn't read this instance's server list, so it hasn't changed it. Edit it in \
+                 the game's Multiplayer screen."
+                    .into()
+            }
+            AshError::InvalidServerName { .. } => {
+                "A server name can be at most 32 characters.".into()
             }
         }
     }
@@ -388,6 +420,7 @@ impl AshError {
                 | AshError::LaunchFailed { .. }
                 | AshError::FileVanished { .. }
                 | AshError::OutOfSpace
+                | AshError::ServerListChanged
         )
     }
 }
@@ -507,6 +540,10 @@ mod tests {
             AshError::AlreadyRunning { id: s.clone() },
             AshError::ServerNotListed { address: s.clone() },
             AshError::InvalidServerAddress { address: s.clone() },
+            AshError::ServerListInUse { id: s.clone() },
+            AshError::ServerListChanged,
+            AshError::ServerListUnreadable,
+            AshError::InvalidServerName { name: s.clone() },
         ];
 
         // This says the list has no variant in it twice. It cannot say the
@@ -572,7 +609,11 @@ mod tests {
             | AshError::LaunchFailed { .. }
             | AshError::AlreadyRunning { .. }
             | AshError::ServerNotListed { .. }
-            | AshError::InvalidServerAddress { .. } => {}
+            | AshError::InvalidServerAddress { .. }
+            | AshError::ServerListInUse { .. }
+            | AshError::ServerListChanged
+            | AshError::ServerListUnreadable
+            | AshError::InvalidServerName { .. } => {}
         }
     }
 }

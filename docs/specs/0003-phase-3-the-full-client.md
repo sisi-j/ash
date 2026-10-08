@@ -456,7 +456,7 @@ No fixture substitutes for this.
 ## Out of Scope
 
 - The backend, cosmetics, entitlements, synced settings and news. These are Phase 4.
-- macOS, ~~server entries and quick-connect~~ hand-made server entries, and the news panel. These are Phase 5. (*Amended 2026-10-03: joining a recent server from the launcher, read from the instance's own server list, is in this phase, with the final design.*)
+- macOS, ~~server entries and quick-connect~~ hand-made server entries, and the news panel. These are Phase 5. (*Amended 2026-10-03: joining a recent server from the launcher, read from the instance's own server list, is in this phase, with the final design.*) (*Amended 2026-10-08: hand-made server entries were built after Phase 3, with reordering - ADR-0019.*)
 - Bundling Sodium (ADR-0013). Players add it as a third-party mod.
 - Forge mods, and mods for any loader other than the instance's own.
 - Finding, downloading, vetting or updating third-party mods for the player.

@@ -7,6 +7,8 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -158,6 +160,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         fasterCloudsChangeNoPixel(client);
         fasterViewScanAnswersAsTheGameDoes(client);
         hitIndicatorWorks(client);
+        serverListAshWroteLoadsInTheGame(client);
         moveReadoutsWorks(client);
         panelIsCrispAtEveryGuiScale(client);
         ashSettingsWork(client);
@@ -576,6 +579,46 @@ public final class AshSmokeTest implements ClientModInitializer {
             }
         }
         return first == null ? null : differing + " pixels differ, the first " + first;
+    }
+
+    /**
+     * A server list ash's launcher wrote loads in the game's own code as ash
+     * meant it. The file is the launcher's test fixture: a list 1.8.9 itself
+     * wrote, with a server added - its name past the basic plane - one
+     * edited, one moved and one removed by the launcher. The game must read
+     * every name and address, in order, and keep Hypixel's icon, which the
+     * launcher's edits must not have touched.
+     */
+    private static void serverListAshWroteLoadsInTheGame(MinecraftClient client) {
+        Path written = Paths.get(System.getProperty("ash.test.serversChangedByAsh"));
+        Path list = new File(client.runDirectory, "servers.dat").toPath();
+        try {
+            byte[] before = Files.exists(list) ? Files.readAllBytes(list) : null;
+            Files.copy(written, list, StandardCopyOption.REPLACE_EXISTING);
+            List<String> seen = onClient(client, () -> {
+                net.minecraft.client.option.ServerList servers = new net.minecraft.client.option.ServerList(client);
+                List<String> entries = new ArrayList<>();
+                for (int i = 0; i < servers.size(); i++) {
+                    net.minecraft.client.network.ServerInfo server = servers.get(i);
+                    entries.add(server.name + " | " + server.address + " | icon " + (server.getIcon() != null));
+                }
+                return entries;
+            });
+            if (before != null) {
+                Files.write(list, before);
+            } else {
+                Files.delete(list);
+            }
+            List<String> wanted = java.util.Arrays.asList(
+                    "ash ★ 😀 test | play.example.net:25570 | icon false",
+                    "Hypixel | mc.hypixel.net | icon true",
+                    "Local, renamed | localhost:25571 | icon false");
+            if (!seen.equals(wanted)) {
+                fail("the game read the server list ash wrote as " + seen + ", not " + wanted);
+            }
+        } catch (IOException unreadable) {
+            fail("could not put ash's server list in place (" + unreadable + ")");
+        }
     }
 
     /** Opens ash's settings, presses one switch, checks the file, and closes them again. */

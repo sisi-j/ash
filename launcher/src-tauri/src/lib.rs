@@ -402,6 +402,57 @@ async fn servers(
 }
 
 #[tauri::command]
+async fn server_list(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<ServerEntry>, UiError> {
+    state.ash.server_list(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn add_server(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    name: String,
+    address: String,
+) -> Result<(), UiError> {
+    state.ash.add_server(&id, &name, &address).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn edit_server(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    position: usize,
+    expected: String,
+    name: String,
+    address: String,
+) -> Result<(), UiError> {
+    state.ash.edit_server(&id, position, &expected, &name, &address).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn remove_server(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    position: usize,
+    expected: String,
+) -> Result<(), UiError> {
+    state.ash.remove_server(&id, position, &expected).map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn move_server(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    position: usize,
+    expected: String,
+    to: usize,
+) -> Result<(), UiError> {
+    state.ash.move_server(&id, position, &expected, to).map_err(UiError::from)
+}
+
+#[tauri::command]
 async fn server_status(
     state: tauri::State<'_, AppState>,
     id: InstanceId,
@@ -691,6 +742,11 @@ pub fn run() {
             launch,
             join,
             servers,
+            server_list,
+            add_server,
+            edit_server,
+            remove_server,
+            move_server,
             server_status,
             preview_launch,
             game_status,

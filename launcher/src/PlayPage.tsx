@@ -4,6 +4,7 @@ import {
   describeAge,
   describeDuration,
   describeKind,
+  isUiError,
   type Account,
   type AshFeatures,
   type Instance,
@@ -149,13 +150,169 @@ function ServersCard(props: { instance: Instance; launch: Launch; sounds: boolea
     launch.join(address);
   };
 
+  // Editing works on the game's own order, which the card does not show
+  // otherwise: it puts the most recently joined first.
+  const [editing, setEditing] = useState(false);
+  const [ordered, setOrdered] = useState<ServerEntry[]>([]);
+  const [form, setForm] = useState<ServerForm | null>(null);
+  const [removing, setRemoving] = useState<number | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reread = async () => {
+    const list = await api.serverList(instance.id).catch(() => null);
+    if (list) setOrdered(list);
+    const recent = await api.servers(instance.id).catch(() => null);
+    if (recent) setServers(recent);
+  };
+
+  useEffect(() => {
+    setEditing(false);
+    setForm(null);
+    setRemoving(null);
+    setProblem(null);
+  }, [instance.id]);
+
+  const startEditing = () => {
+    setProblem(null);
+    setEditing(true);
+    void reread();
+  };
+
+  /** One change, then the list as it now is - also after a refusal, which is often a list changed elsewhere. */
+  const change = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await work();
+      setForm(null);
+      setRemoving(null);
+    } catch (e) {
+      setProblem(isUiError(e) ? e.message : "That didn't work. Try again.");
+    } finally {
+      await reread();
+      setBusy(false);
+    }
+  };
+
+  const save = (f: ServerForm) =>
+    change(() =>
+      f.position === null
+        ? api.addServer(instance.id, f.name, f.address)
+        : api.editServer(instance.id, f.position, f.expected, f.name, f.address),
+    );
+
+  const locked = playing || busy;
+
+  if (editing) {
+    return (
+      <div className="card servers-card">
+        <h3>
+          Edit servers <small>{instance.name}</small>
+        </h3>
+        <div className="server-edit-actions">
+          <button
+            className="button"
+            disabled={locked || form !== null}
+            onClick={() => setForm({ position: null, expected: "", name: "", address: "" })}
+          >
+            <Icon name="plus" /> Add server
+          </button>
+          <button className="button button-go" disabled={busy} onClick={() => setEditing(false)}>
+            Done
+          </button>
+        </div>
+        {playing && <p className="hint">Close {instance.name} to edit its servers. The game rewrites its list itself.</p>}
+        {problem && (
+          <p className="setting-refused" role="alert">
+            {problem}
+          </p>
+        )}
+        {form && (
+          <ServerFormView form={form} busy={busy} onChange={setForm} onCancel={() => setForm(null)} onSave={save} />
+        )}
+        {ordered.length === 0 && !form && <p className="hint">No servers yet.</p>}
+        <div className="server-rows">
+          {ordered.map((server, position) => (
+            <div key={`${position}-${server.address}`} className="server-row">
+              <ServerIcon name={server.name} icon={server.icon} />
+              <span className="server-text">
+                <b>{server.name || server.address}</b>
+                <small>{server.address}</small>
+              </span>
+              {removing === position ? (
+                <>
+                  <button
+                    className="button button-danger"
+                    disabled={locked}
+                    onClick={() => change(() => api.removeServer(instance.id, position, server.address))}
+                  >
+                    Remove
+                  </button>
+                  <button className="button" disabled={busy} onClick={() => setRemoving(null)}>
+                    Keep
+                  </button>
+                </>
+              ) : (
+                <span className="server-edit-row">
+                  <button
+                    className="icon-only"
+                    aria-label={`Move ${server.name || server.address} up`}
+                    disabled={locked || position === 0}
+                    onClick={() => change(() => api.moveServer(instance.id, position, server.address, position - 1))}
+                  >
+                    <Icon name="up" />
+                  </button>
+                  <button
+                    className="icon-only"
+                    aria-label={`Move ${server.name || server.address} down`}
+                    disabled={locked || position === ordered.length - 1}
+                    onClick={() => change(() => api.moveServer(instance.id, position, server.address, position + 1))}
+                  >
+                    <Icon name="chevron" />
+                  </button>
+                  <button
+                    className="icon-only"
+                    aria-label={`Edit ${server.name || server.address}`}
+                    disabled={locked || form !== null}
+                    onClick={() =>
+                      setForm({ position, expected: server.address, name: server.name, address: server.address })
+                    }
+                  >
+                    <Icon name="edit" />
+                  </button>
+                  <button
+                    className="icon-only"
+                    aria-label={`Remove ${server.name || server.address}`}
+                    disabled={locked}
+                    onClick={() => setRemoving(position)}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="card servers-card">
       <h3>
         {servers?.some((s) => s.last_joined_ms !== null) ? "Recent servers" : "Servers"} <small>{instance.name}</small>
+        <button
+          className="button server-edit-open"
+          disabled={servers === null}
+          onClick={startEditing}
+          aria-label={`Edit ${instance.name}'s servers`}
+        >
+          Edit
+        </button>
       </h3>
       {servers && servers.length === 0 && (
-        <p className="hint">No servers yet. Add one in the game's Multiplayer screen.</p>
+        <p className="hint">No servers yet. Add one with Edit, or in the game's Multiplayer screen.</p>
       )}
       {servers && servers.length > 0 && (
         <>
@@ -193,6 +350,60 @@ function ServersCard(props: { instance: Instance; launch: Launch; sounds: boolea
         </>
       )}
     </div>
+  );
+}
+
+/** A server being added (`position` null) or edited, as typed so far. */
+type ServerForm = { position: number | null; expected: string; name: string; address: string };
+
+/** The game's own Add Server fields: a name, which may be left empty, and an address. */
+function ServerFormView(props: {
+  form: ServerForm;
+  busy: boolean;
+  onChange: (form: ServerForm) => void;
+  onCancel: () => void;
+  onSave: (form: ServerForm) => void;
+}) {
+  const { form } = props;
+  const adding = form.position === null;
+  return (
+    <form
+      className="server-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        props.onSave(form);
+      }}
+    >
+      <label>
+        <span>Name</span>
+        <input
+          className="input"
+          value={form.name}
+          maxLength={32}
+          placeholder="Minecraft Server"
+          onChange={(e) => props.onChange({ ...form, name: e.target.value })}
+        />
+      </label>
+      <label>
+        <span>Address</span>
+        <input
+          className="input"
+          value={form.address}
+          maxLength={128}
+          placeholder="play.example.net"
+          autoFocus={adding}
+          onChange={(e) => props.onChange({ ...form, address: e.target.value })}
+        />
+      </label>
+      <span className="server-form-actions">
+        <button type="button" className="button" disabled={props.busy} onClick={props.onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="button button-go" disabled={props.busy || form.address.trim() === ""}>
+          {adding ? "Add" : "Save"}
+        </button>
+      </span>
+    </form>
   );
 }
 

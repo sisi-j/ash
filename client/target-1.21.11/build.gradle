@@ -68,6 +68,17 @@ fabricApi {
     }
 }
 
+// A server list ash's launcher wrote, for the game's own code to load in the
+// game test - and in the run with Sodium, which inherits this.
+loom {
+    runs {
+        clientGameTest {
+            property 'ash.test.serversChangedByAsh',
+                    rootProject.file('../launcher/core/tests/fixtures/servers-1.21.11-changed-by-ash.dat').absolutePath
+        }
+    }
+}
+
 // The frame-time measurement (#42): a developer tool, run by hand on a real
 // machine, in a source set of its own so nothing of it reaches a player's
 // jar. Not the client game test tier above: that steps the game a frame at a

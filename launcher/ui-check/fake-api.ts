@@ -317,6 +317,23 @@ export const api: typeof real.api = {
   },
   join: async (_id, address) => joined(address),
   servers: (id) => resolve(SERVERS[id] ?? []),
+  serverList: (id) => resolve([...(SERVERS[id] ?? [])]),
+  addServer: async (id, name, address) => {
+    (SERVERS[id] ??= []).push({ name: name.trim() || "Minecraft Server", address: address.trim(), icon: null, last_joined_ms: null });
+  },
+  editServer: async (id, position, _expected, name, address) => {
+    const list = SERVERS[id] ?? [];
+    const old = list[position];
+    if (old) list[position] = { ...old, name: name.trim() || "Minecraft Server", address: address.trim() };
+  },
+  removeServer: async (id, position) => {
+    (SERVERS[id] ?? []).splice(position, 1);
+  },
+  moveServer: async (id, position, _expected, to) => {
+    const list = SERVERS[id] ?? [];
+    const [moving] = list.splice(position, 1);
+    if (moving) list.splice(to, 0, moving);
+  },
   serverStatus: (_id, address) => resolve(STATUSES[address] ?? { state: "offline" }),
   previewLaunch: () => resolve({ program: "java", args: [], working_directory: "" }),
   gameStatus: () => resolve(status()),
