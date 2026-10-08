@@ -277,6 +277,12 @@ public final class AshSmokeTest implements ClientModInitializer {
                 client.currentScreen instanceof AshSettingsScreen ? (AshSettingsScreen) client.currentScreen : null);
         pause(500L);
         screenshot(client, "ash-settings-panel.png");
+        // A new player's game shows "Press 'E' to open your inventory" over
+        // every screen; over the panel it covered the tabs. It was there to
+        // keep off, the whole time the panel was open.
+        if (AshSettingsScreen.notificationsHidden == 0) {
+            fail("the game's notification was drawn over ash's panel, or there was none to keep off");
+        }
 
         click(client, screen, Feature.FPS_READOUT);
         pause(500L);

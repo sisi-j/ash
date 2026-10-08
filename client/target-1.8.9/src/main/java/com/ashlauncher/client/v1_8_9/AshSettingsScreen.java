@@ -42,6 +42,24 @@ public final class AshSettingsScreen extends Screen {
 
     private static final Identifier BLUR = new Identifier("shaders/post/blur.json");
 
+    /** Frames on which a notification of the game's was kept off the open panel, for the smoke test. */
+    static int notificationsHidden;
+
+    /**
+     * Whether the game's achievement notification is kept off this screen -
+     * it is, off the panel - counting the frames where there was one to keep
+     * off. See {@code AchievementNotificationPanelMixin}.
+     */
+    public static boolean hidesNotification(Screen screen, boolean showingOne) {
+        if (!(screen instanceof AshSettingsScreen)) {
+            return false;
+        }
+        if (showingOne) {
+            notificationsHidden++;
+        }
+        return true;
+    }
+
     private final KeyBinding key;
     private final Panel panel;
     private boolean blurring;
