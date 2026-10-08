@@ -18,7 +18,9 @@
     "MinecraftClientMixin",
     "MinecraftClientSnaplookMixin",
     "MinecraftClientServerMixin",
-    "WorldRendererCloudsMixin"
+    "WorldRendererCloudsMixin",
+    "WorldRendererViewScanMixin",
+    "WorldViewScanMixin"
   ],
   "injectors": {
     "defaultRequire": 0

@@ -3,13 +3,16 @@ package com.ashlauncher.client.v1_8_9;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -32,12 +35,17 @@ import com.ashlauncher.client.ui.Rect;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.client.util.Window;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.passive.PigEntity;
@@ -148,6 +156,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         crosshairOptionsWork(client);
         crosshairWorks(client);
         fasterCloudsChangeNoPixel(client);
+        fasterViewScanAnswersAsTheGameDoes(client);
         hitIndicatorWorks(client);
         moveReadoutsWorks(client);
         panelIsCrispAtEveryGuiScale(client);
@@ -217,6 +226,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
             "{ \"id\": \"faster-clouds\", \"name\": \"Faster clouds\", \"status\": \"loaded\" }",
+            "{ \"id\": \"faster-view-scan\", \"name\": \"Faster view scan\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -406,6 +416,99 @@ public final class AshSmokeTest implements ClientModInitializer {
             client.player.prevPitch = pitch;
             return null;
         });
+    }
+
+    /**
+     * Faster view scan answers as the game's own scan would (#105): with the
+     * player in the open, then boxed in by stone, then in the open again,
+     * what the culling is told with it on must be what the game finds with it
+     * off. A box is what a reused answer could get wrong - built round the
+     * player, the scan must stop seeing out - so the box must change the
+     * answer, and in the open the answer must really be reused, or the test
+     * proves nothing either way.
+     */
+    private static void fasterViewScanAnswersAsTheGameDoes(MinecraftClient client) {
+        Settings settings = AshClient.settings;
+        IntegratedServer server = client.getServer();
+        BlockPos[] eyeAndFeet = onClient(client, () -> {
+            BlockPos eye = new BlockPos(client.player.x, client.player.y + client.player.getEyeHeight(),
+                    client.player.z);
+            return new BlockPos[] {eye, eye.down()};
+        });
+        List<BlockPos> box = new ArrayList<>();
+        for (BlockPos cell : eyeAndFeet) {
+            box.add(cell.north());
+            box.add(cell.south());
+            box.add(cell.east());
+            box.add(cell.west());
+        }
+        box.add(eyeAndFeet[0].up());
+
+        Set<Direction> open = expectScanAsTheGame(client, settings, "in the open");
+        int reusedBefore = FasterViewScan.reused;
+        Set<Direction> again = scanOnce(client);
+        if (FasterViewScan.reused == reusedBefore || !again.equals(open)) {
+            fail("faster view scan did not reuse its answer in the open, where nothing had changed: " + again
+                    + " for " + open);
+        }
+
+        setBlocks(client, server, box, Blocks.STONE.getDefaultState());
+        Set<Direction> boxed = expectScanAsTheGame(client, settings, "boxed in by stone");
+        if (boxed.equals(open)) {
+            fail("the box round the player did not change what the scan sees (" + boxed + "), so it tested nothing");
+        }
+
+        setBlocks(client, server, box, Blocks.AIR.getDefaultState());
+        Set<Direction> openAgain = expectScanAsTheGame(client, settings, "in the open again");
+        if (!openAgain.equals(open)) {
+            fail("with the box gone, the scan sees " + openAgain + ", not " + open + " as before it");
+        }
+    }
+
+    /** The scan with faster view scan on, which must be what the game's own scan answers with it off. */
+    private static Set<Direction> expectScanAsTheGame(MinecraftClient client, Settings settings, String where) {
+        settings.set(Settings.FASTER_VIEW_SCAN, true);
+        Set<Direction> ash = scanOnce(client);
+        settings.set(Settings.FASTER_VIEW_SCAN, false);
+        Set<Direction> game = scanOnce(client);
+        settings.set(Settings.FASTER_VIEW_SCAN, true);
+        if (!ash.equals(game)) {
+            fail("faster view scan answered " + ash + " " + where + ", where the game's own scan answers " + game);
+        }
+        // Once more on, so that it keeps this answer for the next check.
+        scanOnce(client);
+        return game;
+    }
+
+    /** The culling's scan of the camera's chunk section, called as setupTerrain calls it. */
+    @SuppressWarnings("unchecked")
+    private static Set<Direction> scanOnce(MinecraftClient client) {
+        return onClient(client, () -> {
+            Method scan = WorldRenderer.class.getDeclaredMethod("getOpenChunkFaces", BlockPos.class);
+            scan.setAccessible(true);
+            BlockPos eye = new BlockPos(client.player.x, client.player.y + client.player.getEyeHeight(),
+                    client.player.z);
+            return EnumSet.copyOf((Collection<Direction>) scan.invoke(client.worldRenderer, eye));
+        });
+    }
+
+    /** Sets blocks on the server, and waits for the client to have every one. */
+    private static void setBlocks(MinecraftClient client, IntegratedServer server, List<BlockPos> where,
+            BlockState state) {
+        onServer(server, () -> {
+            for (BlockPos pos : where) {
+                server.worlds[0].setBlockState(pos, state);
+            }
+            return Boolean.TRUE;
+        });
+        await("see the blocks set", () -> onClient(client, () -> {
+            for (BlockPos pos : where) {
+                if (client.world.getBlockState(pos) != state) {
+                    return null;
+                }
+            }
+            return client;
+        }));
     }
 
     /**

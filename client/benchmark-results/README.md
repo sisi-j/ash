@@ -71,3 +71,19 @@ The same laptop, back to back in one sitting, with `faster-clouds.enabled` switc
 - **The clouds' own time halved,** from about 0.38 ms to 0.19 ms a frame.
 - **Building the clouds was the cost, not drawing them.** A first version also put each pass into one draw instead of 64. It measured about 15% faster the evening before, but Mesa's software renderer on CI then settled a few dozen ties between cloud faces at equal depth the other way. So the shipped version draws tile by tile as the game does, and keeps most of the gain.
 - **It only helps with fancy clouds,** the game's default. With clouds on Fast or Off, the game never reaches the code it replaces.
+
+### Faster view scan (#105), 8 October 2026
+
+The same laptop, back to back in one sitting, with faster clouds on throughout and `faster-view-scan.enabled` switched between runs:
+
+| Run | Faster view scan | Average | Uncertainty | 1% low | Terrain setup's share |
+| --- | --- | --- | --- | --- | --- |
+| `1.8.9-scan-off-20261008-015824` | off | 513.4 FPS | ±1.2% | 224.0 FPS | 22.4% |
+| `1.8.9-scan-on-20261008-020203` | on | 579.2 FPS | ±1.0% | 252.9 FPS | 16.7% |
+| `1.8.9-scan-off-20261008-020541` | off | 510.2 FPS | ±0.5% | 227.9 FPS | 22.6% |
+| `1.8.9-scan-on-20261008-020919` | on | 579.5 FPS | ±0.9% | 254.8 FPS | 16.7% |
+
+- **Faster view scan is 12.8% to 13.6% faster here**, against at most 3.1% for twice the combined uncertainty of any pair.
+- **The scan's own section went** from 7.1% and 7.7% of the frame to under the profile's 1% floor.
+- **The gain is more than the section's share.** The scan saved about 0.23 ms a frame where its section was about 0.15 ms. Most likely the rest is the garbage the scan made every frame, which the collector no longer has to clear; that is not measured.
+- **This scene is its best case.** The camera turns on the spot, so it never leaves its block and the answer is always reused. A player walking moves into a new block a few times a second, and each move costs one scan, as before.
