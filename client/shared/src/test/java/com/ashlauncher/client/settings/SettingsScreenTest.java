@@ -161,9 +161,9 @@ class SettingsScreenTest {
         // first would tell a different story about the same session.
         SettingsScreen screen = new SettingsScreen(Settings.load(configDir), feature -> false, () -> { });
 
-        assertEquals("FPS readout, Toggle sprint, Crosshair, Hit indicator, Freelook, Snaplook, Ping readout and Hit"
-                + " colour did not load. That is a problem with ash, not with your game or your setup, and an update to"
-                + " ash will fix it.", screen.footer());
+        assertEquals("FPS readout, Toggle sprint, Crosshair, Hit indicator, Freelook, Snaplook, Ping readout, Hit"
+                + " colour and Faster clouds did not load. That is a problem with ash, not with your game or your setup,"
+                + " and an update to ash will fix it.", screen.footer());
     }
 
     @Test

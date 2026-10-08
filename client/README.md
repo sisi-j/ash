@@ -199,7 +199,10 @@ keeps them. Each run writes two files:
   - the **spread** between passes, and the **uncertainty** of the average;
   - how long the warm-up took, and whether the world had settled;
   - on 1.8.9, the **profile**: each section of the game's frame worth at least
-    1% of it, three levels deep.
+    1% of it, five levels deep. One section is the measurement's own:
+    `terrain_setup.culling.open_faces`, the scan of the camera's chunk section
+    that the game's culling makes each frame. A mixin in the benchmark's source
+    set marks it out, so it never reaches a player.
 - `...-frames.csv`, with every frame's time.
 
 The log's last lines say the same in one sentence.
@@ -218,6 +221,11 @@ The log's last lines say the same in one sentence.
   their combined uncertainty, √(u₁² + u₂²). Anything less has not been shown
   to move the frame rate. Run the baseline twice first, to see how far this
   machine disagrees with itself.
+- **Compare runs from one sitting only.** Between two sittings an hour apart,
+  the same 1.8.9 build on the same laptop moved from 440 to 379 FPS, far
+  outside either run's uncertainty. So a before and after are run back to
+  back, alternating - off, on, off, on - and the pairs are compared, never a
+  run against an older one.
 
 **Features on and off:** before a run, edit
 `target-<version>/build/run/benchmark/config/ash.properties`. It is the run's

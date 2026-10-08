@@ -205,7 +205,7 @@ tasks.register('checkJarHasNoBenchmark') {
         zipTree(shipped.get().asFile).visit { entry ->
             entries++
             def path = entry.relativePath.pathString
-            if (path.startsWith('com/ashlauncher/client/bench/') || path.contains('AshBenchmark')) {
+            if (path.startsWith('com/ashlauncher/client/bench/') || path.contains('AshBenchmark') || path.contains('ash-benchmark')) {
                 offences << path
             }
         }

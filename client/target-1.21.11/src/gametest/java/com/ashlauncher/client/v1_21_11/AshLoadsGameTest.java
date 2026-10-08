@@ -112,6 +112,9 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         }) {
             assertReportSays(feature);
         }
+        // Faster clouds is 1.8.9's alone: not a feature that failed here, but
+        // one this game has no line for at all.
+        assertReportOmits("\"faster-clouds\"");
         // Read from the real loader's mod origins: nothing of a player's is in
         // this game's mods folder - except Sodium, in the run with it - and
         // Fabric API came from where the build put it, so the copy that ran
@@ -912,6 +915,19 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             String written = Files.readString(report);
             if (!written.contains(entry)) {
                 throw new AssertionError("the load report does not say " + entry + ":\n" + written);
+            }
+        } catch (IOException unreadable) {
+            throw new AssertionError("the load report could not be read", unreadable);
+        }
+    }
+
+    private static void assertReportOmits(String entry) {
+        Path report = FabricLoader.getInstance().getGameDir().resolve(LoadReport.RELATIVE_PATH);
+        try {
+            String written = Files.readString(report);
+            if (written.contains(entry)) {
+                throw new AssertionError("the load report names " + entry + ", which this target does not have:\n"
+                        + written);
             }
         } catch (IOException unreadable) {
             throw new AssertionError("the load report could not be read", unreadable);

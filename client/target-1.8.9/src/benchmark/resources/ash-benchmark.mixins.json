@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.ashlauncher.client.v1_8_9.benchmark",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "AshBenchmarkOpenFacesMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

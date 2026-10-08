@@ -256,7 +256,7 @@ public final class AshClient implements ClientModInitializer {
         Runnable writeReport = () -> writeLoadReport(settings, landed);
         // Freelook's row says why it is off on a listed server, and cannot be
         // switched there, as the spec's settings screen asks.
-        SettingsScreen settingsScreen = new SettingsScreen(settings, feature -> true, landed::contains,
+        SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
                 feature -> {
                     BlockList.Server here = feature == Feature.FREELOOK ? CurrentServer.blockedHere() : null;
                     return here == null ? "" : here.whyOff();
@@ -288,12 +288,21 @@ public final class AshClient implements ClientModInitializer {
      */
     private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
-            LoadReport.forSession(clientVersion(), landed::contains, settings::on)
+            LoadReport.forSession(clientVersion(), AshClient::present, landed::contains, settings::on)
                     .withOrigins(modOrigins(), BUNDLED)
                     .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {
             LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
         }
+    }
+
+    /**
+     * Whether this target has a feature at all. Faster clouds is 1.8.9's
+     * alone: this game draws its clouds another way, so here it has no tile
+     * and no line in the report, rather than one that says it did not load.
+     */
+    private static boolean present(Feature feature) {
+        return feature != Feature.FASTER_CLOUDS;
     }
 
     /**

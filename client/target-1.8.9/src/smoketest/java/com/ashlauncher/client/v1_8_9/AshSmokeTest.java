@@ -33,6 +33,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.ScreenshotUtils;
 import net.minecraft.client.util.Window;
@@ -128,6 +129,13 @@ public final class AshSmokeTest implements ClientModInitializer {
         });
         await("join a world", () ->
                 client.world != null && client.player != null && client.currentScreen == null ? client : null);
+        // And on the server itself: on CI the option alone left the world on
+        // its default difficulty, and slimes spawned on the flat world and
+        // killed the player while a step waited for the mobs to go.
+        onServer(client.getServer(), () -> {
+            client.getServer().setDifficulty(net.minecraft.world.Difficulty.PEACEFUL);
+            return Boolean.TRUE;
+        });
 
         pause(IN_WORLD_MS);
         screenshot(client, "ash-in-world.png");
@@ -139,6 +147,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         settingsScreenWorks(client);
         crosshairOptionsWork(client);
         crosshairWorks(client);
+        fasterCloudsChangeNoPixel(client);
         hitIndicatorWorks(client);
         moveReadoutsWorks(client);
         panelIsCrispAtEveryGuiScale(client);
@@ -207,6 +216,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
             "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
+            "{ \"id\": \"faster-clouds\", \"name\": \"Faster clouds\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -342,6 +352,117 @@ public final class AshSmokeTest implements ClientModInitializer {
         });
     }
 
+    /**
+     * Faster clouds draws the game's clouds and not one pixel differently
+     * (#45, ADR-0006): the same frame, with ash's clouds and with the game's,
+     * compared pixel for pixel.
+     *
+     * <p>The clouds drift with every tick, so the frame is held still first:
+     * looking up at them, behind an empty screen that pauses the game - which
+     * stops the ticks and holds the partial tick where it was. Two frames of
+     * the game's own clouds must then match, or the frame did not hold and
+     * nothing after it would mean anything. Then ash's clouds must match the
+     * game's; and with clouds off the frame must differ, or there were no
+     * clouds where the frames were compared. The HUD still draws behind a
+     * screen, and its frame rate changes, so the top of the screen, where the
+     * readouts are, is left out; the rest holds as still as the clouds do.
+     */
+    private static void fasterCloudsChangeNoPixel(MinecraftClient client) {
+        Float pitch = onClient(client, () -> {
+            float was = client.player.pitch;
+            client.player.pitch = -30.0F;
+            client.player.prevPitch = -30.0F;
+            client.options.cloudMode = 2;
+            client.setScreen(new Screen() {
+            });
+            return was;
+        });
+        Settings settings = AshClient.settings;
+        settings.set(Settings.FASTER_CLOUDS, false);
+
+        Frame game = stillFrame(client, "ash-clouds-game.png");
+
+        int drawnBefore = FasterClouds.drawn;
+        settings.set(Settings.FASTER_CLOUDS, true);
+        Frame ash = stillFrame(client, "ash-clouds-ash.png");
+        if (FasterClouds.drawn == drawnBefore) {
+            fail("faster clouds is on, and ash's clouds never drew - the frame compared is the game's own");
+        }
+        expectSameSky(ash, game, "ash's clouds differ from the game's");
+
+        onClient(client, () -> {
+            client.options.cloudMode = 0;
+            return null;
+        });
+        Frame none = frame(client, "ash-clouds-none.png", false);
+        if (sameSky(none, game) == null) {
+            fail("the frame with no clouds matches the frame with them - there were no clouds where it compared");
+        }
+
+        onClient(client, () -> {
+            client.options.cloudMode = 2;
+            client.setScreen(null);
+            client.player.pitch = pitch;
+            client.player.prevPitch = pitch;
+            return null;
+        });
+    }
+
+    /**
+     * A frame the same as the one before it. The sky's colour follows where
+     * the camera looks, and eases there a little every frame, paused or not:
+     * on CI's software renderer, at under 40 frames a second, it was still
+     * moving a second after the camera turned. So frames are taken until two
+     * in a row match, for up to 20 seconds.
+     */
+    private static Frame stillFrame(MinecraftClient client, String name) {
+        Frame previous = frame(client, name, false);
+        for (int tries = 0; tries < 40; tries++) {
+            Frame next = frame(client, name, false);
+            if (sameSky(next, previous) == null) {
+                return next;
+            }
+            previous = next;
+        }
+        fail(name + ": the frame never held still behind a pausing screen, so the clouds cannot be compared ("
+                + sameSky(frame(client, name, false), previous) + ")");
+        return null;
+    }
+
+    private static void expectSameSky(Frame frame, Frame expected, String what) {
+        String difference = sameSky(frame, expected);
+        if (difference != null) {
+            fail(frame.name + " against " + expected.name + ": " + what + " (" + difference + ")");
+        }
+    }
+
+    /**
+     * Null if both are the same pixel for pixel below the top tenth of the
+     * screen - clear of the readouts, whose frame rate changes - or the first
+     * difference and how many pixels differ. Overhead, the clouds can have a
+     * gap as wide as the screen, so it is not the middle alone.
+     */
+    private static String sameSky(Frame frame, Frame expected) {
+        BufferedImage a = frame.image;
+        BufferedImage b = expected.image;
+        int differing = 0;
+        String first = null;
+        for (int y = a.getHeight() / 10; y < a.getHeight(); y++) {
+            for (int x = 0; x < a.getWidth(); x++) {
+                int found = a.getRGB(x, y) & 0xFFFFFF;
+                int wanted = b.getRGB(x, y) & 0xFFFFFF;
+                if (found != wanted) {
+                    differing++;
+                    if (first == null) {
+                        first = "#" + Integer.toHexString(found) + " for #" + Integer.toHexString(wanted) + " at " + x
+                                + "," + y;
+                    }
+                }
+            }
+        }
+        return first == null ? null : differing + " pixels differ, the first " + first;
+    }
+
     /** Opens ash's settings, presses one switch, checks the file, and closes them again. */
     private static void switchCrosshair(MinecraftClient client, KeyBinding settingsKey, String fileSays) {
         tap(client, settingsKey.getCode());
@@ -362,21 +483,34 @@ public final class AshSmokeTest implements ClientModInitializer {
      */
     private static void clearMobs(MinecraftClient client) {
         IntegratedServer server = client.getServer();
-        onServer(server, () -> {
-            for (net.minecraft.entity.Entity entity : new ArrayList<>(server.worlds[0].loadedEntities)) {
-                if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
-                    entity.remove();
-                }
-            }
-            return Boolean.TRUE;
-        });
+        AtomicReference<String> lastSeen = new AtomicReference<>("");
         await("see the mobs go", () -> {
+            // Removed again on every look: a chunk still generating can bring
+            // new animals with it after the first sweep.
+            onServer(server, () -> {
+                for (net.minecraft.entity.Entity entity : new ArrayList<>(server.worlds[0].loadedEntities)) {
+                    if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
+                        entity.remove();
+                    }
+                }
+                return Boolean.TRUE;
+            });
+            List<String> left = new ArrayList<>();
             for (Object entity : onClient(client, () -> new ArrayList<>(client.world.loadedEntities))) {
                 if (!(entity instanceof net.minecraft.entity.player.PlayerEntity)) {
-                    return null;
+                    left.add(entity.getClass().getSimpleName());
                 }
             }
-            return client;
+            if (left.isEmpty()) {
+                return client;
+            }
+            // Named whenever what is left changes, so a wait that never ends
+            // says what would not go.
+            Collections.sort(left);
+            if (!left.toString().equals(lastSeen.getAndSet(left.toString()))) {
+                System.out.println("ash smoke test: the client still sees " + left);
+            }
+            return null;
         });
     }
 

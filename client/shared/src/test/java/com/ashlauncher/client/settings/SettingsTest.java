@@ -152,7 +152,7 @@ class SettingsTest {
                 Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT,
                 Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH,
                 Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION, Settings.PANEL_SIZE,
-                Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR), Settings.declared());
+                Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR, Settings.FASTER_CLOUDS), Settings.declared());
 
         Settings.load(configDir);
 
@@ -216,7 +216,10 @@ class SettingsTest {
                         + "panel.animations=true\n"
                         + "# Whether the game blurs behind ash's settings panel; off, the panel is darker instead."
                         + " true or false.\n"
-                        + "panel.blur=true\n",
+                        + "panel.blur=true\n"
+                        + "# Draw the game's fancy clouds with half the work; they look exactly as the game's own do."
+                        + " 1.8.9 only. true or false.\n"
+                        + "faster-clouds.enabled=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

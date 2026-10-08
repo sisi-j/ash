@@ -133,6 +133,11 @@ public final class Settings {
             "Strength", 30, 0, 100, 5, "%",
             "How strongly the flash colours the entity, in per cent: a whole number from 0 to 100. 30 is the game's.");
 
+    public static final OnOff FASTER_CLOUDS = new OnOff(Feature.FASTER_CLOUDS, Category.PERFORMANCE,
+            "The game's clouds with half the work. They look exactly the same.", "faster-clouds.enabled", true,
+            "Draw the game's fancy clouds with half the work; they look exactly as the game's own do. 1.8.9 only."
+                    + " true or false.");
+
     // Where the readouts sit, set by dragging them in the panel's Edit HUD
     // mode. The frame rate four in from the top-left corner, as it always
     // has been: everything vanilla anchors lives at the bottom or the centre
@@ -175,7 +180,7 @@ public final class Settings {
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
             HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
             HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION,
-            PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR));
+            PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR, FASTER_CLOUDS));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;

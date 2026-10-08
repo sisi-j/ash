@@ -5,6 +5,9 @@
   "name": "ash frame-time measurement (1.8.9)",
   "description": "Runs a fixed scene and records every frame's time. A developer tool; never shipped.",
   "environment": "client",
+  "mixins": [
+    "ash-benchmark.mixins.json"
+  ],
   "entrypoints": {
     "client": [
       "com.ashlauncher.client.v1_8_9.AshBenchmark"
