@@ -55,18 +55,19 @@ So the baseline's 20% of terrain setup is two costs, and clouds are the largest 
 
 This run averaged 372.9 FPS, against the baseline's 440 an hour earlier, on the same build: the drift between sittings that the client README warns of.
 
-### Faster clouds (#45), 7 October 2026
+### Faster clouds (#45), 8 October 2026
 
 The same laptop, back to back in one sitting, with `faster-clouds.enabled` switched between runs:
 
 | Run | Faster clouds | Average | Uncertainty | 1% low | Clouds' share |
 | --- | --- | --- | --- | --- | --- |
-| `1.8.9-clouds-on-20261007-223741` | on | 542.4 FPS | ±0.8% | 235.5 FPS | 10.3% |
-| `1.8.9-clouds-off-20261007-224120` | off | 465.4 FPS | ±0.3% | 222.5 FPS | 18.3% |
-| `1.8.9-clouds-on-20261007-224458` | on | 534.1 FPS | ±0.8% | 244.2 FPS | 9.6% |
+| `1.8.9-clouds-off-20261008-010535` | off | 459.0 FPS | ±0.5% | 220.9 FPS | 17.4% |
+| `1.8.9-clouds-on-20261008-010914` | on | 513.4 FPS | ±1.0% | 235.4 FPS | 9.9% |
+| `1.8.9-clouds-off-20261008-011253` | off | 458.8 FPS | ±1.0% | 228.0 FPS | 17.5% |
+| `1.8.9-clouds-on-20261008-011630` | on | 514.0 FPS | ±0.6% | 237.9 FPS | 9.8% |
 
-- **Faster clouds is 14.8% to 16.5% faster here**, against twice the combined uncertainty of 1.7%.
-- **Drift does not explain it.** The run with it off sits between the two with it on, so a machine drifting either way would have moved one of them towards it.
-- **The clouds' own time halved,** from about 0.39 ms to 0.19 ms a frame.
-- **One run was left out.** The first run with it off came out at ±2.9% and marked itself not comparable.
+- **Faster clouds is 11.9% to 12.0% faster here**, against at most 2.8% for twice the combined uncertainty of any pair.
+- **Drift does not explain it.** The runs alternate, and each setting agrees with itself to 0.1%.
+- **The clouds' own time halved,** from about 0.38 ms to 0.19 ms a frame.
+- **Building the clouds was the cost, not drawing them.** A first version also put each pass into one draw instead of 64. It measured about 15% faster the evening before, but Mesa's software renderer on CI then settled a few dozen ties between cloud faces at equal depth the other way. So the shipped version draws tile by tile as the game does, and keeps most of the gain.
 - **It only helps with fancy clouds,** the game's default. With clouds on Fast or Off, the game never reaches the code it replaces.
