@@ -48,7 +48,10 @@ import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.BaseFrustum;
+import net.minecraft.client.render.BuiltChunkStorage;
 import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.client.world.BuiltChunk;
 import net.minecraft.world.World;
 import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.entity.player.ClientPlayerEntity;
@@ -95,6 +98,17 @@ public final class AshClient implements ClientModInitializer {
             "com.ashlauncher.client.v1_8_9.mixin.WorldRendererViewScanMixin";
 
     private static final String VIEW_SCAN_WORLD_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.WorldViewScanMixin";
+
+    private static final String CHUNK_SEARCH_RENDERER_MIXIN =
+            "com.ashlauncher.client.v1_8_9.mixin.WorldRendererChunkSearchMixin";
+
+    private static final String CHUNK_SEARCH_NEIGHBOURS_MIXIN =
+            "com.ashlauncher.client.v1_8_9.mixin.BuiltChunkNeighboursMixin";
+
+    private static final String CHUNK_SEARCH_STORAGE_ACCESS = "com.ashlauncher.client.v1_8_9.mixin.BuiltChunkStorageAccess";
+
+    private static final String CHUNK_SEARCH_FRUSTUM_MIXIN =
+            "com.ashlauncher.client.v1_8_9.mixin.BaseFrustumChunkSearchMixin";
 
     private static final String HIT_ATTACK_MIXIN =
             "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerInteractionManagerMixin";
@@ -259,6 +273,25 @@ public final class AshClient implements ClientModInitializer {
             FasterViewScan.install(() -> settings.get(Settings.FASTER_VIEW_SCAN));
         } else {
             landed.remove(Feature.FASTER_VIEW_SCAN);
+        }
+
+        // Faster chunk search: the culling's walk to the chunks in view, with
+        // kept neighbours and the one-corner frustum test. All four mixins or
+        // none, so the feature is wholly the game's or wholly ash's.
+        boolean chunkSearchLanded = true;
+        for (Object[] mixin : new Object[][] {
+            {WorldRenderer.class, CHUNK_SEARCH_RENDERER_MIXIN},
+            {BuiltChunk.class, CHUNK_SEARCH_NEIGHBOURS_MIXIN},
+            {BuiltChunkStorage.class, CHUNK_SEARCH_STORAGE_ACCESS},
+            {BaseFrustum.class, CHUNK_SEARCH_FRUSTUM_MIXIN},
+        }) {
+            chunkSearchLanded &= MixinFeature.landed(() -> (Class<?>) mixin[0], (String) mixin[1],
+                    why -> LOG.warn(MixinFeature.didNotLoad(Feature.FASTER_CHUNK_SEARCH.displayName(), why)));
+        }
+        if (chunkSearchLanded) {
+            FasterChunkSearch.install(() -> settings.get(Settings.FASTER_CHUNK_SEARCH));
+        } else {
+            landed.remove(Feature.FASTER_CHUNK_SEARCH);
         }
         AshClient.settings = settings;
 

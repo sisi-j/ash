@@ -3,6 +3,7 @@ package com.ashlauncher.client.v1_8_9;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -157,6 +158,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         crosshairWorks(client);
         fasterCloudsChangeNoPixel(client);
         fasterViewScanAnswersAsTheGameDoes(client);
+        fasterChunkSearchFindsWhatTheGameFinds(client);
         hitIndicatorWorks(client);
         moveReadoutsWorks(client);
         panelIsCrispAtEveryGuiScale(client);
@@ -227,6 +229,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
             "{ \"id\": \"faster-clouds\", \"name\": \"Faster clouds\", \"status\": \"loaded\" }",
             "{ \"id\": \"faster-view-scan\", \"name\": \"Faster view scan\", \"status\": \"loaded\" }",
+            "{ \"id\": \"faster-chunk-search\", \"name\": \"Faster chunk search\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -463,6 +466,126 @@ public final class AshSmokeTest implements ClientModInitializer {
         if (!openAgain.equals(open)) {
             fail("with the box gone, the scan sees " + openAgain + ", not " + open + " as before it");
         }
+    }
+
+    /**
+     * Faster chunk search finds what the game's search finds (#104): the same
+     * sections, in the same order, reached the same way. Behind a pausing
+     * screen, so the view holds still, at four angles: the search is made to
+     * run again with it off, on and off again, and the renderer's list of
+     * visible sections compared element for element. The two runs with it off
+     * must agree with each other first - a section finishing its build in
+     * between would change the list for a reason of its own - and with it on
+     * the kept neighbours must really have been used. Then one frame with it
+     * off and one with it on must match, pixel for pixel.
+     */
+    private static void fasterChunkSearchFindsWhatTheGameFinds(MinecraftClient client) {
+        Settings settings = AshClient.settings;
+        float[] was = onClient(client, () -> {
+            client.setScreen(new Screen() {
+            });
+            return new float[] {client.player.yaw, client.player.pitch};
+        });
+        for (float[] view : new float[][] {{0, 0}, {90, -30}, {200, 45}, {300, 10}}) {
+            onClient(client, () -> {
+                client.player.yaw = view[0];
+                client.player.prevYaw = view[0];
+                client.player.pitch = view[1];
+                client.player.prevPitch = view[1];
+                return null;
+            });
+            for (int tries = 0; ; tries++) {
+                List<String> off = visibleAfterSearch(client, settings, false);
+                int keptBefore = FasterChunkSearch.neighboursKept;
+                List<String> on = visibleAfterSearch(client, settings, true);
+                int kept = FasterChunkSearch.neighboursKept - keptBefore;
+                List<String> offAgain = visibleAfterSearch(client, settings, false);
+                if (!off.equals(offAgain)) {
+                    if (tries < 10) {
+                        continue;
+                    }
+                    fail("the game's own search kept finding different sections at yaw " + view[0] + ", pitch "
+                            + view[1] + ", so faster chunk search could not be compared with it");
+                }
+                if (off.size() < 10) {
+                    fail("the search found only " + off.size() + " sections at yaw " + view[0] + " - too few to"
+                            + " prove anything");
+                }
+                if (kept == 0) {
+                    fail("faster chunk search was on and kept no neighbours - the search compared was the game's");
+                }
+                if (!on.equals(off)) {
+                    fail("faster chunk search found " + on.size() + " sections at yaw " + view[0] + ", pitch "
+                            + view[1] + ", where the game finds " + off.size() + "; the first difference: "
+                            + firstDifference(on, off));
+                }
+                break;
+            }
+        }
+
+        settings.set(Settings.FASTER_CHUNK_SEARCH, false);
+        Frame game = stillFrame(client, "ash-chunk-search-game.png");
+        settings.set(Settings.FASTER_CHUNK_SEARCH, true);
+        Frame ash = stillFrame(client, "ash-chunk-search-ash.png");
+        expectSameSky(ash, game, "the frame with faster chunk search differs from the game's");
+
+        onClient(client, () -> {
+            client.setScreen(null);
+            client.player.yaw = was[0];
+            client.player.prevYaw = was[0];
+            client.player.pitch = was[1];
+            client.player.prevPitch = was[1];
+            return null;
+        });
+    }
+
+    /**
+     * The renderer's list of visible sections after its search has run again
+     * with faster chunk search on or off: for each, where it is, the way the
+     * search came into it, how many steps from the camera, and every way it
+     * has gone.
+     */
+    private static List<String> visibleAfterSearch(MinecraftClient client, Settings settings, boolean on) {
+        settings.set(Settings.FASTER_CHUNK_SEARCH, on);
+        onClient(client, () -> {
+            Field needsUpdate = WorldRenderer.class.getDeclaredField("needsTerrainUpdate");
+            needsUpdate.setAccessible(true);
+            needsUpdate.setBoolean(client.worldRenderer, true);
+            return null;
+        });
+        pause(300L);
+        return onClient(client, () -> {
+            Field visible = WorldRenderer.class.getDeclaredField("visibleChunks");
+            visible.setAccessible(true);
+            List<String> found = new ArrayList<>();
+            for (Object info : (List<?>) visible.get(client.worldRenderer)) {
+                found.add(describe(info));
+            }
+            return found;
+        });
+    }
+
+    private static String describe(Object chunkInfo) throws ReflectiveOperationException {
+        StringBuilder described = new StringBuilder();
+        for (String name : new String[] {"chunk", "direction", "propagationLevel", "facingSet"}) {
+            Field field = chunkInfo.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            Object value = field.get(chunkInfo);
+            if ("chunk".equals(name)) {
+                value = ((net.minecraft.client.world.BuiltChunk) value).getPos();
+            }
+            described.append(name).append('=').append(value).append(' ');
+        }
+        return described.toString().trim();
+    }
+
+    private static String firstDifference(List<String> found, List<String> expected) {
+        for (int i = 0; i < Math.min(found.size(), expected.size()); i++) {
+            if (!found.get(i).equals(expected.get(i))) {
+                return "at " + i + ", " + found.get(i) + " for " + expected.get(i);
+            }
+        }
+        return "one list ends at " + Math.min(found.size(), expected.size());
     }
 
     /** The scan with faster view scan on, which must be what the game's own scan answers with it off. */

@@ -152,7 +152,8 @@ class SettingsTest {
                 Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT,
                 Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH,
                 Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION, Settings.PANEL_SIZE,
-                Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR, Settings.FASTER_CLOUDS, Settings.FASTER_VIEW_SCAN),
+                Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR, Settings.FASTER_CLOUDS, Settings.FASTER_VIEW_SCAN,
+                Settings.FASTER_CHUNK_SEARCH),
                 Settings.declared());
 
         Settings.load(configDir);
@@ -223,7 +224,10 @@ class SettingsTest {
                         + "faster-clouds.enabled=true\n"
                         + "# Reuse the game's scan of the blocks round the camera until one of them changes; what you"
                         + " see is exactly the same. 1.8.9 only. true or false.\n"
-                        + "faster-view-scan.enabled=true\n",
+                        + "faster-view-scan.enabled=true\n"
+                        + "# Find the chunks in view with cheaper lookups and frustum tests; exactly the same chunks"
+                        + " are found. 1.8.9 only. true or false.\n"
+                        + "faster-chunk-search.enabled=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

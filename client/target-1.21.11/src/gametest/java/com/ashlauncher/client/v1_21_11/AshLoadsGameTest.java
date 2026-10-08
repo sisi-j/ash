@@ -116,6 +116,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // one this game has no line for at all.
         assertReportOmits("\"faster-clouds\"");
         assertReportOmits("\"faster-view-scan\"");
+        assertReportOmits("\"faster-chunk-search\"");
         // Read from the real loader's mod origins: nothing of a player's is in
         // this game's mods folder - except Sodium, in the run with it - and
         // Fabric API came from where the build put it, so the copy that ran

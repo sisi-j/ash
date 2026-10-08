@@ -1162,6 +1162,8 @@ public final class Panel {
                 return Ink.Icon.CLOUD;
             case FASTER_VIEW_SCAN:
                 return Ink.Icon.SCAN;
+            case FASTER_CHUNK_SEARCH:
+                return Ink.Icon.BOXES;
             default:
                 return null;
         }

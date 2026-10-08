@@ -89,13 +89,31 @@ class PanelTest {
     @Test
     void every_switchable_feature_has_a_tile_with_its_name_and_its_state() {
         Panel panel = panel();
-        FakeCanvas canvas = render(panel);
+        render(panel);
 
         for (SettingsScreen.Row row : new SettingsScreen(settings, feature -> true, () -> { }).rows()) {
+            FakeCanvas canvas = scrolledTo(panel, row.feature());
             assertTrue(canvas.drew(row.name()), row.name() + " has no tile: " + canvas.texts());
             assertNotNull(panel.switchOf(row.feature()), row.name() + "'s button is not on view");
+            assertTrue(canvas.drew("ENABLED"), canvas.texts().toString());
         }
-        assertTrue(canvas.drew("ENABLED"), canvas.texts().toString());
+    }
+
+    /**
+     * The tiles scrolled, from the top, until this feature's is in view -
+     * as a player would, with the wheel - and drawn there. More tiles than fit
+     * at once is the panel's normal case.
+     */
+    private static FakeCanvas scrolledTo(Panel panel, Feature feature) {
+        for (int up = 0; up <= panel.maxScroll(); up++) {
+            panel.mouseScrolled(1);
+        }
+        FakeCanvas canvas = render(panel);
+        for (int down = 0; panel.tileOf(feature) == null && down < panel.maxScroll(); down++) {
+            panel.mouseScrolled(-1);
+            canvas = render(panel);
+        }
+        return canvas;
     }
 
     @Test
@@ -344,11 +362,11 @@ class PanelTest {
     @Test
     void every_tile_shows_its_features_icon_under_its_name() throws Exception {
         Panel panel = panel();
-        FakeCanvas canvas = render(panel);
-        canvas.save(new File("build/ui/tiles-with-icons.png"));
+        render(panel).save(new File("build/ui/tiles-with-icons.png"));
 
         for (SettingsScreen.Row row : model.rows()) {
             assertNotNull(Panel.iconOf(row.feature()), row.name() + " has no icon");
+            FakeCanvas canvas = scrolledTo(panel, row.feature());
             Rect glyph = panel.glyphIn(panel.tileOf(row.feature()));
             assertTrue(canvas.drawn.stream().anyMatch(d -> d.x() == glyph.x && d.y() == glyph.y
                     && d.width() == glyph.width && d.height() == glyph.height),

@@ -20,7 +20,11 @@
     "MinecraftClientServerMixin",
     "WorldRendererCloudsMixin",
     "WorldRendererViewScanMixin",
-    "WorldViewScanMixin"
+    "WorldViewScanMixin",
+    "BuiltChunkNeighboursMixin",
+    "BuiltChunkStorageAccess",
+    "WorldRendererChunkSearchMixin",
+    "BaseFrustumChunkSearchMixin"
   ],
   "injectors": {
     "defaultRequire": 0

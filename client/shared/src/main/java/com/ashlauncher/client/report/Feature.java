@@ -29,6 +29,11 @@ public enum Feature {
      */
     FASTER_VIEW_SCAN("faster-view-scan", "Faster view scan"),
     /**
+     * 1.8.9's search for visible chunks, with its chunk lookups and frustum
+     * tests made cheaper and its answer unchanged (#104). 1.8.9's alone.
+     */
+    FASTER_CHUNK_SEARCH("faster-chunk-search", "Faster chunk search"),
+    /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can
      * still fail to load: on 1.8.9 the key is read by a mixin of ash's own.

@@ -162,8 +162,8 @@ class SettingsScreenTest {
         SettingsScreen screen = new SettingsScreen(Settings.load(configDir), feature -> false, () -> { });
 
         assertEquals("FPS readout, Toggle sprint, Crosshair, Hit indicator, Freelook, Snaplook, Ping readout, Hit"
-                + " colour, Faster clouds and Faster view scan did not load. That is a problem with ash, not with your game"
-                + " or your setup, and an update to ash will fix it.", screen.footer());
+                + " colour, Faster clouds, Faster view scan and Faster chunk search did not load. That is a problem with"
+                + " ash, not with your game or your setup, and an update to ash will fix it.", screen.footer());
     }
 
     @Test

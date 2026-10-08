@@ -144,6 +144,12 @@ public final class Settings {
             "Reuse the game's scan of the blocks round the camera until one of them changes; what you see is"
                     + " exactly the same. 1.8.9 only. true or false.");
 
+    public static final OnOff FASTER_CHUNK_SEARCH = new OnOff(Feature.FASTER_CHUNK_SEARCH, Category.PERFORMANCE,
+            "Finds the chunks in view with less work each frame. Finds exactly the same ones.",
+            "faster-chunk-search.enabled", true,
+            "Find the chunks in view with cheaper lookups and frustum tests; exactly the same chunks are found."
+                    + " 1.8.9 only. true or false.");
+
     // Where the readouts sit, set by dragging them in the panel's Edit HUD
     // mode. The frame rate four in from the top-left corner, as it always
     // has been: everything vanilla anchors lives at the bottom or the centre
@@ -186,7 +192,8 @@ public final class Settings {
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
             HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
             HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION,
-            PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR, FASTER_CLOUDS, FASTER_VIEW_SCAN));
+            PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR, FASTER_CLOUDS, FASTER_VIEW_SCAN,
+            FASTER_CHUNK_SEARCH));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;
