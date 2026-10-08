@@ -1,0 +1,53 @@
+{
+  "target": "1.21.11",
+  "label": "marks-base",
+  "recorded": "2026-10-08T06:21:02Z",
+  "scene": {"seed": 4242, "x": 0.50, "y": 110.00, "z": 0.50, "pitch": 20.00, "renderDistance": 8, "width": 1280, "height": 720, "guiScale": 2, "warmUpSeconds": 40, "warmedUpSeconds": 59.98, "settled": true, "passSeconds": 30},
+  "machine": {
+    "cpu": "16x AMD Ryzen 7 8845HS w/ Radeon 780M Graphics",
+    "cores": "16",
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU/PCIe/SSE2",
+    "gpuVendor": "NVIDIA Corporation",
+    "driver": "3.3.0 NVIDIA 596.56",
+    "os": "Windows 11 10.0 amd64",
+    "java": "26.0.1 (Oracle Corporation)",
+    "maxMemoryMb": "3920"
+  },
+  "ashSettings": {
+    "crosshair.colour": "#FFFFFFFF",
+    "crosshair.enabled": "true",
+    "crosshair.gap": "0",
+    "crosshair.outline": "true",
+    "crosshair.shape": "cross",
+    "crosshair.size": "4",
+    "crosshair.thickness": "1",
+    "faster-clouds.enabled": "true",
+    "faster-view-scan.enabled": "true",
+    "fps-readout.enabled": "true",
+    "fps-readout.position": "top-left 4 4",
+    "freelook.enabled": "true",
+    "hit-colour.colour": "#FF0000",
+    "hit-colour.enabled": "true",
+    "hit-colour.strength": "30",
+    "hit-indicator.colour": "#FF4D4DFF",
+    "hit-indicator.duration": "300",
+    "hit-indicator.enabled": "true",
+    "panel.animations": "true",
+    "panel.blur": "true",
+    "panel.size": "100",
+    "ping-readout.enabled": "true",
+    "ping-readout.position": "top-left 4 15",
+    "snaplook.enabled": "true",
+    "toggle-sprint.enabled": "true"
+  },
+  "overall": {"frames": 105573, "seconds": 150.00, "averageFps": 703.80, "averageMs": 1.42, "onePercentLowFps": 291.05, "worstMs": 29.90},
+  "spread": {"averageFpsPercent": 0.81, "onePercentLowFpsPercent": 4.27, "uncertaintyPercent": 0.36, "comparable": true},
+  "passes": [
+    {"frames": 21180, "seconds": 30.00, "averageFps": 705.97, "averageMs": 1.42, "onePercentLowFps": 284.37, "worstMs": 18.69},
+    {"frames": 21122, "seconds": 30.00, "averageFps": 704.05, "averageMs": 1.42, "onePercentLowFps": 297.82, "worstMs": 12.40},
+    {"frames": 21037, "seconds": 30.00, "averageFps": 701.23, "averageMs": 1.43, "onePercentLowFps": 282.97, "worstMs": 29.90},
+    {"frames": 20887, "seconds": 30.00, "averageFps": 696.21, "averageMs": 1.44, "onePercentLowFps": 283.86, "worstMs": 14.82},
+    {"frames": 21347, "seconds": 30.00, "averageFps": 711.55, "averageMs": 1.41, "onePercentLowFps": 311.55, "worstMs": 12.26}
+  ],
+  "profile": []
+}

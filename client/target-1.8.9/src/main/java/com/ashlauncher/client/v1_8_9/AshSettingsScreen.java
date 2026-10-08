@@ -1,5 +1,7 @@
 package com.ashlauncher.client.v1_8_9;
 
+import com.ashlauncher.client.perf.FpsMeasurements;
+import com.ashlauncher.client.report.Target;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.ui.Key;
 import com.ashlauncher.client.ui.Panel;
@@ -55,6 +57,8 @@ public final class AshSettingsScreen extends Screen {
         // player to the game's own Controls to change it.
         panel.setOpenKey(() -> GameOptions.getFormattedNameForKeyCode(key.getCode()),
                 () -> client.setScreen(new ControlsOptionsScreen(this, client.options)));
+        // Each tile's FPS mark, as it was measured on this version (#70).
+        panel.setMarks(feature -> FpsMeasurements.markOf(feature, Target.V1_8_9));
     }
 
     /** The panel this screen shows, so the smoke test can find a switch and click it. */

@@ -394,6 +394,45 @@ public final class Ink {
         });
     }
 
+    /**
+     * A tile's FPS mark (#70), {@code width} by {@code height}, from the
+     * mockup's 24 by 18 drawing: for a gain, an even triangle pointing up, its
+     * corners rounded by a round-joined stroke 3 wide of its own colour; for a
+     * loss, the same pointing down; for neither, a bar as wide as the
+     * triangle's base, its ends round.
+     *
+     * @param direction above zero for up, below for down, zero for level
+     */
+    public static synchronized Raster fpsMark(int direction, int width, int height, int argb) {
+        int way = Integer.signum(direction);
+        return cached("mark/" + way + "/" + width + "x" + height + "/" + Integer.toHexString(argb), () -> {
+            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = graphics(image);
+            g.setColor(new Color(argb, true));
+            g.scale(width / 24.0, height / 18.0);
+            if (way == 0) {
+                g.fill(new java.awt.geom.RoundRectangle2D.Float(1, 7, 22, 4, 4, 4));
+            } else {
+                java.awt.geom.Path2D.Float triangle = new java.awt.geom.Path2D.Float();
+                if (way > 0) {
+                    triangle.moveTo(12, 3);
+                    triangle.lineTo(21.5f, 15);
+                    triangle.lineTo(2.5f, 15);
+                } else {
+                    triangle.moveTo(12, 15);
+                    triangle.lineTo(21.5f, 3);
+                    triangle.lineTo(2.5f, 3);
+                }
+                triangle.closePath();
+                g.fill(triangle);
+                g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.draw(triangle);
+            }
+            g.dispose();
+            return raster(image, 0, 0, null);
+        });
+    }
+
     private static List<Shape> shapesOf(Icon icon) {
         List<Shape> shapes = ICON_SHAPES.get(icon);
         if (shapes == null) {

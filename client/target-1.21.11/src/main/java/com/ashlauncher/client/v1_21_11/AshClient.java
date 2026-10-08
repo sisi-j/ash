@@ -17,6 +17,7 @@ import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
+import com.ashlauncher.client.report.Target;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.snaplook.Snaplook;
@@ -297,13 +298,12 @@ public final class AshClient implements ClientModInitializer {
     }
 
     /**
-     * Whether this target has a feature at all. Faster clouds and faster view
-     * scan are 1.8.9's alone: this game draws its clouds and culls its chunks
-     * other ways, so here they have no tile and no line in the report, rather
-     * than one that says they did not load.
+     * Whether this target has a feature at all, as the feature declares it.
+     * Faster clouds and faster view scan are 1.8.9's alone: this game draws
+     * its clouds and culls its chunks other ways.
      */
     private static boolean present(Feature feature) {
-        return feature != Feature.FASTER_CLOUDS && feature != Feature.FASTER_VIEW_SCAN;
+        return feature.existsOn(Target.V1_21_11);
     }
 
     /**
