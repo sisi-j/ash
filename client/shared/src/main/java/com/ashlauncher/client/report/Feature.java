@@ -23,6 +23,12 @@ public enum Feature {
      */
     FASTER_CLOUDS("faster-clouds", "Faster clouds"),
     /**
+     * 1.8.9's scan of the blocks round the camera, which its chunk culling
+     * makes every frame, reused until one of them could have changed (#105).
+     * 1.8.9's alone, as faster clouds is.
+     */
+    FASTER_VIEW_SCAN("faster-view-scan", "Faster view scan"),
+    /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can
      * still fail to load: on 1.8.9 the key is read by a mixin of ash's own.

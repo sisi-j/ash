@@ -99,7 +99,8 @@ public final class Ink {
         SPRINT("chevrons-right"),
         EYE("eye"),
         ROTATE("rotate-ccw"),
-        CLOUD("cloud");
+        CLOUD("cloud"),
+        SCAN("scan-eye");
 
         private final String lucideName;
 

@@ -1160,6 +1160,8 @@ public final class Panel {
                 return Ink.Icon.DROPLET;
             case FASTER_CLOUDS:
                 return Ink.Icon.CLOUD;
+            case FASTER_VIEW_SCAN:
+                return Ink.Icon.SCAN;
             default:
                 return null;
         }

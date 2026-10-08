@@ -49,6 +49,7 @@ import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.world.World;
 import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.entity.player.ClientPlayerEntity;
 import org.apache.logging.log4j.LogManager;
@@ -89,6 +90,11 @@ public final class AshClient implements ClientModInitializer {
     private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.InGameHudMixin";
 
     private static final String FASTER_CLOUDS_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.WorldRendererCloudsMixin";
+
+    private static final String VIEW_SCAN_RENDERER_MIXIN =
+            "com.ashlauncher.client.v1_8_9.mixin.WorldRendererViewScanMixin";
+
+    private static final String VIEW_SCAN_WORLD_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.WorldViewScanMixin";
 
     private static final String HIT_ATTACK_MIXIN =
             "com.ashlauncher.client.v1_8_9.mixin.ClientPlayerInteractionManagerMixin";
@@ -240,6 +246,19 @@ public final class AshClient implements ClientModInitializer {
             FasterClouds.install(() -> settings.get(Settings.FASTER_CLOUDS));
         } else {
             landed.remove(Feature.FASTER_CLOUDS);
+        }
+
+        // Faster view scan: the culling's scan of the camera's chunk section,
+        // reused until a block could have changed. Both halves or neither: a
+        // kept answer nothing forgets would be worse than none.
+        boolean viewScanLanded = MixinFeature.landed(() -> WorldRenderer.class, VIEW_SCAN_RENDERER_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.FASTER_VIEW_SCAN.displayName(), why)))
+                && MixinFeature.landed(() -> World.class, VIEW_SCAN_WORLD_MIXIN,
+                        why -> LOG.warn(MixinFeature.didNotLoad(Feature.FASTER_VIEW_SCAN.displayName(), why)));
+        if (viewScanLanded) {
+            FasterViewScan.install(() -> settings.get(Settings.FASTER_VIEW_SCAN));
+        } else {
+            landed.remove(Feature.FASTER_VIEW_SCAN);
         }
         AshClient.settings = settings;
 
