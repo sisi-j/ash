@@ -192,3 +192,16 @@ Faster clouds as merged in #106, which builds the clouds with the game's buffer 
 - **The clouds' share of the frame halved again**, from 9.9% to 4.7%.
 - **The gain is more than the share predicts**, as with faster view scan, and the rest isn't measured.
 - **The mark stays green.** Faster clouds' FPS mark rests on the builder version, which already raised the frame rate.
+
+### 1.8.9's "Use VBOs", 8 October 2026
+
+Where 1.8.9's frame goes now, from a flight recording of the benchmark with every feature on: about 45% of the render thread's native time is waiting on the display swap, and 38% is the driver running the chunk display lists. So the game's own Video Settings option to draw chunks from vertex buffer objects instead was measured, alternating in one sitting after a warm-up:
+
+| Run | Use VBOs | Average | Uncertainty | Terrain's share |
+| --- | --- | --- | --- | --- |
+| `1.8.9-vbo-false-20261008-155718` | off | 553.9 FPS | ±0.8% | 22.8% |
+| `1.8.9-vbo-true-20261008-160057` | on | 570.5 FPS | ±1.4% | 21.3% |
+| `1.8.9-vbo-false-20261008-160437` | off | 576.4 FPS | ±1.2% | 22.7% |
+| `1.8.9-vbo-true-20261008-160816` | on | 547.7 FPS | ±1.2% | 21.6% |
+
+**No difference** on this machine: the pairs go opposite ways, and terrain's share barely moves. So ash leaves the option as the player has it. It's worth measuring again on a weaker or older GPU before anyone acts on it either way.
