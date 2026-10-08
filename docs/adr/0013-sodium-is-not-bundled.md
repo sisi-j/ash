@@ -1,6 +1,6 @@
 # Sodium is not bundled
 
-ash ships no Sodium. Lithium stays. A player who wants Sodium installs it themselves as a third-party mod.
+ash ships no Sodium. ~~Lithium stays.~~ Lithium is not bundled either (amended 2026-10-08, below). A player who wants Sodium installs it themselves as a third-party mod.
 
 This supersedes the Sodium half of ADR-0004, which was built on a licence that is not Sodium's licence.
 
@@ -27,3 +27,21 @@ Do not bundle Sodium. Revisit before Phase 4, with legal advice, when cosmetics 
 - Players lose Sodium's frame rate unless they install it themselves. On a competitive client that is a real cost, and it is the reason to revisit rather than close this.
 - The bundled-mod machinery still earns its keep for Lithium, so nothing built for it is wasted.
 - On 1.8.9 nothing changes: no Sodium equivalent exists there, and that pipeline was always ash's own.
+
+## Amended 2026-10-08: Lithium is not bundled either
+
+"Lithium stays" was conditional from Phase 3 on: the spec bundles it only if it makes the game measurably faster (user story 39), because Lithium's own documentation credits its gains to singleplayer's built-in server, not to play on a server (`docs/research/0006`). #44 measured it on 1.21.11 with the frame-time measurement. Lithium `0.21.4+mc1.21.11`, off and on in alternating runs, in singleplayer and on a vanilla dedicated server:
+
+| Where | Off | On | Change, pair by pair |
+| --- | --- | --- | --- |
+| Singleplayer | 626.1, 656.5 FPS | 627.1, 671.5 FPS | +0.2%, +2.3% |
+| On a server | 637.1, 622.2 FPS | 627.3, 644.4 FPS | -1.5%, +3.6% |
+
+Averaged, +1.2% and +1.0%: inside the ±3% the spec counts as no change. The runs and how they were taken are in `client/benchmark-results/README.md`, under *Lithium on 1.21.11*.
+
+So ash bundles **neither Sodium nor Lithium**. A player who wants either adds it as a third-party mod.
+
+Consequences:
+- **No bundled-mod work for Lithium.** The depot pin, the LGPL and GPL texts and the source directions it would have needed are not built. The bundled-mod machinery stays, for Fabric API and Legacy Fabric.
+- **Frame time is what was asked, and what was measured.** Lithium's claims are about the built-in server's tick time. On a weaker machine, a slow singleplayer tick may matter in a way this laptop's frame rate doesn't show. If that is ever the question, it needs its own measurement of tick time, not a reading of this one.
+- **Revisited the way it was decided:** a new Lithium release, or a new target, is measured with the same runs before anything changes.

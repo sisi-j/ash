@@ -83,6 +83,9 @@ dependencies {
     benchmarkImplementation project(':bench')
 }
 
+// The benchmark's player, by name: the local benchmark server makes it an operator.
+ext.BENCH_PLAYER = 'AshBench'
+
 loom {
     runs {
         // `./gradlew :target-1.21.11:runBenchmark`, with `-Pbench.label=...`
@@ -93,10 +96,118 @@ loom {
             configName = 'ash frame-time measurement (1.21.11)'
             source 'benchmark'
             runDir 'build/run/benchmark'
-            programArgs '--width', '1280', '--height', '720'
+            // A fixed name, so the local benchmark server can make it an operator.
+            programArgs '--width', '1280', '--height', '720', '--username', BENCH_PLAYER
             property 'ash.bench.label', (project.findProperty('bench.label') ?: '').toString()
             property 'ash.bench.out', rootProject.file('benchmark-results').absolutePath
+            // `-Pbench.server=127.0.0.1:25599` joins the local benchmark server;
+            // `-Pbench.lithium` loads Lithium (#44). See `client/README.md`.
+            property 'ash.bench.server', (project.findProperty('bench.server') ?: '').toString()
+            property 'ash.bench.lithium', project.hasProperty('bench.lithium').toString()
         }
+    }
+}
+
+// ---- Lithium, measured (#44) ------------------------------------------------
+
+// Measured, never shipped from here: whether ash bundles Lithium is what the
+// measurement decides. The pin is in `gradle.properties`.
+def lithiumJar = layout.buildDirectory.file("lithium/lithium-fabric-${lithium_version}.jar")
+
+tasks.register('downloadLithium') {
+    group = 'verification'
+    description = 'Fetches the pinned Lithium jar and refuses it unless its SHA-512 is the pinned one.'
+    inputs.property('url', lithium_url)
+    inputs.property('sha512', lithium_sha512)
+    outputs.file(lithiumJar)
+
+    doLast {
+        def jar = lithiumJar.get().asFile
+        jar.parentFile.mkdirs()
+        new URI(lithium_url).toURL().withInputStream { input -> jar.withOutputStream { it << input } }
+        def digest = java.security.MessageDigest.getInstance('SHA-512').digest(jar.bytes).encodeHex().toString()
+        if (digest != lithium_sha512) {
+            jar.delete()
+            throw new GradleException("Lithium ${lithium_version} from ${lithium_url} is not the jar that was pinned:"
+                    + " its SHA-512 is ${digest}")
+        }
+    }
+}
+
+def benchmarkMods = file('build/run/benchmark/mods')
+def withLithium = project.hasProperty('bench.lithium')
+
+tasks.register('prepareBenchmarkMods') {
+    description = 'Puts the pinned Lithium in the benchmark run\'s mods with -Pbench.lithium, and takes it out without.'
+    if (withLithium) {
+        dependsOn 'downloadLithium'
+    }
+    doLast {
+        project.delete(project.fileTree(benchmarkMods) { include 'lithium-*.jar' })
+        if (withLithium) {
+            project.copy {
+                from lithiumJar
+                into benchmarkMods
+            }
+        }
+    }
+}
+
+tasks.named('runBenchmark') {
+    dependsOn 'prepareBenchmarkMods'
+}
+
+// ---- the local benchmark server (#44) ---------------------------------------
+
+// Mojang's own dedicated server, as real servers run it, on this machine only:
+// `./gradlew :target-1.21.11:prepareBenchmarkServer`, then start it from
+// `build/run/benchmark-server` with `java -jar server.jar nogui`. It answers on
+// 127.0.0.1 alone, in offline mode, with the benchmark's player an operator so
+// it can set the scene by command. See `client/README.md`.
+def benchmarkServerDir = file('build/run/benchmark-server')
+
+tasks.register('prepareBenchmarkServer') {
+    description = 'The vanilla dedicated server for the benchmark: verified against Mojang\'s manifest, and configured.'
+    doLast {
+        def slurper = new groovy.json.JsonSlurper()
+        def manifest = slurper.parse(new URI('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json').toURL())
+        def entry = manifest.versions.find { it.id == minecraft_version }
+        if (entry == null) {
+            throw new GradleException("Mojang's manifest has no ${minecraft_version}")
+        }
+        def download = slurper.parse(new URI(entry.url).toURL()).downloads.server
+        benchmarkServerDir.mkdirs()
+        def jar = new File(benchmarkServerDir, 'server.jar')
+        def sha1 = { File f -> java.security.MessageDigest.getInstance('SHA-1').digest(f.bytes).encodeHex().toString() }
+        if (!jar.isFile() || sha1(jar) != download.sha1) {
+            new URI(download.url).toURL().withInputStream { input -> jar.withOutputStream { it << input } }
+            if (sha1(jar) != download.sha1) {
+                jar.delete()
+                throw new GradleException("the ${minecraft_version} server from ${download.url} is not the one Mojang lists")
+            }
+        }
+        // Accepted for this local run as for the game tests, by the same
+        // decision: docs/adr/0016-ci-accepts-the-minecraft-eula.md.
+        new File(benchmarkServerDir, 'eula.txt').text = '# Accepted by ash\'s build, as for its game tests:' +
+                ' docs/adr/0016-ci-accepts-the-minecraft-eula.md\neula=true\n'
+        new File(benchmarkServerDir, 'server.properties').text = [
+            '# The benchmark scene, as a server: see client/README.md.',
+            'server-ip=127.0.0.1',
+            'server-port=25599',
+            'online-mode=false',
+            'enforce-secure-profile=false',
+            'level-name=ash-benchmark',
+            'level-seed=4242',
+            'gamemode=spectator',
+            'force-gamemode=true',
+            'difficulty=peaceful',
+            'spawn-protection=0',
+            'view-distance=8',
+            'motd=ash benchmark',
+        ].join('\n') + '\n'
+        def uuid = UUID.nameUUIDFromBytes("OfflinePlayer:${BENCH_PLAYER}".getBytes('UTF-8'))
+        new File(benchmarkServerDir, 'ops.json').text =
+                "[{\"uuid\": \"${uuid}\", \"name\": \"${BENCH_PLAYER}\", \"level\": 4, \"bypassesPlayerLimit\": false}]\n"
     }
 }
 

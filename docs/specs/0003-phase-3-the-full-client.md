@@ -32,7 +32,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 **A settings screen in the game.** A key opens it, Right Shift by default and rebindable. Every feature is switched and set up there. Changes show at once and are saved as they are made. Readouts can be dragged where the player wants them, and put back where they started.
 
 **A faster game:**
-- Lithium ~~ships as a bundled mod on 1.21.11~~ is measured on 1.21.11, and ships as a bundled mod only if it makes the game measurably faster. (*Amended 2026-09-30, after `docs/research/0006`*: Lithium's own documentation credits its frame-rate gains to singleplayer's built-in server, not to play on a server.)
+- Lithium ~~ships as a bundled mod on 1.21.11~~ is measured on 1.21.11, and ships as a bundled mod only if it makes the game measurably faster. (*Amended 2026-09-30, after `docs/research/0006`*: Lithium's own documentation credits its frame-rate gains to singleplayer's built-in server, not to play on a server.) *Settled 2026-10-08 by #44: no measured gain in singleplayer or on a server, so it is not bundled (ADR-0013, amended).*
 - A player can opt an instance in to loading **third-party mods** they supply themselves, so that Sodium is one file away.
 - On 1.8.9, ash ships optimisations of its own. Each is chosen by measuring where the frame time goes on real hardware, and each ships only with a before and after from that measurement.
 
@@ -318,7 +318,7 @@ Each one works identically on 1.8.9 and 1.21.11, can be switched off, and degrad
 
 ### Performance
 
-- **Lithium is ~~a bundled mod~~ measured on 1.21.11 first, and bundled only on a measured gain** (*amended 2026-09-30, after `docs/research/0006`*).
+- **Lithium is ~~a bundled mod~~ measured on 1.21.11 first, and bundled only on a measured gain** (*amended 2026-09-30, after `docs/research/0006`*). *Settled 2026-10-08 by #44: it showed none, so ash bundles no Lithium; the numbers are in ADR-0013.*
   - Its own documentation credits its frame-rate gains to singleplayer's built-in server. It makes no claim for play on a server, and it sends players to Sodium for rendering.
   - With a default config, its client-only mixins are four pieces of chunk and entity bookkeeping.
   - So its ticket measures frame time with and without it, both in singleplayer and on a server, using the frame-time measurement. It bundles Lithium only if that shows a gain, the same rule the 1.8.9 optimisations follow. If it shows none, ADR-0013's "Lithium stays" is amended.
