@@ -73,6 +73,11 @@ loom {
             programArgs '--width', '1280', '--height', '720'
             property 'ash.bench.label', (project.findProperty('bench.label') ?: '').toString()
             property 'ash.bench.out', rootProject.file('benchmark-results').absolutePath
+            // `-Pbench.jfr=<file>` also records the run with Java Flight
+            // Recorder, for where inside a profile section the time goes.
+            if (project.hasProperty('bench.jfr')) {
+                vmArg "-XX:StartFlightRecording=filename=${project.property('bench.jfr')},settings=profile"
+            }
         }
     }
 }
