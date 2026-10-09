@@ -144,8 +144,8 @@ The backend runs on Cloudflare Workers, written in TypeScript, in its own public
   An equipped cosmetic requires an entitlement.
 - **An equipped ash cape replaces the player's Mojang cape** for ash players who see it. With no ash cape, the Mojang cape shows as it does today.
 - **Seeing others' cosmetics:**
-  - the client looks up the UUIDs of the players it can see, in batches;
-  - the backend answers from an edge cache and logs nothing about who asked for whom.
+  - ~~the client looks up the UUIDs of the players it can see, in batches;~~ each account's equipped cosmetics are a static file, `profiles/<uuid>.json` in R2, read by the client through an edge-cached public domain (*amended 2026-10-09 by research 0010*);
+  - ~~the backend answers from an edge cache and logs nothing about who asked for whom.~~ a lookup never reaches ash's code, so there is nothing to log.
 
   ADR-0023 records the no-record rule.
 - **Hiding others' cosmetics** is an option on the client's Cosmetics feature. It's off by default, so other players' cosmetics show unless the player turns it on.
@@ -231,14 +231,14 @@ The bar is Phase 3's: a test states a fact a player or the product owner would r
 ## Further Notes
 
 - **Unverified, and to be settled by research before the tickets that depend on them:**
-  1. **The join handshake from a launcher rather than a game connection:**
+  1. ~~**The join handshake from a launcher rather than a game connection:**~~ *Answered 2026-10-09 in `docs/research/0010-the-join-handshake-and-cloudflares-free-plan.md`, except the live check, which the product owner runs with `examples/join-handshake.rs`.* The client derives the server id, so the backend can never choose one (ADR-0020, amended). What it covered:
      - that Mojang's session server accepts a join with ash's own challenge;
      - its rate limits;
      - its behaviour for a player whose multiplayer is disabled on their Microsoft account;
      - whether anything in Mojang's or Microsoft's terms bears on it.
 
      Blocks the sign-in tickets.
-  2. **Cloudflare's free-plan limits for this shape:** D1, Durable Objects with WebSocket hibernation, cron triggers and R2. It also covers Cloudflare Access's signed header for `/admin`, and testing Workers locally. Blocks the backend skeleton's choices.
+  2. ~~**Cloudflare's free-plan limits for this shape:**~~ *Answered 2026-10-09 in research 0010:* one to a hundred players fit comfortably, once cosmetics lookups are static files rather than Worker requests. What it covered: D1, Durable Objects with WebSocket hibernation, cron triggers and R2. It also covers Cloudflare Access's signed header for `/admin`, and testing Workers locally. Blocks the backend skeleton's choices.
   3. **Drawing cosmetics on each target:**
      - where each draws the cape, how to attach models to the head and body, and how to pose the player model for an emote;
      - whether Sodium touches any of it.

@@ -418,6 +418,61 @@ async fn a_session_for_an_unknown_account_is_not_a_crash() {
     assert_eq!(err.kind(), "session_expired");
 }
 
+// ---- the join handshake (ADR-0020) -----------------------------------------
+
+const JOIN_URL: &str = "https://sessionserver.mojang.com/session/minecraft/join";
+const PROFILE: &str = "986dec87b7ec47ff89ff033fdb95c4b5";
+const CHALLENGE: &str = "4f1c2a9b0e7d4c3a8b6f5e4d3c2b1a09";
+/// Minecraft's digest of `ash-account-sign-in:` + `CHALLENGE`, worked out
+/// independently (Python's signed `int.from_bytes`), not by the code under test.
+const SERVER_ID: &str = "655bc2e7697492d992e77e6057eb55cdf7e1d2fd";
+
+#[tokio::test]
+async fn joining_for_ash_joins_the_server_id_derived_from_the_challenge() {
+    let f = fixture(happy_chain().route(JOIN_URL, HttpResponse::status(204)));
+    sign_in(&f).await.expect("signed in");
+
+    let server_id = f.ash.join_for_ash(PROFILE, CHALLENGE).await.expect("joined");
+
+    assert_eq!(server_id, SERVER_ID);
+    let body: serde_json::Value =
+        serde_json::from_str(&f.http.last_body(JOIN_URL).expect("a join was sent")).unwrap();
+    assert_eq!(body["serverId"], SERVER_ID, "never the challenge itself");
+    assert_eq!(body["selectedProfile"], PROFILE);
+    assert_eq!(body["accessToken"], "MC-TOKEN", "the session's current Minecraft token");
+}
+
+#[tokio::test]
+async fn a_join_refused_for_multiplayer_settings_says_so_and_is_not_retried() {
+    let cases = [
+        (
+            r#"{"error":"InsufficientPrivilegesException","errorMessage":"Multiplayer is disabled."}"#,
+            "multiplayer_disabled",
+        ),
+        (r#"{"error":"UserBannedException","errorMessage":"Banned"}"#, "multiplayer_banned"),
+    ];
+    for (body, kind) in cases {
+        let f = fixture(happy_chain().route(JOIN_URL, HttpResponse::json(403, body)));
+        sign_in(&f).await.expect("signed in");
+
+        let err = f.ash.join_for_ash(PROFILE, CHALLENGE).await.expect_err("refused");
+
+        assert_eq!(err.kind(), kind);
+        assert!(!err.is_retryable(), "{kind}: retrying changes nothing");
+    }
+}
+
+#[tokio::test]
+async fn a_session_server_that_is_down_is_not_a_multiplayer_refusal() {
+    let f = fixture(happy_chain().route(JOIN_URL, HttpResponse::status(503)));
+    sign_in(&f).await.expect("signed in");
+
+    let err = f.ash.join_for_ash(PROFILE, CHALLENGE).await.expect_err("down");
+
+    assert_eq!(err.kind(), "unexpected_status");
+    assert!(err.is_retryable());
+}
+
 // ---- the error contract ----------------------------------------------------
 
 #[tokio::test]

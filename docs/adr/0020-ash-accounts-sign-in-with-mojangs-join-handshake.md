@@ -11,6 +11,8 @@ Phase 4 needs the backend to know a request comes from the owner of a Minecraft 
 ## Decision
 
 - **The handshake is the only sign-in.** The launcher runs it after every Microsoft sign-in. The client runs its own in game, with the token the game already holds for the session, so the launcher never hands the game an ash token.
+- **The client derives the server id; the backend never chooses it.** *(Added 2026-10-09 by research 0010.)* The client joins Minecraft's digest of `ash-account-sign-in:` followed by the challenge, and the backend computes the same digest to check. A backend that could choose the server id could hand over a real server's login hash, and log in to that server as the player. That's the hole found in Feather's version of this handshake in 2023.
+- **`hasJoined`'s `ip` parameter isn't used.** The join goes to Mojang directly and the sign-in goes through Cloudflare, possibly over different address families. The single-use challenge does the binding instead.
 - **A challenge is single-use and short-lived.** A challenge that was never issued, or that was already used, is refused.
 - **Mojang being unreachable is its own error.** It isn't "not signed in", and it never stops a launch.
 - **Reading public data needs no sign-in.** That covers another player's equipped cosmetics and published news, both rate-limited.
