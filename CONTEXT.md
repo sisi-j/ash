@@ -17,7 +17,7 @@ _Avoid_: mod, ash mod, Minecraft client
 In front of players an instance is "ash client" when it runs the client - every modded instance ash makes does - and "vanilla" when it does not.
 
 **Backend**:
-The separately deployed service holding ash accounts, entitlements, stats, synced settings and news.
+The separately deployed service holding ash accounts, entitlements, synced settings, news posts and the emote relay. TypeScript on Cloudflare Workers, in its own public repository, `sisi-j/ash-backend` (ADR-0021). Nothing about playing depends on it: unreachable, it costs cosmetics, sync and news, never a launch.
 _Avoid_: server (that means a Minecraft server here), API
 
 ### Identity
@@ -31,8 +31,12 @@ Mojang's player identity — UUID, username and skin. Its UUID is what other pla
 _Avoid_: account, profile (unqualified), game account
 
 **ash account**:
-The app's record for one player, keyed by Minecraft profile UUID. Owns entitlements, stats and synced settings.
+The app's record for one player, keyed by Minecraft profile UUID. Owns entitlements, equipped cosmetics and synced settings. Made at the player's first sign-in through the **join handshake**, and deleted entirely when they ask or after 12 months without a sign-in.
 _Avoid_: user, profile, app profile
+
+**Join handshake**:
+How a player proves to the backend which Minecraft profile they are: the backend issues a one-time challenge, the player's machine joins it at Mojang's session server, and the backend asks Mojang whether that profile joined. It's what a Minecraft server does at login, so no Minecraft or Microsoft token reaches the backend (ADR-0020). The launcher and the game each do their own.
+_Avoid_: login (that is the Microsoft sign-in), auth (unqualified), token exchange
 
 ### Launcher
 
@@ -87,7 +91,7 @@ The tier that launches a real vanilla client with ash in it and asserts what loa
 _Avoid_: integration test, e2e test, game test (that is Minecraft's server-side framework, a different tier)
 
 **Client settings**:
-The client's own configuration file, `config/ash.properties` in an instance's game directory. The client writes it on first run, appends settings an older file lacks, and changes a value in place - that value and not one other byte - when the player changes it in game; nothing else writes it - the launcher least of all, until synced settings define a second writer and the rules that come with one.
+The client's own configuration file, `config/ash.properties` in an instance's game directory. The client writes it on first run, appends settings an older file lacks, and changes a value in place - that value and not one other byte - when the player changes it in game; the launcher is its only other writer, for synced settings, and only while that instance's game is closed, changing the synced values and not one other byte (ADR-0022).
 _Avoid_: config (unqualified), options (that is the game's own `options.txt`), synced settings (Phase 4, and a different thing)
 
 **Settings screen**:
@@ -117,7 +121,7 @@ _Avoid_: mod (unqualified), external mod, custom mod
 ### Cosmetics
 
 **Cosmetic**:
-A wearable item definition, such as a cape or an emote. Rendered client-side; the Minecraft server never sees it.
+A wearable item definition: a cape, a worn model or an emote. Rendered client-side and seen by other ash players; the Minecraft server never sees it. Free to every ash account in Phase 4, and a cape is never sold (ADR-0010).
 _Avoid_: skin (that means Mojang's player texture), item, unlockable
 
 **Entitlement**:
@@ -125,13 +129,21 @@ The grant of one cosmetic to one ash account. The existence of the grant, not th
 _Avoid_: ownership, unlock, purchase
 
 **Equipped cosmetic**:
-The cosmetic an account currently wears. Requires a matching entitlement.
+The cosmetic an account currently wears, one per **slot**: a cape, one on the head and one on the back, plus up to 8 emotes on the **emote wheel**. Requires a matching entitlement. An equipped cape replaces the player's Mojang cape for ash players who see it. Public by UUID, and looked up without a record of who asked (ADR-0023).
 _Avoid_: active cosmetic, selected skin, worn item
+
+**Emote**:
+A short animation of the player's model, played from the emote wheel (hold B by default) and relayed by the backend to the ash players who can see them. The player's own view goes to third person while it plays; moving, attacking or being hurt stops it. Visual only.
+_Avoid_: dance, animation (unqualified), gesture
+
+**Wardrobe**:
+The launcher page where a player equips cosmetics, on a 3D preview of their own skin. The client's settings panel equips them too.
+_Avoid_: store (reserved for a paid storefront, which does not exist), shop, locker, inventory
 
 ### Settings
 
 **Synced settings**:
-The per-account blob that follows a player between machines — feature settings, launcher preferences, instance definitions and server entries.
+What follows an ash account between machines: feature settings (one set per account, not per instance), launcher preferences, instance definitions and each instance's server list. Each setting carries its own time and the latest change wins; a server list is one setting. Only the launcher syncs, and only while the game is closed (ADR-0022). On whenever the player is signed in, with a switch to turn it off.
 _Avoid_: config, preferences, sync blob
 
 **Launcher preferences**:
@@ -147,5 +159,5 @@ A saved Minecraft server address available for quick-connect. On the launcher's 
 _Avoid_: favourite, bookmark, saved server
 
 **News post**:
-One entry in the launcher's news and changelog feed.
+One entry in the launcher's news and changelog feed, written and published on the backend's `/admin` page, which Cloudflare Access guards.
 _Avoid_: announcement, article, update
