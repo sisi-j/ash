@@ -19,3 +19,12 @@ It is not a finding that the model complies. Mojang declines to pre-clear specif
 - Revisit if Mojang's terms change, if enforcement activity against comparable clients appears, or before taking outside investment — a revocable core revenue stream is a diligence question.
 
 See `docs/research/0001-minecraft-launcher-api-access.md` §8 and §10 for the source text and the full reasoning.
+
+## Amended 2026-10-09: free in Phase 4, and capes are never sold
+
+Research 0002 §6 found that Mojang's Usage Guidelines name capes as the one cosmetic not to sell ("except for capes or anything that attempts to visually act like the feature of a Minecraft player cape"). Capes are ash's headline cosmetic. The publisher is still an individual, and no lawyer has read the position. So, by the product owner's decision in the Phase 4 design (spec 0004):
+- **Phase 4 sells nothing.** Every ash account is entitled to the whole catalogue. Entitlements are still built as real per-account grants, so the model is ready for whatever comes next.
+- **Capes are never sold**, whatever is decided later.
+- **Granting is revisited** in the phase that prepares for launch, and selling anything waits for incorporation and a lawyer's read.
+
+The accepted-risk position above is unchanged for the day money is taken. Until then, the risk it accepts isn't being run.
