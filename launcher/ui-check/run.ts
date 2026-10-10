@@ -334,6 +334,25 @@ const STATES: State[] = [
     },
   },
   { name: "settings", shows: "When the game starts", reach: openPage("Settings") },
+  { name: "sync-on", shows: "On. Synced 2 minutes ago.", reach: openPage("Settings") },
+  {
+    name: "sync-off",
+    shows: "Off on this computer.",
+    reach: openPage("Settings"),
+    verify: async (page) =>
+      (await page.getByRole("switch", { name: "Sync between computers" }).getAttribute("aria-checked")) === "false"
+        ? null
+        : "the switch shows on",
+  },
+  { name: "sync-unreachable", shows: "ash's servers can't be reached right now. ash will try again.", reach: openPage("Settings") },
+  {
+    name: "sync-deleted-elsewhere",
+    shows: "was deleted on another computer",
+    verify: async (page) => {
+      await page.getByRole("button", { name: "Keep here" }).click();
+      return (await page.getByText("was deleted on another computer").count()) === 0 ? null : "the question stayed after Keep here";
+    },
+  },
   // The ash account (spec 0004): a notice once, a quiet line in Settings, and deleting it.
   { name: "ash-notice", shows: "ash made an ash account for Steve." },
   {

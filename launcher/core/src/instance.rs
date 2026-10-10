@@ -63,6 +63,16 @@ pub struct Instance {
     /// The latest session, open until it is seen to end.
     #[serde(default)]
     pub last_session: Option<Session>,
+    /// Which instance this is on every computer the player syncs (research
+    /// 0011). The id above is this machine's directory name, a slug of the
+    /// name, and two machines' "PvP" instances share one by accident; this
+    /// never does. `None` for an instance that isn't synced.
+    #[serde(default)]
+    pub sync_id: Option<String>,
+    /// Deleted on another computer and kept here: this machine's alone from
+    /// then on, so sync never gives it a sync id again.
+    #[serde(default)]
+    pub local_only: bool,
 }
 
 /// One run of the game, from ash starting it to its exit.
@@ -191,6 +201,26 @@ pub(crate) fn create(
     version_id: &str,
     loader: Loader,
 ) -> Result<Instance, AshError> {
+    create_with(
+        instances_root,
+        name,
+        version_id,
+        loader,
+        uuid::Uuid::new_v4().to_string(),
+        now_ms(),
+    )
+}
+
+/// An instance another computer made, arriving here by sync: its sync id and
+/// creation time are that instance's, and its directory id is this machine's.
+pub(crate) fn create_with(
+    instances_root: &Path,
+    name: &str,
+    version_id: &str,
+    loader: Loader,
+    sync_id: String,
+    created_at_ms: u64,
+) -> Result<Instance, AshError> {
     let name = name.trim();
     if name.is_empty() {
         return Err(AshError::InvalidInstanceName { detail: "the name is empty".into() });
@@ -210,10 +240,12 @@ pub(crate) fn create(
         name: name.to_owned(),
         version_id: version_id.to_owned(),
         loader,
-        created_at_ms: now_ms(),
+        created_at_ms,
         last_played_ms: None,
         played_ms: 0,
         last_session: None,
+        sync_id: Some(sync_id),
+        local_only: false,
     };
     write_metadata(instances_root, &instance)?;
     Ok(instance)
@@ -243,6 +275,20 @@ pub(crate) fn list(instances_root: &Path) -> Result<Vec<Instance>, AshError> {
 
 pub(crate) fn get(instances_root: &Path, id: &InstanceId) -> Result<Instance, AshError> {
     read_metadata(instances_root, id)
+}
+
+/// Set how an instance takes part in sync.
+pub(crate) fn set_sync(
+    instances_root: &Path,
+    id: &InstanceId,
+    sync_id: Option<String>,
+    local_only: bool,
+) -> Result<Instance, AshError> {
+    let mut instance = read_metadata(instances_root, id)?;
+    instance.sync_id = sync_id;
+    instance.local_only = local_only;
+    write_metadata(instances_root, &instance)?;
+    Ok(instance)
 }
 
 pub(crate) fn rename(

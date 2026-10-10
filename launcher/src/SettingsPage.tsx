@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { api, isUiError, type AshAccountStatus, type LauncherPreferences, type MachineDefaults, type OnGameStart } from "./api";
+import { api, isUiError, type AshAccountStatus, type SyncStatus, type LauncherPreferences, type MachineDefaults, type OnGameStart } from "./api";
 import { DeleteAshAccount, describeAshAccount } from "./AshAccount";
+import { SyncSetting } from "./Sync";
 import { Icon } from "./icons";
 import { filledPercent, formatGb, MEMORY_MAX_GB, MEMORY_MIN_GB, MEMORY_STEP_GB, onSlider, toGb } from "./memory";
 import { PAGES } from "./Sidebar";
@@ -29,6 +30,8 @@ export function SettingsPage(props: {
   ashAccount: { username: string; status: AshAccountStatus } | null;
   /** Delete the active player's ash account; whether ash's servers confirmed it. */
   onDeleteAshAccount: () => Promise<boolean>;
+  sync: SyncStatus | null;
+  onSyncToggle: (enabled: boolean) => void;
 }) {
   const { preferences } = props;
 
@@ -50,6 +53,7 @@ export function SettingsPage(props: {
             onClick={() => preferences && props.onChange({ ...preferences, launch_sounds: !preferences.launch_sounds })}
           />
         </div>
+        <SyncSetting status={props.sync} onToggle={props.onSyncToggle} />
       </div>
 
       <div className="settings launcher-settings">
