@@ -12,6 +12,7 @@
 //! JVM.
 
 mod account;
+mod ash_account;
 mod auth;
 mod catalogue;
 mod config;
@@ -41,6 +42,7 @@ pub mod process;
 pub mod servers;
 
 pub use account::{Account, Accounts};
+pub use ash_account::AshAccountStatus;
 pub use catalogue::{
     Catalogue, CatalogueEntry, CatalogueSource, VersionKind, VERSION_MANIFEST_URL,
 };
@@ -149,6 +151,9 @@ pub struct Ash {
     /// so no server is asked more than once a minute however often the
     /// window asks.
     statuses: Mutex<HashMap<(i32, String), (u64, ServerStatus)>>,
+    /// How each account's last ash sign-in went, this run. An account with
+    /// no attempt yet is judged by the session it has stored.
+    ash_status: Mutex<HashMap<String, AshAccountStatus>>,
 }
 
 impl Ash {
@@ -175,6 +180,7 @@ impl Ash {
             games: Mutex::new(HashMap::new()),
             reports_logged: Mutex::new(HashMap::new()),
             statuses: Mutex::new(HashMap::new()),
+            ash_status: Mutex::new(HashMap::new()),
         }
     }
 
@@ -244,6 +250,19 @@ impl Ash {
                     session.skin_url.clone(),
                     session.refresh_token.as_deref(),
                 )?;
+                // Signing in on purpose is the one thing that undoes deleting
+                // an ash account here: the player chose to come back.
+                let account = if account.ash_account_deleted {
+                    account::set_ash_account_deleted(
+                        &self.config.data_root,
+                        &account.profile_id,
+                        false,
+                    )?;
+                    Account { ash_account_deleted: false, ..account }
+                } else {
+                    account
+                };
+                self.ash_status.lock().expect("ash status").remove(&account.profile_id);
                 Ok(SignInStatus::Complete { account })
             }
             Err(e) => {
@@ -324,6 +343,128 @@ impl Ash {
         )
         .await?;
         Ok(server_id)
+    }
+
+    // ---- the ash account (spec 0004, ADR-0020) -----------------------------
+
+    /// Sign `profile_id` in to their ash account: a challenge from ash's
+    /// backend, a join of the server id derived from it at Mojang's session
+    /// server, and the challenge redeemed for an ash session.
+    ///
+    /// Never an error: whatever happens, the player can still play, so the
+    /// result is a status to show rather than a failure to handle. The
+    /// adapter runs this in the background after every Microsoft sign-in, and
+    /// at startup when [`Ash::needs_ash_sign_in`] says so - never on the way
+    /// to a launch.
+    pub async fn sign_in_to_ash(&self, profile_id: &str) -> AshAccountStatus {
+        if self.ash_account_deleted(profile_id) {
+            return AshAccountStatus::Deleted;
+        }
+        let status = match self.try_sign_in_to_ash(profile_id).await {
+            Ok(()) => AshAccountStatus::SignedIn,
+            Err(e) => match e.kind() {
+                "multiplayer_disabled" | "multiplayer_banned" => {
+                    AshAccountStatus::Refused { kind: e.kind().into(), message: e.user_message() }
+                }
+                "session_expired" | "account_not_found" => AshAccountStatus::NotSignedIn,
+                _ => AshAccountStatus::Unreachable,
+            },
+        };
+        self.ash_status.lock().expect("ash status").insert(profile_id.to_owned(), status.clone());
+        status
+    }
+
+    async fn try_sign_in_to_ash(&self, profile_id: &str) -> Result<(), AshError> {
+        let base = &self.config.backend_url;
+        let challenge = ash_account::challenge(self.http.as_ref(), base).await?;
+        self.join_for_ash(profile_id, &challenge).await?;
+        // join_for_ash refreshed the account, so this is the current name.
+        let username = account::load(&self.config.data_root)
+            .accounts
+            .into_iter()
+            .find(|a| a.profile_id == profile_id)
+            .map(|a| a.username)
+            .ok_or_else(|| AshError::AccountNotFound { profile_id: profile_id.to_owned() })?;
+        let signed_in =
+            ash_account::redeem(self.http.as_ref(), base, &challenge, &username).await?;
+        ash_account::store_session(
+            self.credentials.as_ref(),
+            profile_id,
+            &ash_account::StoredSession {
+                token: signed_in.session.token,
+                expires_at: signed_in.session.expires_at,
+            },
+        )?;
+        if signed_in.account.created {
+            account::set_ash_account_notice(&self.config.data_root, profile_id, true)?;
+        }
+        Ok(())
+    }
+
+    /// Where `profile_id` stands with their ash account.
+    pub fn ash_account_status(&self, profile_id: &str) -> AshAccountStatus {
+        if self.ash_account_deleted(profile_id) {
+            return AshAccountStatus::Deleted;
+        }
+        if let Some(status) = self.ash_status.lock().expect("ash status").get(profile_id) {
+            return status.clone();
+        }
+        match ash_account::stored_session(self.credentials.as_ref(), profile_id) {
+            Some(s) if s.expires_at > now_ms() => AshAccountStatus::SignedIn,
+            _ => AshAccountStatus::NotSignedIn,
+        }
+    }
+
+    /// Whether `profile_id` has no ash session, or one ending within a week.
+    pub fn needs_ash_sign_in(&self, profile_id: &str) -> bool {
+        if self.ash_account_deleted(profile_id) {
+            return false;
+        }
+        match ash_account::stored_session(self.credentials.as_ref(), profile_id) {
+            Some(s) => s.expires_at <= now_ms() + ash_account::RENEW_WITHIN_MS,
+            None => true,
+        }
+    }
+
+    /// Delete `profile_id`'s ash account, and everything ash's servers hold
+    /// about it (spec 0004, user story 3). The player stays signed in to
+    /// play. An ended session is renewed first, so a deletion never fails
+    /// for want of one.
+    ///
+    /// Only a deletion ash's servers confirmed changes anything here: on any
+    /// failure the session stays, and the error says nothing was deleted.
+    pub async fn delete_ash_account(&self, profile_id: &str) -> Result<Accounts, AshError> {
+        let base = &self.config.backend_url;
+        let live = ash_account::stored_session(self.credentials.as_ref(), profile_id)
+            .filter(|s| s.expires_at > now_ms());
+        let token = match live {
+            Some(session) => session.token,
+            None => {
+                self.try_sign_in_to_ash(profile_id).await?;
+                ash_account::stored_session(self.credentials.as_ref(), profile_id)
+                    .map(|s| s.token)
+                    .ok_or(AshError::SessionExpired)?
+            }
+        };
+        ash_account::delete(self.http.as_ref(), base, &token).await?;
+        self.credentials.delete(&ash_account::session_key(profile_id))?;
+        self.ash_status
+            .lock()
+            .expect("ash status")
+            .insert(profile_id.to_owned(), AshAccountStatus::Deleted);
+        account::set_ash_account_deleted(&self.config.data_root, profile_id, true)
+    }
+
+    fn ash_account_deleted(&self, profile_id: &str) -> bool {
+        account::load(&self.config.data_root)
+            .accounts
+            .iter()
+            .any(|a| a.profile_id == profile_id && a.ash_account_deleted)
+    }
+
+    /// The player has seen "an ash account was made for you".
+    pub fn dismiss_ash_account_notice(&self, profile_id: &str) -> Result<Accounts, AshError> {
+        account::set_ash_account_notice(&self.config.data_root, profile_id, false)
     }
 
     // ---- instances --------------------------------------------------------

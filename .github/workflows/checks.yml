@@ -207,6 +207,22 @@ jobs:
           path: launcher/ui-check/screenshots/
           if-no-files-found: ignore
 
+  backend-contract:
+    # ash-core's fake of ash's backend serves copies of the backend's own
+    # contract examples (ADR-0021). The copies must be what the backend's
+    # tests check today, or the launcher is tested against a backend that no
+    # longer exists. A backend change fails here until the copies follow it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: The copies match sisi-j/ash-backend's contract
+        run: |
+          for copy in launcher/core/tests/fixtures/backend/*.json; do
+            name=$(basename "$copy")
+            curl -fsSL "https://raw.githubusercontent.com/sisi-j/ash-backend/main/contract/$name" \
+              | diff -u - "$copy"
+          done
+
   installed:
     # The real installer, installed, and asked whether it can start a modded
     # instance - `ash --self-check`. Only an installation is laid out the way

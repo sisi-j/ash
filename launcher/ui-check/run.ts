@@ -301,6 +301,52 @@ const STATES: State[] = [
   { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
   { name: "news", shows: "News is coming soon", reach: openPage("News") },
   { name: "settings", shows: "When the game starts", reach: openPage("Settings") },
+  // The ash account (spec 0004): a notice once, a quiet line in Settings, and deleting it.
+  { name: "ash-notice", shows: "ash made an ash account for Steve." },
+  {
+    name: "ash-notice-dismissed",
+    shows: "ash made an ash account for Steve.",
+    verify: async (page) => {
+      await page.getByRole("button", { name: "Privacy statement" }).click();
+      const opened = await page.evaluate(() => (window as unknown as { openedPrivacy?: boolean }).openedPrivacy);
+      if (!opened) return "Privacy statement opened nothing";
+      await page.getByRole("button", { name: "OK", exact: true }).click();
+      return (await page.getByText("ash made an ash account").count()) === 0 ? null : "OK did not dismiss the notice";
+    },
+  },
+  { name: "ash-signed-in", shows: "Signed in to ash as Steve.", reach: openPage("Settings") },
+  { name: "ash-unreachable", shows: "ash's servers can't be reached right now.", reach: openPage("Settings") },
+  { name: "ash-refused", shows: "Multiplayer is turned off for this Microsoft account", reach: openPage("Settings") },
+  {
+    name: "ash-delete",
+    shows: "This deletes Steve",
+    reach: async (page) => {
+      await openPage("Settings")(page);
+      await page.getByRole("button", { name: "Delete ash account" }).click();
+    },
+  },
+  {
+    name: "ash-deleted",
+    shows: "You deleted your ash account.",
+    reach: async (page) => {
+      await openPage("Settings")(page);
+      await page.getByRole("button", { name: "Delete ash account" }).click();
+      await page.getByRole("button", { name: "Delete", exact: true }).click();
+    },
+    verify: async (page) =>
+      (await page.getByRole("button", { name: "Delete ash account" }).count()) === 0 ? null : "still offers to delete a deleted account",
+  },
+  {
+    name: "ash-delete-failed",
+    shows: "nothing was deleted",
+    reach: async (page) => {
+      await openPage("Settings")(page);
+      await page.getByRole("button", { name: "Delete ash account" }).click();
+      await page.getByRole("button", { name: "Delete", exact: true }).click();
+    },
+    verify: async (page) =>
+      (await page.getByText("You deleted your ash account.").count()) === 0 ? null : "showed a failed deletion as done",
+  },
   {
     name: "settings-memory",
     shows: "6 GB",

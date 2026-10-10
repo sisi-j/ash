@@ -11,10 +11,10 @@ use ash_core::http::ReqwestHttp;
 use ash_core::process::OsProcessPort;
 use ash_core::servers::OsServerPort;
 use ash_core::{
-    Account, Accounts, Ash, Cancel, Catalogue, Config, DegradationNotice, DeletionPreview,
-    GameStatus, Instance, InstanceGlance, InstanceId, InvocationView, LauncherPreferences, Loader,
-    MachineDefaults, MachineOverrides, PendingSignIn, Plan, PrepareEvent, ProgressSink, Runtime,
-    ServerEntry, ServerStatus, SignInStatus,
+    Account, Accounts, Ash, AshAccountStatus, Cancel, Catalogue, Config, DegradationNotice,
+    DeletionPreview, GameStatus, Instance, InstanceGlance, InstanceId, InvocationView,
+    LauncherPreferences, Loader, MachineDefaults, MachineOverrides, PendingSignIn, Plan,
+    PrepareEvent, ProgressSink, Runtime, ServerEntry, ServerStatus, SignInStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -98,8 +98,68 @@ async fn begin_sign_in(state: tauri::State<'_, AppState>) -> Result<PendingSignI
 }
 
 #[tauri::command]
-async fn poll_sign_in(state: tauri::State<'_, AppState>) -> Result<SignInStatus, UiError> {
-    state.ash.poll_sign_in().await.map_err(UiError::from)
+async fn poll_sign_in(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<SignInStatus, UiError> {
+    let status = state.ash.poll_sign_in().await.map_err(UiError::from)?;
+    if let SignInStatus::Complete { account } = &status {
+        spawn_ash_sign_in(app, Arc::clone(&state.ash), account.profile_id.clone());
+    }
+    Ok(status)
+}
+
+// ---- the ash account (spec 0004) ----
+
+#[derive(Clone, Serialize)]
+struct AshAccountEvent {
+    profile_id: String,
+    status: AshAccountStatus,
+}
+
+/// Sign a player in to their ash account in the background, and tell the
+/// window how it went. Never awaited by anything on the way to playing: if
+/// ash's servers are slow or down, nothing the player is doing waits.
+fn spawn_ash_sign_in(app: tauri::AppHandle, ash: Arc<Ash>, profile_id: String) {
+    tauri::async_runtime::spawn(async move {
+        let status = ash.sign_in_to_ash(&profile_id).await;
+        let _ = app.emit("ash-account", AshAccountEvent { profile_id, status });
+    });
+}
+
+#[tauri::command]
+fn ash_account_status(state: tauri::State<'_, AppState>, profile_id: String) -> AshAccountStatus {
+    state.ash.ash_account_status(&profile_id)
+}
+
+#[tauri::command]
+async fn delete_ash_account(
+    state: tauri::State<'_, AppState>,
+    profile_id: String,
+) -> Result<Accounts, UiError> {
+    state.ash.delete_ash_account(&profile_id).await.map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn dismiss_ash_account_notice(
+    state: tauri::State<'_, AppState>,
+    profile_id: String,
+) -> Result<Accounts, UiError> {
+    state.ash.dismiss_ash_account_notice(&profile_id).map_err(UiError::from)
+}
+
+/// The one web page the launcher opens: what an ash account holds. A fixed
+/// address rather than one the window names, so no page can open any other.
+#[tauri::command]
+fn open_privacy_statement() -> Result<(), UiError> {
+    tauri_plugin_opener::open_url("https://ashlauncher.com/privacy.html", None::<&str>).map_err(
+        |_| UiError {
+            kind: "open_failed",
+            message: "Could not open the privacy statement. It's at ashlauncher.com/privacy.html."
+                .into(),
+            retryable: true,
+        },
+    )
 }
 
 #[tauri::command]
@@ -713,6 +773,13 @@ pub fn run() {
             if let Some(report) = self_check_report() {
                 self_check(&ash, &report);
             }
+            // Renew ash sessions that are missing or ending soon, in the
+            // background, for every account on this machine.
+            for account in ash.accounts().accounts {
+                if ash.needs_ash_sign_in(&account.profile_id) {
+                    spawn_ash_sign_in(app.handle().clone(), Arc::clone(&ash), account.profile_id);
+                }
+            }
             app.manage(AppState { ash, preparing: Mutex::new(HashMap::new()) });
             Ok(())
         })
@@ -726,6 +793,10 @@ pub fn run() {
             select_account,
             remove_account,
             ensure_session,
+            ash_account_status,
+            delete_ash_account,
+            dismiss_ash_account_notice,
+            open_privacy_statement,
             create_instance,
             loaders_for,
             instances,

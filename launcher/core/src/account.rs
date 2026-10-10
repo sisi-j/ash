@@ -21,6 +21,14 @@ pub struct Account {
     pub username: String,
     pub skin_url: Option<String>,
     pub added_at_ms: u64,
+    /// ash's backend made an ash account for this player, and the launcher
+    /// has not yet told them so. Cleared when the notice is dismissed.
+    #[serde(default)]
+    pub ash_account_notice: bool,
+    /// The player deleted their ash account on this machine. ash does not
+    /// make a new one in the background; signing in to Microsoft again does.
+    #[serde(default)]
+    pub ash_account_deleted: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +103,8 @@ pub(crate) fn upsert(
                 username: username.to_owned(),
                 skin_url,
                 added_at_ms: now_ms(),
+                ash_account_notice: false,
+                ash_account_deleted: false,
             };
             state.accounts.push(account.clone());
             account
@@ -106,6 +116,40 @@ pub(crate) fn upsert(
     state.active = Some(profile_id.to_owned());
     save(data_root, &state)?;
     Ok(account)
+}
+
+/// Record that the player deleted their ash account on this machine, or
+/// that a fresh Microsoft sign-in undid that.
+pub(crate) fn set_ash_account_deleted(
+    data_root: &Path,
+    profile_id: &str,
+    deleted: bool,
+) -> Result<Accounts, AshError> {
+    let mut state = load(data_root);
+    let Some(account) = state.accounts.iter_mut().find(|a| a.profile_id == profile_id) else {
+        return Err(AshError::AccountNotFound { profile_id: profile_id.to_owned() });
+    };
+    account.ash_account_deleted = deleted;
+    if deleted {
+        account.ash_account_notice = false;
+    }
+    save(data_root, &state)?;
+    Ok(state)
+}
+
+/// Set or clear the "an ash account was made for you" notice.
+pub(crate) fn set_ash_account_notice(
+    data_root: &Path,
+    profile_id: &str,
+    pending: bool,
+) -> Result<Accounts, AshError> {
+    let mut state = load(data_root);
+    let Some(account) = state.accounts.iter_mut().find(|a| a.profile_id == profile_id) else {
+        return Err(AshError::AccountNotFound { profile_id: profile_id.to_owned() });
+    };
+    account.ash_account_notice = pending;
+    save(data_root, &state)?;
+    Ok(state)
 }
 
 pub(crate) fn select(data_root: &Path, profile_id: &str) -> Result<Accounts, AshError> {
@@ -129,6 +173,7 @@ pub(crate) fn remove(
     profile_id: &str,
 ) -> Result<Accounts, AshError> {
     credentials.delete(&refresh_key(profile_id))?;
+    credentials.delete(&crate::ash_account::session_key(profile_id))?;
 
     let mut state = load(data_root);
     state.accounts.retain(|a| a.profile_id != profile_id);

@@ -264,7 +264,21 @@ export type Account = {
   username: string;
   skin_url: string | null;
   added_at_ms: number;
+  /** ash made an ash account for this player and has not yet said so. */
+  ash_account_notice: boolean;
+  /** The player deleted their ash account on this machine. */
+  ash_account_deleted: boolean;
 };
+
+/** Mirrors `ash_core::AshAccountStatus`. Shown quietly: none of these stops play. */
+export type AshAccountStatus =
+  | { state: "signed_in" }
+  | { state: "not_signed_in" }
+  | { state: "deleted" }
+  | { state: "unreachable" }
+  | { state: "refused"; kind: string; message: string };
+
+export type AshAccountEvent = { profile_id: string; status: AshAccountStatus };
 
 export type Accounts = {
   accounts: Account[];
@@ -313,6 +327,12 @@ export const api = {
     invoke<Accounts>("select_account", { profileId }),
   removeAccount: (profileId: string) =>
     invoke<Accounts>("remove_account", { profileId }),
+  ashAccountStatus: (profileId: string) =>
+    invoke<AshAccountStatus>("ash_account_status", { profileId }),
+  deleteAshAccount: (profileId: string) => invoke<Accounts>("delete_ash_account", { profileId }),
+  dismissAshAccountNotice: (profileId: string) =>
+    invoke<Accounts>("dismiss_ash_account_notice", { profileId }),
+  openPrivacyStatement: () => invoke<void>("open_privacy_statement"),
 
   planInstance: (id: InstanceId) => invoke<Plan>("plan_instance", { id }),
   /** Returns as soon as the work is scheduled; watch the events for outcome. */
@@ -432,6 +452,11 @@ export function onPrepareFinished(handler: (outcome: PrepareOutcome) => void) {
  * Launching prepares whatever is missing first, so it reports progress on
  * the same `prepare-progress` channel and finishes on this one.
  */
+/** An ash sign-in in the background finished, however it went. */
+export function onAshAccount(handler: (event: AshAccountEvent) => void) {
+  return listen<AshAccountEvent>("ash-account", (e) => handler(e.payload));
+}
+
 export function onLaunchFinished(handler: (outcome: LaunchOutcome) => void) {
   return listen<LaunchOutcome>("launch-finished", (e) => handler(e.payload));
 }

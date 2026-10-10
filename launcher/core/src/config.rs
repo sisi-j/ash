@@ -46,6 +46,11 @@ pub struct Config {
     /// The game's own list gives up after a few seconds too. A value so a
     /// test of a server that never answers waits a moment, not seconds.
     pub server_timeout: Duration,
+    /// ash's backend (spec 0004, ADR-0021), without a trailing slash.
+    ///
+    /// A value so a test points it at a fake host. Nothing ash does to play
+    /// depends on it answering.
+    pub backend_url: String,
 }
 
 impl Config {
@@ -71,6 +76,7 @@ impl Config {
             loaders: loader::PINS,
             client_root: base.join("client"),
             server_timeout: Duration::from_secs(3),
+            backend_url: "https://api.ashlauncher.com".into(),
         }
     }
 }

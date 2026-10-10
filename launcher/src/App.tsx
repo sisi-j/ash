@@ -4,7 +4,9 @@ import {
   appWindow,
   describeAge,
   isUiError,
+  onAshAccount,
   type Accounts as AccountList,
+  type AshAccountStatus,
   type Catalogue,
   type Instance,
   type InstanceId,
@@ -13,6 +15,7 @@ import {
   type UiError,
   LOADER_LABELS,
 } from "./api";
+import { AshAccountNotice } from "./AshAccount";
 import { Icon } from "./icons";
 import { InstancePage } from "./InstancePage";
 import { useLaunch } from "./launch";
@@ -73,6 +76,43 @@ export default function App() {
 
   const signedIn = (accounts?.accounts.length ?? 0) > 0;
   const active = accounts?.accounts.find((a) => a.profile_id === accounts.active) ?? null;
+
+  // The active player's ash account (spec 0004): signed in by the backend
+  // side in the background, never on the way to playing. When a sign-in
+  // finishes, the account list may carry a new notice and the status moves.
+  const [ashStatus, setAshStatus] = useState<AshAccountStatus | null>(null);
+  const activeId = active?.profile_id ?? null;
+  useEffect(() => {
+    if (activeId === null) return setAshStatus(null);
+    api.ashAccountStatus(activeId).then(setAshStatus).catch(() => setAshStatus(null));
+  }, [activeId]);
+  useEffect(() => {
+    const stop = onAshAccount((event) => {
+      api.accounts().then(setAccounts).catch(fail);
+      if (event.profile_id === activeId) setAshStatus(event.status);
+    });
+    return () => void stop.then((unlisten) => unlisten());
+  }, [activeId, fail]);
+  const deleteAshAccount = useCallback(async () => {
+    if (activeId === null) return false;
+    try {
+      setAccounts(await api.deleteAshAccount(activeId));
+      setAshStatus({ state: "deleted" });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [activeId]);
+  const dismissAshNotice = useCallback(
+    async (profileId: string) => {
+      try {
+        setAccounts(await api.dismissAshAccountNotice(profileId));
+      } catch (e) {
+        fail(e);
+      }
+    },
+    [fail],
+  );
 
   const selectAccount = useCallback(
     async (profileId: string) => {
@@ -186,6 +226,10 @@ export default function App() {
           </p>
         )}
 
+        {active?.ash_account_notice && !signingIn && (
+          <AshAccountNotice account={active} onDismiss={() => void dismissAshNotice(active.profile_id)} />
+        )}
+
         {signingIn || (!signedIn && accounts !== null) ? (
           <SignIn
             onSignedIn={() => {
@@ -216,7 +260,12 @@ export default function App() {
         ) : page === "settings" ? (
           // The launcher's own settings. Each instance's settings for this
           // machine are on its own page, from its cog.
-          <SettingsPage preferences={preferences} onChange={savePreferences} />
+          <SettingsPage
+            preferences={preferences}
+            onChange={savePreferences}
+            ashAccount={active && ashStatus ? { username: active.username, status: ashStatus } : null}
+            onDeleteAshAccount={deleteAshAccount}
+          />
         ) : playView === "new" ? (
           <section className="page">
             <BackTo onBack={() => setPlayView("home")} />
