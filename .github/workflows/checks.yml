@@ -192,6 +192,9 @@ jobs:
         working-directory: launcher
       - run: npx tsc --noEmit
         working-directory: launcher
+      # Unit tests on node's own runner: the news Markdown parser.
+      - run: npm test
+        working-directory: launcher
       # The launcher UI check: every screen state in Chromium against a fake
       # of the launcher's API, failing on an error or on any text not drawn
       # in the bundled Inter. Screenshots are uploaded for a person to look

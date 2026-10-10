@@ -27,6 +27,7 @@ mod launch;
 mod load_report;
 mod loader;
 mod natives;
+mod news;
 mod overrides;
 mod preferences;
 mod profile;
@@ -55,6 +56,7 @@ pub use installation::InstallationCheck;
 pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
+pub use news::{News, NewsKind, NewsPost};
 pub use overrides::{MachineDefaults, MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use preferences::{LauncherPreferences, OnGameStart};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
@@ -460,6 +462,19 @@ impl Ash {
             .accounts
             .iter()
             .any(|a| a.profile_id == profile_id && a.ash_account_deleted)
+    }
+
+    // ---- news (spec 0004) ------------------------------------------------
+
+    /// Published posts for the News page, newest first. When ash's servers
+    /// can't be reached, the last posts it saw, marked offline.
+    pub async fn news(&self) -> News {
+        news::news(self.http.as_ref(), &self.config.backend_url, &self.config.data_root).await
+    }
+
+    /// The player opened the News page; its dot goes until a newer post.
+    pub fn mark_news_seen(&self) -> Result<(), AshError> {
+        news::mark_seen(&self.config.data_root)
     }
 
     /// The player has seen "an ash account was made for you".

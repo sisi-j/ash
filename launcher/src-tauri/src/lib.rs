@@ -13,7 +13,7 @@ use ash_core::servers::OsServerPort;
 use ash_core::{
     Account, Accounts, Ash, AshAccountStatus, Cancel, Catalogue, Config, DegradationNotice,
     DeletionPreview, GameStatus, Instance, InstanceGlance, InstanceId, InvocationView,
-    LauncherPreferences, Loader, MachineDefaults, MachineOverrides, PendingSignIn, Plan,
+    LauncherPreferences, Loader, MachineDefaults, MachineOverrides, News, PendingSignIn, Plan,
     PrepareEvent, ProgressSink, Runtime, ServerEntry, ServerStatus, SignInStatus,
 };
 use tauri::{Emitter, Manager};
@@ -146,6 +146,33 @@ async fn dismiss_ash_account_notice(
     profile_id: String,
 ) -> Result<Accounts, UiError> {
     state.ash.dismiss_ash_account_notice(&profile_id).map_err(UiError::from)
+}
+
+// ---- news (spec 0004) ----
+
+#[tauri::command]
+async fn news(state: tauri::State<'_, AppState>) -> Result<News, UiError> {
+    Ok(state.ash.news().await)
+}
+
+#[tauri::command]
+async fn mark_news_seen(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
+    state.ash.mark_news_seen().map_err(UiError::from)
+}
+
+/// A link in a news post. Only https, checked here as well as by the page's
+/// parser: whatever the window asks, nothing but a web page opens.
+#[tauri::command]
+fn open_news_link(url: String) -> Result<(), UiError> {
+    let refused = || UiError {
+        kind: "open_failed",
+        message: "That link can't be opened.".into(),
+        retryable: false,
+    };
+    if !url.starts_with("https://") || url.chars().any(char::is_whitespace) {
+        return Err(refused());
+    }
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|_| refused())
 }
 
 /// The one web page the launcher opens: what an ash account holds. A fixed
@@ -797,6 +824,9 @@ pub fn run() {
             delete_ash_account,
             dismiss_ash_account_notice,
             open_privacy_statement,
+            news,
+            mark_news_seen,
+            open_news_link,
             create_instance,
             loaders_for,
             instances,

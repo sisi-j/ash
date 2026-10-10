@@ -16,7 +16,7 @@ export const PAGES: Record<Page, { label: string; icon: IconName }> = {
  * change, so after the first look the icon is enough, and the space goes to
  * the page instead.
  */
-export function Sidebar(props: { page: Page; onOpen: (page: Page) => void }) {
+export function Sidebar(props: { page: Page; onOpen: (page: Page) => void; unread?: Page[] }) {
   return (
     <nav className="sidebar">
       {(Object.keys(PAGES) as Page[]).map((page) => (
@@ -24,11 +24,12 @@ export function Sidebar(props: { page: Page; onOpen: (page: Page) => void }) {
           key={page}
           className={`nav${page === "settings" ? " nav-bottom" : ""}`}
           data-label={PAGES[page].label}
-          aria-label={PAGES[page].label}
+          aria-label={props.unread?.includes(page) ? `${PAGES[page].label}, something new` : PAGES[page].label}
           aria-current={props.page === page ? "page" : undefined}
           onClick={() => props.onOpen(page)}
         >
           <Icon name={PAGES[page].icon} />
+          {props.unread?.includes(page) && <span className="nav-dot" aria-hidden />}
         </button>
       ))}
     </nav>
