@@ -233,7 +233,7 @@ The bar is Phase 3's: a test states a fact a player or the product owner would r
 ## Further Notes
 
 - **Unverified, and to be settled by research before the tickets that depend on them:**
-  1. ~~**The join handshake from a launcher rather than a game connection:**~~ *Answered 2026-10-09 in `docs/research/0010-the-join-handshake-and-cloudflares-free-plan.md`, except the live check, which the product owner runs with `examples/join-handshake.rs`.* The client derives the server id, so the backend can never choose one (ADR-0020, amended). What it covered:
+  1. ~~**The join handshake from a launcher rather than a game connection:**~~ *Answered 2026-10-09 in `docs/research/0010-the-join-handshake-and-cloudflares-free-plan.md`, and the live check passed on 2026-10-10.* The client derives the server id, so the backend can never choose one (ADR-0020, amended). What it covered:
      - that Mojang's session server accepts a join with ash's own challenge;
      - its rate limits;
      - its behaviour for a player whose multiplayer is disabled on their Microsoft account;

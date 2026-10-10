@@ -16,7 +16,7 @@
   - `join` is a JSON POST answered with 204.
   - `hasJoined` is a GET answered with 200 and the profile, or 204.
   - A refused join names its reason. `InsufficientPrivilegesException` means multiplayer is disabled on the Microsoft account; `UserBannedException` means banned [COMMUNITY].
-- **One thing is still unproved:** that the session server accepts a join made from a launcher with ash's own `serverId`, and how long that join stays confirmable. `cargo run -p ash-core --example join-handshake` proves both with one fresh sign-in. The product owner runs it: the sandbox that wrote this refused to read the stored sign-in, rightly.
+- **Proved live on 2026-10-10** with `cargo run -p ash-core --example join-handshake`: the session server accepts a join made from a launcher with ash's own `serverId`, and confirms it (see §1, "The live check"). How long a join stays confirmable wasn't measured. That doesn't matter for ash, since its sign-in redeems within seconds.
 - **Cloudflare's free plan comfortably covers one to a hundred players**, if the lookup of other players' equipped cosmetics is served as cached static files rather than by the Worker. That also makes ADR-0023's "no record" structural, not a matter of discipline.
 
 ## 1. The join handshake
@@ -87,9 +87,20 @@ The rule is in ADR-0020 (amended) and in `launcher/core/src/session_server.rs` [
 
 The challenge being single-use and short-lived does the binding instead.
 
-### How long a join stays confirmable: to be measured
+### The live check [PRACTICE: the product owner's run, 2026-10-10]
 
-Nothing documents it. The example checks `hasJoined` at 0, 15, 30, 60 and 120 seconds after the join, and the challenge's lifetime is set below the first "not joined". *(To be filled in from the product owner's run.)*
+`cargo run -p ash-core --example join-handshake`, with a fresh device-code sign-in held in memory:
+
+```
+Signed in as oinkr.
+Joined server id -e69e43fe5590a5d95d9f13e520cada782a72385.
+hasJoined, a server id never joined:   204, not joined
+hasJoined, ash's server id, at   1s:  200, confirmed this profile
+```
+
+- **Settled:** Mojang's session server accepts a join from a launcher, of a server id derived from ash's own challenge, and `hasJoined` confirms it for that profile. A server id nobody joined comes back 204, so the "yes" is meaningful. The negative digest (`-e69e...`) went through as Minecraft's own logins send it.
+- **Not measured:** the run was stopped after the 1-second check, so how long Mojang keeps a join confirmable is still unknown.
+- **What that leaves:** in ash the sign-in redeems its challenge within a second or two of the join, so the backend's 30-second challenge lifetime (`CHALLENGE_LIFETIME_MS`) stays. It matters only if Mojang forgets a join in under about 30 seconds. If a real sign-in ever comes back `not_joined` after a successful join, rerun the example to the end and shorten the lifetime below what it shows.
 
 ### Terms
 
