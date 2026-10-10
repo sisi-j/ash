@@ -80,7 +80,7 @@ The backend runs on Cloudflare Workers, written in TypeScript, in its own public
   ADR-0021 records why.
 - **Two deployments:** staging and production, at `api.ashlauncher.com` and a staging host beside it. *(Assumption: the host names.)* CI deploys from the backend repository's own GitHub Actions.
 - **The free plan first.** Workers Paid costs $5 a month. ash moves to it only when the free limits get close, and only after the product owner agrees.
-- **`Ash` stays the launcher's single inbound seam.** The backend is reached through a new outbound port in ash-core, with a fake for tests, as the Microsoft and Mojang HTTP ports are.
+- **`Ash` stays the launcher's single inbound seam.** ~~The backend is reached through a new outbound port in ash-core, with a fake for tests, as the Microsoft and Mojang HTTP ports are.~~ The backend is reached over the existing `HttpPort`, at `Config::backend_url`. Tests use `FakeHttp`, serving the backend's own contract examples (*amended 2026-10-09 with #119*).
 - **The contract is tested on both sides, not shared as code.** The backend's tests pin each response's shape. ash-core's fake is built from the same examples, so a change to one side fails the other's tests.
 - **Severable.** Every Phase 4 piece fails alone. Unreachable or returning errors, the backend costs the player:
   - their cosmetics and other players' cosmetics;
@@ -99,6 +99,8 @@ The backend runs on Cloudflare Workers, written in TypeScript, in its own public
 
   This is what every Minecraft server does at login. The player's Minecraft token stays on their machine.
 - **The launcher signs in after every Microsoft sign-in.** It shows the notice that an ash account exists at the first one. ash's session token is stored the way the Microsoft tokens already are.
+  - *Amended 2026-10-09 with #119:* it signs in in the background after every Microsoft sign-in, and at startup when the ash session is missing or within a week of ending. It doesn't sign in on every token refresh: a launch must never wait on ash, and Mojang rate-limits joins (research 0010).
+  - *Amended 2026-10-09 with #120:* deleting the ash account stops background sign-ins on that machine. Signing in to Microsoft again makes a fresh ash account, and says so again.
 - **The game signs in itself.** The client holds the player's Minecraft token for the session already, so it does its own handshake for what needs sign-in in game: changing what it wears, and sending emotes. The launcher never hands the game an ash token.
 - **Looking up another player's cosmetics needs no sign-in.** A player's equipped cosmetics are public by UUID, with rate limits.
 - **Deletion is total:**

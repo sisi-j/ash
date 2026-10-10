@@ -13,6 +13,8 @@
 import * as real from "../src/api.ts";
 import type {
   Account,
+  AshAccountEvent,
+  AshAccountStatus,
   DegradationNotice,
   Instance,
   InstanceGlance,
@@ -57,6 +59,8 @@ const steve: Account = {
   profile_id: "steve",
   username: "Steve",
   added_at_ms: now - 400 * HOUR,
+  ash_account_notice: state === "ash-notice" || state === "ash-notice-dismissed",
+  ash_account_deleted: false,
   skin_url: skin(
     { h: "#2c1e0e", k: "#b88a6e", d: "#9c6e52", w: "#ffffff", e: "#4a3aa8", m: "#6a4030", n: "#8d5d43" },
     ["hhhhhhhh", "hhhhhhhh", "hkkkkkkh", "kkkkkkkk", "kweknewk", "kkknnkkk", "kkmmmmkk", "kkdddddk"],
@@ -67,6 +71,8 @@ const alex: Account = {
   profile_id: "alex",
   username: "Alex",
   added_at_ms: now - 90 * HOUR,
+  ash_account_notice: false,
+  ash_account_deleted: false,
   skin_url: skin(
     { h: "#e98a3a", k: "#f1c9a5", d: "#e2b28c", w: "#ffffff", e: "#3d8a3d", m: "#c98a6e", n: "#e6b896" },
     ["hhhhhhhh", "hhhhhhhh", "hkkkkkkh", "hkkkkkkh", "hweknewh", "hkknnkkk", "kkkmmkkk", "kkdddddk"],
@@ -109,6 +115,17 @@ const INSTANCES: Instance[] = [
 ];
 
 const signedIn = state !== "signed-out";
+const ashStatus: AshAccountStatus =
+  state === "ash-unreachable"
+    ? { state: "unreachable" }
+    : state === "ash-refused"
+      ? {
+          state: "refused",
+          kind: "multiplayer_disabled",
+          message:
+            "Multiplayer is turned off for this Microsoft account, so ash's online features can't sign in. Playing is unaffected. Multiplayer is allowed in the account's Xbox privacy settings.",
+        }
+      : { state: "signed_in" };
 const instances = state === "no-instances" ? [] : INSTANCES;
 const accounts: real.Accounts = signedIn
   ? { accounts: [steve, alex], active: steve.profile_id }
@@ -210,6 +227,7 @@ const CRASH_LOG = [
 const progress = new Set<(event: PrepareEvent) => void>();
 const prepared = new Set<(outcome: PrepareOutcome) => void>();
 const launched = new Set<(outcome: LaunchOutcome) => void>();
+const ashAccount = new Set<(event: AshAccountEvent) => void>();
 
 function subscribe<T>(handlers: Set<(value: T) => void>, handler: (value: T) => void) {
   handlers.add(handler);
@@ -287,6 +305,22 @@ export const api: typeof real.api = {
   pollSignIn: () => resolve({ status: "waiting", interval_secs: 3600 }),
   cancelSignIn: nothing,
   accounts: () => resolve(accounts),
+  ashAccountStatus: () => resolve(ashStatus),
+  dismissAshAccountNotice: (profileId) =>
+    resolve({
+      ...accounts,
+      accounts: accounts.accounts.map((a) => (a.profile_id === profileId ? { ...a, ash_account_notice: false } : a)),
+    }),
+  deleteAshAccount: (profileId) =>
+    state === "ash-delete-failed"
+      ? Promise.reject({ kind: "unexpected_status", message: "x", retryable: true })
+      : resolve({
+          ...accounts,
+          accounts: accounts.accounts.map((a) => (a.profile_id === profileId ? { ...a, ash_account_deleted: true } : a)),
+        }),
+  openPrivacyStatement: async () => {
+    (window as unknown as { openedPrivacy?: boolean }).openedPrivacy = true;
+  },
   selectAccount: (profileId) => resolve({ ...accounts, active: profileId }),
   removeAccount: (profileId) => {
     // As ash-core does it: signing out the active account hands the slot to
@@ -387,6 +421,7 @@ export const appWindow: typeof real.appWindow = {
 export const onPrepareProgress: typeof real.onPrepareProgress = (handler) => subscribe(progress, handler);
 export const onPrepareFinished: typeof real.onPrepareFinished = (handler) => subscribe(prepared, handler);
 export const onLaunchFinished: typeof real.onLaunchFinished = (handler) => subscribe(launched, handler);
+export const onAshAccount: typeof real.onAshAccount = (handler) => subscribe(ashAccount, handler);
 
 /** What the launcher did to its own window, for the check to read back. */
 function windowDid(what: "minimise" | "close") {

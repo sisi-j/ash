@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { api, isUiError, type LauncherPreferences, type MachineDefaults, type OnGameStart } from "./api";
+import { api, isUiError, type AshAccountStatus, type LauncherPreferences, type MachineDefaults, type OnGameStart } from "./api";
+import { DeleteAshAccount, describeAshAccount } from "./AshAccount";
 import { Icon } from "./icons";
 import { filledPercent, formatGb, MEMORY_MAX_GB, MEMORY_MIN_GB, MEMORY_STEP_GB, onSlider, toGb } from "./memory";
 import { PAGES } from "./Sidebar";
@@ -24,6 +25,10 @@ const ON_GAME_START: { value: OnGameStart; label: string }[] = [
 export function SettingsPage(props: {
   preferences: LauncherPreferences | null;
   onChange: (next: LauncherPreferences) => void;
+  /** The active player and where they stand with ash's servers. */
+  ashAccount: { username: string; status: AshAccountStatus } | null;
+  /** Delete the active player's ash account; whether ash's servers confirmed it. */
+  onDeleteAshAccount: () => Promise<boolean>;
 }) {
   const { preferences } = props;
 
@@ -72,6 +77,20 @@ export function SettingsPage(props: {
         </div>
 
         <DefaultMemory />
+
+        {props.ashAccount && (
+          <div className="setting">
+            <span className="setting-label">ash account</span>
+            <div className="setting-control">
+              <span className="ash-account-status" role="status">
+                {describeAshAccount(props.ashAccount.username, props.ashAccount.status)}
+              </span>
+              {props.ashAccount.status.state !== "deleted" && (
+                <DeleteAshAccount username={props.ashAccount.username} onDelete={props.onDeleteAshAccount} />
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="setting">
           <span className="setting-label" id="language">

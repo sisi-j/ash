@@ -10,6 +10,7 @@ use crate::error::AshError;
 pub enum Method {
     Get,
     Post,
+    Delete,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +24,10 @@ pub struct HttpRequest {
 impl HttpRequest {
     pub fn get(url: impl Into<String>) -> Self {
         Self { method: Method::Get, url: url.into(), headers: Vec::new(), body: None }
+    }
+
+    pub fn delete(url: impl Into<String>) -> Self {
+        Self { method: Method::Delete, url: url.into(), headers: Vec::new(), body: None }
     }
 
     pub fn post_json(url: impl Into<String>, body: &impl Serialize) -> Result<Self, AshError> {
@@ -158,6 +163,7 @@ impl HttpPort for ReqwestHttp {
         let mut builder = match request.method {
             Method::Get => self.client.get(&request.url),
             Method::Post => self.client.post(&request.url),
+            Method::Delete => self.client.delete(&request.url),
         };
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
@@ -269,6 +275,24 @@ impl FakeHttp {
     /// How many times a URL was requested, ignoring any query string.
     pub fn hits(&self, url: &str) -> usize {
         self.requested.lock().unwrap().iter().filter(|r| same_endpoint(&r.url, url)).count()
+    }
+
+    /// Every request sent to a URL starting with `prefix`, each flattened to
+    /// one string - URL, headers and body - so a test can assert what never
+    /// appears in any of them, rather than in only the last.
+    pub fn everything_sent_to(&self, prefix: &str) -> Vec<String> {
+        self.requested
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r.url.starts_with(prefix))
+            .map(|r| {
+                let headers: Vec<String> =
+                    r.headers.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+                let body = r.body.as_deref().map(String::from_utf8_lossy).unwrap_or_default();
+                format!("{:?} {}\n{}\n{}", r.method, r.url, headers.join("\n"), body)
+            })
+            .collect()
     }
 
     /// The body sent to a URL, for asserting request shape.

@@ -1673,6 +1673,56 @@ button {
   margin-bottom: 12px;
 }
 
+/* ash made an ash account for the player: said once, quietly, above the
+   page. Nothing here stops play, so it is a band, not a dialog. */
+.ash-account-notice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--fill);
+  font-size: 13px;
+}
+
+.ash-account-notice p {
+  flex: 1;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.ash-account-notice b {
+  color: var(--text);
+}
+
+.ash-account-notice-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.ash-account-status {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.ash-account-status + .button,
+.ash-account-delete {
+  margin-top: 10px;
+}
+
+.ash-account-delete p {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.ash-account-delete .ash-account-delete-failed {
+  color: var(--red-text);
+}
+
 /* ---- scrollbars, kept in palette ---- */
 
 ::-webkit-scrollbar {
