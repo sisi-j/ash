@@ -98,6 +98,15 @@ pub enum AshError {
     #[error("this account has no Minecraft profile yet")]
     ProfileUnavailable,
 
+    /// Mojang's session server refused a join because the Microsoft
+    /// account's privacy settings turn multiplayer off. The game cannot join
+    /// servers either; ash's online features need the same join.
+    #[error("multiplayer is disabled for this Microsoft account")]
+    MultiplayerDisabled,
+
+    #[error("this account is banned from multiplayer")]
+    MultiplayerBanned,
+
     // ---- accounts ----
     #[error("no account is signed in")]
     NoAccountSelected,
@@ -226,6 +235,8 @@ impl AshError {
             AshError::NotAllowListed => "not_allow_listed",
             AshError::NotEntitled => "not_entitled",
             AshError::ProfileUnavailable => "profile_unavailable",
+            AshError::MultiplayerDisabled => "multiplayer_disabled",
+            AshError::MultiplayerBanned => "multiplayer_banned",
             AshError::NoAccountSelected => "no_account_selected",
             AshError::AccountNotFound { .. } => "account_not_found",
             AshError::InvalidSetting { .. } => "invalid_setting",
@@ -338,6 +349,17 @@ impl AshError {
             AshError::ProfileUnavailable => {
                 "This account has no Minecraft profile yet. Sign into the official Minecraft \
                  launcher once to create one, then come back."
+                    .into()
+            }
+            AshError::MultiplayerDisabled => {
+                "Multiplayer is turned off for this Microsoft account, so ash's online features \
+                 can't sign in. Playing is unaffected. Multiplayer is allowed in the account's \
+                 Xbox privacy settings."
+                    .into()
+            }
+            AshError::MultiplayerBanned => {
+                "This account is banned from multiplayer, so ash's online features can't sign in. \
+                 Playing singleplayer is unaffected."
                     .into()
             }
             AshError::NoAccountSelected => {
@@ -530,6 +552,8 @@ mod tests {
             AshError::NotAllowListed,
             AshError::NotEntitled,
             AshError::ProfileUnavailable,
+            AshError::MultiplayerDisabled,
+            AshError::MultiplayerBanned,
             AshError::NoAccountSelected,
             AshError::AccountNotFound { profile_id: s.clone() },
             AshError::InvalidSetting { detail: s.clone() },
@@ -600,6 +624,8 @@ mod tests {
             | AshError::NotAllowListed
             | AshError::NotEntitled
             | AshError::ProfileUnavailable
+            | AshError::MultiplayerDisabled
+            | AshError::MultiplayerBanned
             | AshError::NoAccountSelected
             | AshError::AccountNotFound { .. }
             | AshError::InvalidSetting { .. }

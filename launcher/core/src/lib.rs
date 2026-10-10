@@ -32,6 +32,7 @@ mod profile;
 mod recent_servers;
 mod runtime;
 mod server_list;
+mod session_server;
 mod version;
 
 pub mod credentials;
@@ -291,6 +292,38 @@ impl Ash {
             session.skin_url.clone(),
             session.refresh_token.as_deref(),
         )
+    }
+
+    /// The player's half of the join handshake (ADR-0020): join the server
+    /// id derived from the backend's `challenge`, as `profile_id`, and return
+    /// that server id for the backend to check with Mojang.
+    ///
+    /// Refreshes the session first, as a launch does, so the Minecraft token
+    /// is current; it goes to Mojang's session server and nowhere else.
+    pub async fn join_for_ash(
+        &self,
+        profile_id: &str,
+        challenge: &str,
+    ) -> Result<String, AshError> {
+        let token = account::refresh_token(self.credentials.as_ref(), profile_id)?;
+        let session = auth::refresh(self.http.as_ref(), &self.client_id, &token).await?;
+        account::upsert(
+            &self.config.data_root,
+            self.credentials.as_ref(),
+            &session.profile_id,
+            &session.username,
+            session.skin_url.clone(),
+            session.refresh_token.as_deref(),
+        )?;
+        let server_id = session_server::server_id_for(challenge);
+        session_server::join(
+            self.http.as_ref(),
+            &session.minecraft_token,
+            &session.profile_id,
+            &server_id,
+        )
+        .await?;
+        Ok(server_id)
     }
 
     // ---- instances --------------------------------------------------------
