@@ -8,6 +8,8 @@ import {
   type Accounts as AccountList,
   type AshAccountStatus,
   type News,
+  onSync,
+  type SyncStatus,
   type Catalogue,
   type Instance,
   type InstanceId,
@@ -22,6 +24,7 @@ import { InstancePage } from "./InstancePage";
 import { useLaunch } from "./launch";
 import { LaunchFailure } from "./LaunchFailure";
 import { NewsPage } from "./NewsPage";
+import { DeletedElsewhereQuestion } from "./Sync";
 import { PlayPage } from "./PlayPage";
 import { SettingsPage } from "./SettingsPage";
 import { EmptyPage, Sidebar, type Page } from "./Sidebar";
@@ -121,6 +124,39 @@ export default function App() {
       })
       .catch(() => undefined);
   }, [page]);
+  // Synced settings (spec 0004): run in the background by the adapter. When
+  // one finishes, instances, preferences and server lists may have changed.
+  const [sync, setSync] = useState<SyncStatus | null>(null);
+  useEffect(() => {
+    api.syncStatus().then(setSync).catch(() => setSync(null));
+    const stop = onSync((status) => {
+      setSync(status);
+      void reloadInstances();
+      api.launcherPreferences().then(setPreferences).catch(fail);
+    });
+    return () => void stop.then((unlisten) => unlisten());
+  }, [reloadInstances, fail]);
+  const toggleSync = useCallback(
+    async (enabled: boolean) => {
+      try {
+        setSync(await api.setSyncEnabled(enabled));
+      } catch (e) {
+        fail(e);
+      }
+    },
+    [fail],
+  );
+  const answerDeletedElsewhere = useCallback(
+    async (id: InstanceId, deleteHere: boolean) => {
+      try {
+        setSync(await api.resolveDeletedElsewhere(id, deleteHere));
+        await reloadInstances();
+      } catch (e) {
+        fail(e);
+      }
+    },
+    [fail, reloadInstances],
+  );
   const dismissAshNotice = useCallback(
     async (profileId: string) => {
       try {
@@ -245,6 +281,15 @@ export default function App() {
           </p>
         )}
 
+        {!signingIn &&
+          sync?.deleted_elsewhere.map((gone) => (
+            <DeletedElsewhereQuestion
+              key={gone.instance_id}
+              instance={gone}
+              onAnswer={(deleteHere) => void answerDeletedElsewhere(gone.instance_id, deleteHere)}
+            />
+          ))}
+
         {active?.ash_account_notice && !signingIn && (
           <AshAccountNotice account={active} onDismiss={() => void dismissAshNotice(active.profile_id)} />
         )}
@@ -280,6 +325,8 @@ export default function App() {
             onChange={savePreferences}
             ashAccount={active && ashStatus ? { username: active.username, status: ashStatus } : null}
             onDeleteAshAccount={deleteAshAccount}
+            sync={sync}
+            onSyncToggle={(enabled) => void toggleSync(enabled)}
           />
         ) : playView === "new" ? (
           <section className="page">

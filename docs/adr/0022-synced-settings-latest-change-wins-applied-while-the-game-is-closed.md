@@ -21,3 +21,10 @@ Synced settings carry an account's feature settings, launcher preferences, insta
 - A setting changed in game reaches the account only after the session ends. If the launcher was closed during play, it reaches it the next time ash opens. That's accepted, because the alternative is a second writer inside a running game.
 - Whole-blob "latest wins" was rejected because it loses the other machine's unrelated changes. Asking the player at every conflict was rejected as noise for a single player on two machines.
 - A game started outside ash still isn't seen as running (ADR-0019), so the same caveat applies to `ash.properties`.
+
+## Amended 2026-10-10 by research 0011
+
+- **Instances sync by a sync id, never by their directory id.** A directory id is a slug of the name, so two machines' "PvP" instances share one by accident. A new instance from another machine gets a fresh local id here.
+- **`panel.size` (Interface size) stays on each machine.** It suits a screen, as the window size does (ADR-0011). Every other client setting is account-wide.
+- **The backend clamps a change's time to its own clock,** so a machine with a fast clock can't win every later conflict.
+- **The sync switch is machine-local.**
