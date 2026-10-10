@@ -79,6 +79,55 @@ const alex: Account = {
   ),
 };
 
+/** A cover made here, as the faces are: the check has no network. */
+function cover(): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 320;
+  canvas.height = 140;
+  const pen = canvas.getContext("2d");
+  if (!pen) return "";
+  const sky = pen.createLinearGradient(0, 0, 0, 140);
+  sky.addColorStop(0, "#1b2a4a");
+  sky.addColorStop(1, "#3c6e5a");
+  pen.fillStyle = sky;
+  pen.fillRect(0, 0, 320, 140);
+  pen.fillStyle = "#5b3a24";
+  pen.fillRect(0, 110, 320, 30);
+  return canvas.toDataURL();
+}
+
+const NEWS: real.NewsPost[] = [
+  {
+    id: "n1",
+    kind: "patch_notes",
+    title: "ash 0.2: your ash account",
+    body: `## What's new
+
+- **ash accounts**, made when you sign in.
+- Delete yours any time in *Settings*.
+
+More in the [privacy statement](https://ashlauncher.com/privacy.html).
+
+Text like <script>alert("x")</script> stays text.`,
+    cover_url: cover(),
+    published_at: now - 26 * HOUR,
+    updated_at: now - 26 * HOUR,
+  },
+  {
+    id: "n2",
+    kind: "news",
+    title: "Synced settings are next",
+    body: `Your crosshair, readouts and servers will follow you between computers.
+
+1. Settings
+2. News
+3. Cosmetics`,
+    cover_url: null,
+    published_at: now - 72 * HOUR,
+    updated_at: now - 72 * HOUR,
+  },
+];
+
 // ---- the launcher's state -------------------------------------------------
 
 const INSTANCES: Instance[] = [
@@ -318,6 +367,14 @@ export const api: typeof real.api = {
           ...accounts,
           accounts: accounts.accounts.map((a) => (a.profile_id === profileId ? { ...a, ash_account_deleted: true } : a)),
         }),
+  news: () =>
+    state === "news-offline"
+      ? resolve({ posts: NEWS, unread: false, offline: true })
+      : resolve({ posts: state === "news-empty" ? [] : NEWS, unread: state === "news-dot", offline: false }),
+  markNewsSeen: nothing,
+  openNewsLink: async (url) => {
+    (window as unknown as { openedLink?: string }).openedLink = url;
+  },
   openPrivacyStatement: async () => {
     (window as unknown as { openedPrivacy?: boolean }).openedPrivacy = true;
   },

@@ -299,7 +299,40 @@ const STATES: State[] = [
   },
   { name: "new-instance", shows: "Built for", reach: (page) => page.getByRole("button", { name: "New", exact: true }).click() },
   { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
-  { name: "news", shows: "News is coming soon", reach: openPage("News") },
+  {
+    name: "news",
+    shows: "ash 0.2: your ash account",
+    reach: openPage("News"),
+    verify: async (page) => {
+      if ((await page.locator(".news-body strong", { hasText: "ash accounts" }).count()) !== 1) return "bold was not drawn";
+      if ((await page.locator(".news-body script").count()) !== 0) return "a post's <script> became markup";
+      if ((await page.getByText('<script>alert("x")</script>', { exact: false }).count()) !== 1) return "a post's <script> text vanished";
+      await page.getByRole("link", { name: "privacy statement" }).click();
+      const opened = await page.evaluate(() => (window as unknown as { openedLink?: string }).openedLink);
+      return opened === "https://ashlauncher.com/privacy.html" ? null : `the link opened ${opened}`;
+    },
+  },
+  {
+    name: "news-filtered",
+    shows: "Synced settings are next",
+    reach: async (page) => {
+      await openPage("News")(page);
+      await page.getByRole("radio", { name: "News", exact: true }).click();
+    },
+    verify: async (page) =>
+      (await page.getByText("ash 0.2: your ash account").count()) === 0 ? null : "patch notes showed under News",
+  },
+  { name: "news-empty", shows: "No news yet.", reach: openPage("News") },
+  { name: "news-offline", shows: "this is the news ash last saw", reach: openPage("News") },
+  {
+    name: "news-dot",
+    shows: "LAUNCH GAME",
+    verify: async (page) => {
+      if ((await page.locator(".nav-dot").count()) !== 1) return "no dot on News";
+      await openPage("News")(page);
+      return (await page.locator(".nav-dot").count()) === 0 ? null : "the dot stayed after opening News";
+    },
+  },
   { name: "settings", shows: "When the game starts", reach: openPage("Settings") },
   // The ash account (spec 0004): a notice once, a quiet line in Settings, and deleting it.
   { name: "ash-notice", shows: "ash made an ash account for Steve." },

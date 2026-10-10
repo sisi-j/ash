@@ -1703,6 +1703,106 @@ button {
   gap: 8px;
 }
 
+/* ---- the News page ---- */
+
+.nav {
+  position: relative;
+}
+
+.nav-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.news-posts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+}
+
+.news-post {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--fill);
+}
+
+.news-cover {
+  display: block;
+  width: calc(100% + 40px);
+  margin: -18px -20px 16px;
+  aspect-ratio: 16 / 7;
+  object-fit: cover;
+  border-radius: 14px 14px 0 0;
+}
+
+.news-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.news-kind {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--fill-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.news-kind-patch_notes {
+  color: var(--green);
+}
+
+.news-title {
+  margin: 8px 0 6px;
+  font-size: 18px;
+}
+
+.news-body {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.news-body h4,
+.news-body h5 {
+  margin: 14px 0 6px;
+  color: var(--text);
+}
+
+.news-body h4 {
+  font-size: 15px;
+}
+
+.news-body h5 {
+  font-size: 14px;
+}
+
+.news-body p,
+.news-body ul,
+.news-body ol {
+  margin: 0 0 10px;
+}
+
+.news-body strong {
+  color: var(--text);
+}
+
+.news-body a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .ash-account-status {
   color: var(--text-2);
   font-size: 13px;

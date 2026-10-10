@@ -280,6 +280,22 @@ export type AshAccountStatus =
 
 export type AshAccountEvent = { profile_id: string; status: AshAccountStatus };
 
+export type NewsKind = "news" | "patch_notes";
+
+/** Mirrors `ash_core::NewsPost`; times are milliseconds since the epoch. */
+export type NewsPost = {
+  id: string;
+  kind: NewsKind;
+  title: string;
+  /** The agreed Markdown subset; render with `parseMarkdown`, never as HTML. */
+  body: string;
+  cover_url: string | null;
+  published_at: number;
+  updated_at: number;
+};
+
+export type News = { posts: NewsPost[]; unread: boolean; offline: boolean };
+
 export type Accounts = {
   accounts: Account[];
   active: string | null;
@@ -333,6 +349,9 @@ export const api = {
   dismissAshAccountNotice: (profileId: string) =>
     invoke<Accounts>("dismiss_ash_account_notice", { profileId }),
   openPrivacyStatement: () => invoke<void>("open_privacy_statement"),
+  news: () => invoke<News>("news"),
+  markNewsSeen: () => invoke<void>("mark_news_seen"),
+  openNewsLink: (url: string) => invoke<void>("open_news_link", { url }),
 
   planInstance: (id: InstanceId) => invoke<Plan>("plan_instance", { id }),
   /** Returns as soon as the work is scheduled; watch the events for outcome. */

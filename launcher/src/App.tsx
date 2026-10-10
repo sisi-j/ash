@@ -7,6 +7,7 @@ import {
   onAshAccount,
   type Accounts as AccountList,
   type AshAccountStatus,
+  type News,
   type Catalogue,
   type Instance,
   type InstanceId,
@@ -20,6 +21,7 @@ import { Icon } from "./icons";
 import { InstancePage } from "./InstancePage";
 import { useLaunch } from "./launch";
 import { LaunchFailure } from "./LaunchFailure";
+import { NewsPage } from "./NewsPage";
 import { PlayPage } from "./PlayPage";
 import { SettingsPage } from "./SettingsPage";
 import { EmptyPage, Sidebar, type Page } from "./Sidebar";
@@ -103,6 +105,22 @@ export default function App() {
       return false;
     }
   }, [activeId]);
+  // News (spec 0004): fetched at start for the sidebar's dot, and again
+  // each time the page opens, which also marks it seen.
+  const [news, setNews] = useState<News | null>(null);
+  useEffect(() => {
+    api.news().then(setNews).catch(() => setNews(null));
+  }, []);
+  useEffect(() => {
+    if (page !== "news") return;
+    api
+      .news()
+      .then((loaded) => {
+        setNews({ ...loaded, unread: false });
+        return api.markNewsSeen();
+      })
+      .catch(() => undefined);
+  }, [page]);
   const dismissAshNotice = useCallback(
     async (profileId: string) => {
       try {
@@ -212,6 +230,7 @@ export default function App() {
       />
       <Sidebar
         page={page}
+        unread={news?.unread && page !== "news" ? ["news"] : []}
         onOpen={(next) => {
           setPage(next);
           setSigningIn(false);
@@ -252,11 +271,7 @@ export default function App() {
             detail="Third-party mods you add to an instance will show here."
           />
         ) : page === "news" ? (
-          <EmptyPage
-            page="news"
-            headline="News is coming soon"
-            detail="News posts and patch notes will show here."
-          />
+          <NewsPage news={news} />
         ) : page === "settings" ? (
           // The launcher's own settings. Each instance's settings for this
           // machine are on its own page, from its cog.
