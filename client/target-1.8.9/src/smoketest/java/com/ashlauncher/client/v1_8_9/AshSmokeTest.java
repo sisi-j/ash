@@ -125,7 +125,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         // again for a couple of minutes.
         TestCdn cdn;
         try {
-            cdn = new TestCdn(client.getSession().getProfile().getId());
+            cdn = new TestCdn();
         } catch (java.io.IOException couldNotStart) {
             fail("the test's CDN did not start on port " + TestCdn.PORT + ": " + couldNotStart);
             return;
@@ -863,7 +863,8 @@ public final class AshSmokeTest implements ClientModInitializer {
                 break;
             }
             if (System.currentTimeMillis() > deadline) {
-                fail("the player's cape was never ash's from " + TestCdn.CAPE + "; it was " + cape);
+                fail("the player's cape was never ash's from " + TestCdn.CAPE + "; it was " + cape + ", for player "
+                        + onClient(client, () -> client.player.getUuid()));
             }
             pause(200L);
         }

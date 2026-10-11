@@ -67,7 +67,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // ash's CDN, for the cape test, from before the game first asks who
         // wears what: the player's own skin is asked for as soon as a hand is
         // drawn, and a profile that wasn't there is not asked again for a while.
-        try (TestCdn cdn = new TestCdn(context.computeOnClient(c -> c.getUser().getProfileId()))) {
+        try (TestCdn cdn = new TestCdn()) {
             runTestWithCdn(context);
         } catch (IOException couldNotStart) {
             throw new AssertionError("the test's CDN did not start on port " + TestCdn.PORT, couldNotStart);

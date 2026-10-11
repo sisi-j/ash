@@ -7,14 +7,15 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import javax.imageio.ImageIO;
 
 /**
  * ash's CDN, as far as one player's cape needs it, on 127.0.0.1: the game
  * test points the client here (build.gradle's {@code ash.cosmetics.cdn}) so
- * nothing reaches the network. Serves one profile and one cape, solid magenta
- * so a screenshot shows it plainly.
+ * nothing reaches the network. Serves one cape, solid magenta so a screenshot
+ * shows it plainly, as worn by every player it is asked about: in a
+ * development world the player's UUID need not be the session's. Each
+ * request is printed, for a failure to show what was asked.
  */
 final class TestCdn implements AutoCloseable {
 
@@ -25,14 +26,15 @@ final class TestCdn implements AutoCloseable {
 
     private final HttpServer server;
 
-    TestCdn(UUID wearer) throws IOException {
+    TestCdn() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", PORT), 0);
         byte[] profile = ("{\"v\":1,\"equipped\":{\"cape\":{\"id\":\"cape.test\",\"texture_url\":\"" + CAPE + "\"}}}")
                 .getBytes(StandardCharsets.UTF_8);
         byte[] cape = magentaCape();
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath();
-            byte[] body = path.equals("/profiles/" + wearer.toString().replace("-", "") + ".json") ? profile
+            System.out.println("ash test CDN: " + path);
+            byte[] body = path.matches("/profiles/[0-9a-f]{32}\\.json") ? profile
                     : path.equals("/cosmetics/test-cape.png") ? cape
                     : null;
             if (body == null) {
