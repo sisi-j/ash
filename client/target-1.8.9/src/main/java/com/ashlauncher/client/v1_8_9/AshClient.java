@@ -7,6 +7,8 @@ import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
+import com.ashlauncher.client.cosmetics.CapeSource;
+import com.ashlauncher.client.cosmetics.Cosmetics;
 import com.ashlauncher.client.hit.HitColour;
 import com.ashlauncher.client.hit.HitColourHook;
 import com.ashlauncher.client.hit.HitHook;
@@ -266,6 +268,21 @@ public final class AshClient implements ClientModInitializer {
             FasterViewScan.install(() -> settings.get(Settings.FASTER_VIEW_SCAN));
         } else {
             landed.remove(Feature.FASTER_VIEW_SCAN);
+        }
+
+        // Cosmetics: ash players' capes, drawn by the game's own cape
+        // renderer from ash's texture (research 0012). Looked up from ash's
+        // CDN in the background, never on the way to a frame.
+        boolean cosmeticsLanded = MixinFeature.landed(
+                () -> net.minecraft.client.network.AbstractClientPlayerEntity.class,
+                "com.ashlauncher.client.v1_8_9.mixin.AbstractClientPlayerEntityCapeMixin",
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.COSMETICS.displayName(), why)));
+        if (cosmeticsLanded) {
+            com.ashlauncher.client.v1_8_9.cosmetics.CapeTextures.install(new Cosmetics(CapeSource.forGame(),
+                    () -> settings.get(Settings.COSMETICS), () -> settings.get(Settings.COSMETICS_HIDE_OTHERS),
+                    () -> MinecraftClient.getInstance().getSession().getProfile().getId()));
+        } else {
+            landed.remove(Feature.COSMETICS);
         }
         AshClient.settings = settings;
 

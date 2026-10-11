@@ -310,6 +310,18 @@ export type SyncState =
 
 export type DeletedElsewhere = { instance_id: InstanceId; name: string };
 
+/** Mirrors `ash_core::Cosmetic`; `texture` is a `data:` URL. */
+export type Cosmetic = { id: string; slot: "cape" | "head" | "back"; name: string; texture: string };
+
+/** Mirrors `ash_core::Wardrobe`. */
+export type Wardrobe = {
+  signed_in: boolean;
+  cosmetics: Cosmetic[];
+  equipped: { cape: string | null; head: string | null; back: string | null };
+  /** The active player's own skin, as a `data:` URL. */
+  skin: string | null;
+};
+
 /** Mirrors `ash_core::SyncStatus`. */
 export type SyncStatus = { enabled: boolean; state: SyncState; deleted_elsewhere: DeletedElsewhere[] };
 
@@ -368,6 +380,9 @@ export const api = {
   openPrivacyStatement: () => invoke<void>("open_privacy_statement"),
   news: () => invoke<News>("news"),
   syncStatus: () => invoke<SyncStatus>("sync_status"),
+  wardrobe: () => invoke<Wardrobe>("wardrobe"),
+  equip: (slot: Cosmetic["slot"], cosmeticId: string | null) =>
+    invoke<Wardrobe>("equip", { slot, cosmeticId }),
   setSyncEnabled: (enabled: boolean) => invoke<SyncStatus>("set_sync_enabled", { enabled }),
   resolveDeletedElsewhere: (id: InstanceId, deleteHere: boolean) =>
     invoke<SyncStatus>("resolve_deleted_elsewhere", { id, deleteHere }),

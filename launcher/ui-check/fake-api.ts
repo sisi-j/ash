@@ -96,6 +96,34 @@ function cover(): string {
   return canvas.toDataURL();
 }
 
+/** A placeholder cape, made here as the faces are: one colour on the cape's faces. */
+function capeTexture(colour: string): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 32;
+  const pen = canvas.getContext("2d");
+  if (!pen) return "";
+  pen.fillStyle = colour;
+  pen.fillRect(0, 0, 22, 17);
+  pen.fillStyle = "#ffffff";
+  pen.fillRect(16, 5, 3, 3);
+  return canvas.toDataURL();
+}
+
+const CAPES: real.Cosmetic[] = [
+  { id: "cape.ash", slot: "cape", name: "Ash", texture: capeTexture("#585860") },
+  { id: "cape.ember", slot: "cape", name: "Ember", texture: capeTexture("#e0702a") },
+  { id: "cape.midnight", slot: "cape", name: "Midnight", texture: capeTexture("#28346e") },
+];
+
+let wearing: string | null = state === "wardrobe-none" ? null : "cape.ember";
+const wardrobe = (): real.Wardrobe => ({
+  signed_in: state !== "wardrobe-signed-out",
+  cosmetics: CAPES,
+  equipped: { cape: state === "wardrobe-signed-out" ? null : wearing, head: null, back: null },
+  skin: steve.skin_url,
+});
+
 const NEWS: real.NewsPost[] = [
   {
     id: "n1",
@@ -389,6 +417,11 @@ export const api: typeof real.api = {
       : resolve({ posts: state === "news-empty" ? [] : NEWS, unread: state === "news-dot", offline: false }),
   markNewsSeen: nothing,
   syncStatus: () => resolve(syncStatus),
+  wardrobe: () => resolve(wardrobe()),
+  equip: async (_slot, cosmeticId) => {
+    wearing = cosmeticId;
+    return wardrobe();
+  },
   setSyncEnabled: (enabled) => resolve({ ...syncStatus, enabled, state: enabled ? { state: "waiting" } : { state: "off" } }),
   resolveDeletedElsewhere: () => resolve({ ...syncStatus, deleted_elsewhere: [] }),
   openNewsLink: async (url) => {

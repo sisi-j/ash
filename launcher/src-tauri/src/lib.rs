@@ -15,6 +15,7 @@ use ash_core::{
     DeletionPreview, GameStatus, Instance, InstanceGlance, InstanceId, InvocationView,
     LauncherPreferences, Loader, MachineDefaults, MachineOverrides, News, PendingSignIn, Plan,
     PrepareEvent, ProgressSink, Runtime, ServerEntry, ServerStatus, SignInStatus, SyncStatus,
+    Wardrobe,
 };
 use tauri::{Emitter, Manager};
 
@@ -172,6 +173,22 @@ async fn set_sync_enabled(
         tauri::async_runtime::spawn(async move { sync_and_tell(&app, &ash).await });
     }
     Ok(status)
+}
+
+// ---- the Wardrobe (spec 0004, step 4) ----
+
+#[tauri::command]
+async fn wardrobe(state: tauri::State<'_, AppState>) -> Result<Wardrobe, UiError> {
+    state.ash.wardrobe().await.map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn equip(
+    state: tauri::State<'_, AppState>,
+    slot: String,
+    cosmetic_id: Option<String>,
+) -> Result<Wardrobe, UiError> {
+    state.ash.equip(&slot, cosmetic_id.as_deref()).await.map_err(UiError::from)
 }
 
 /// The player's answer about an instance deleted on another computer.
@@ -888,6 +905,8 @@ pub fn run() {
             sync_status,
             set_sync_enabled,
             resolve_deleted_elsewhere,
+            wardrobe,
+            equip,
             open_news_link,
             create_instance,
             loaders_for,

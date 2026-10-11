@@ -100,7 +100,8 @@ public final class Ink {
         EYE("eye"),
         ROTATE("rotate-ccw"),
         CLOUD("cloud"),
-        SCAN("scan-eye");
+        SCAN("scan-eye"),
+        SHIRT("shirt");
 
         private final String lucideName;
 

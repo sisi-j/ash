@@ -61,6 +61,8 @@ loom {
             // A server list ash's launcher wrote, for the game's own code to load.
             property 'ash.test.serversChangedByAsh',
                     rootProject.file('../launcher/core/tests/fixtures/servers-1.8.9-changed-by-ash.dat').absolutePath
+            // The cape test's own CDN, started by AshSmokeTest (TestCdn).
+            property 'ash.cosmetics.cdn', 'http://127.0.0.1:25613'
         }
 
         // The frame-time measurement: `./gradlew :target-1.8.9:runBenchmark`,

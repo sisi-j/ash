@@ -29,6 +29,11 @@ public enum Feature {
      */
     FASTER_VIEW_SCAN("faster-view-scan", "Faster view scan", Target.V1_8_9),
     /**
+     * ash players' capes (spec 0004, step 4), drawn by the game's own cape in
+     * place of its texture. Seen only by other ash players.
+     */
+    COSMETICS("cosmetics", "Cosmetics"),
+    /**
      * The key that opens ash's settings, and so the screen behind it. It has
      * no switch - nothing switches off the way to switch things - but it can
      * still fail to load: on 1.8.9 the key is read by a mixin of ash's own.
