@@ -75,6 +75,8 @@ loom {
         clientGameTest {
             property 'ash.test.serversChangedByAsh',
                     rootProject.file('../launcher/core/tests/fixtures/servers-1.21.11-changed-by-ash.dat').absolutePath
+            // The cape test's own CDN, started by AshLoadsGameTest (TestCdn).
+            property 'ash.cosmetics.cdn', 'http://127.0.0.1:25613'
         }
     }
 }

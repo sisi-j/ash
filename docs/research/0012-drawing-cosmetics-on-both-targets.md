@@ -8,7 +8,7 @@ Game classes were read with `javap -p` from the jars Loom built for this reposit
 
 - **A cape is one return value on each target.** The game already draws a cape, with its own physics, the player's "Cape" skin option and elytra handling. ash only changes which texture it uses:
   - on 1.21.11, the `cape` of the `PlayerSkin` that `AbstractClientPlayer.getSkin()` returns;
-  - on 1.8.9, `AbstractClientPlayerEntity.getCapeId()`.
+  - on 1.8.9, the method Legacy Yarn 604 calls `AbstractClientPlayerEntity.getSkinId()` (see §1: the names are swapped).
 
   So an ash cape replaces a Mojang cape (spec 0004) by construction. It also looks identical on both targets, because it is the game's own cape model on both.
 - **Worn models are a render layer on the player.**
@@ -40,10 +40,12 @@ Game classes were read with `javap -p` from the jars Loom built for this reposit
 
 ### 1.8.9 [ASH]
 
-- `AbstractClientPlayerEntity.getCapeId()` returns an `Identifier`. `canRenderCapeTexture()` reflects the player's own "Cape" skin option.
-- `CapeFeatureRenderer.render(AbstractClientPlayerEntity, ...)` draws the cape when both say so.
+*Corrected 2026-10-10 from the bytecode, while building the capes step.* Legacy Yarn 604's names are swapped here:
+- `getCapeId()` returns the **skin**, the player list entry's skin texture or the default.
+- `getSkinId()` returns the **cape**, the entry's cape texture or null.
+- `CapeFeatureRenderer.render(AbstractClientPlayerEntity, ...)` checks `canRenderCapeTexture()` (only "is in the player list"), `isInvisible()` and `isPartVisible(PlayerModelPart.CAPE)`, the player's own option. Then it binds `getSkinId()`.
 
-**The hook:** at the return of `getCapeId()`, ash's texture `Identifier` for that player, registered with the texture manager as a `NativeImageBackedTexture` from the PNG.
+**The hook:** at the return of `getSkinId()`, ash's texture `Identifier` for that player, registered with the texture manager as a `NativeImageBackedTexture` from the PNG.
 
 ### Both
 

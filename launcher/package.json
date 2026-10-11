@@ -16,7 +16,8 @@
     "@tauri-apps/api": "~2.11.0",
     "@tauri-apps/plugin-dialog": "~2.7.0",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "skinview3d": "3.4.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

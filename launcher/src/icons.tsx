@@ -13,6 +13,10 @@ const PATHS = {
       <path d="M17.25 13.5v7.5M13.5 17.25H21" />
     </>
   ),
+  // Lucide's "shirt", as the in-game Cosmetics tile uses.
+  wardrobe: (
+    <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" />
+  ),
   news: (
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />

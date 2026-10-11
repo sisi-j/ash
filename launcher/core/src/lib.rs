@@ -38,6 +38,7 @@ mod server_list;
 mod session_server;
 mod sync;
 mod version;
+mod wardrobe;
 
 pub mod credentials;
 pub mod http;
@@ -66,6 +67,7 @@ pub use runtime::Runtime;
 pub use server_list::{Handshake, ServerEntry, ServerStatus};
 pub use sync::{DeletedElsewhere, SyncState, SyncStatus};
 pub use version::Os;
+pub use wardrobe::{Cosmetic, Equipped, Wardrobe};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -163,6 +165,8 @@ pub struct Ash {
     sync_state: Mutex<SyncState>,
     /// Set while a sync runs, so two never overlap.
     syncing: std::sync::atomic::AtomicBool,
+    /// Skin and cosmetic textures the Wardrobe has fetched this run.
+    images: wardrobe::Images,
 }
 
 impl Ash {
@@ -192,6 +196,7 @@ impl Ash {
             ash_status: Mutex::new(HashMap::new()),
             sync_state: Mutex::new(SyncState::Waiting),
             syncing: std::sync::atomic::AtomicBool::new(false),
+            images: wardrobe::Images::default(),
         }
     }
 
@@ -573,6 +578,41 @@ impl Ash {
         } else {
             instance::set_sync(&self.config.instances_root, id, None, true).map(|_| ())
         }
+    }
+
+    // ---- the Wardrobe (spec 0004, step 4) -----------------------------------
+
+    /// The active player's ash session token, if it hasn't ended.
+    fn live_ash_token(&self) -> Option<String> {
+        let uuid = self.accounts().active?;
+        ash_account::stored_session(self.credentials.as_ref(), &uuid)
+            .filter(|s| s.expires_at > now_ms())
+            .map(|s| s.token)
+    }
+
+    /// The catalogue, what the active player wears, and their skin, for the
+    /// Wardrobe. Without an ash session the catalogue still shows, and
+    /// nothing is worn.
+    pub async fn wardrobe(&self) -> Result<Wardrobe, AshError> {
+        let base = &self.config.backend_url;
+        let cosmetics = wardrobe::catalogue(self.http.as_ref(), base, &self.images).await?;
+        let token = self.live_ash_token();
+        let equipped = match &token {
+            Some(token) => wardrobe::equipped(self.http.as_ref(), base, token).await?,
+            None => Equipped::default(),
+        };
+        let skin_url = self.accounts().active_account().and_then(|a| a.skin_url.clone());
+        let skin = wardrobe::skin(self.http.as_ref(), &self.images, skin_url.as_deref()).await;
+        Ok(Wardrobe { signed_in: token.is_some(), cosmetics, equipped, skin })
+    }
+
+    /// Wear `cosmetic_id` in `slot`, or take off what's there with `None`.
+    /// Other ash players see it within a minute or two (ADR-0023).
+    pub async fn equip(&self, slot: &str, cosmetic_id: Option<&str>) -> Result<Wardrobe, AshError> {
+        let token = self.live_ash_token().ok_or(AshError::SessionExpired)?;
+        wardrobe::equip(self.http.as_ref(), &self.config.backend_url, &token, slot, cosmetic_id)
+            .await?;
+        self.wardrobe().await
     }
 
     // ---- news (spec 0004) ------------------------------------------------

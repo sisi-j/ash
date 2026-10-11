@@ -7,6 +7,8 @@ import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
+import com.ashlauncher.client.cosmetics.CapeSource;
+import com.ashlauncher.client.cosmetics.Cosmetics;
 import com.ashlauncher.client.hit.HitColour;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
@@ -95,6 +97,7 @@ public final class AshClient implements ClientModInitializer {
     private static final String FREELOOK_MOUSE_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.MouseHandlerMixin";
 
     private static final String HIT_COLOUR_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.OverlayTextureAccess";
+    private static final String COSMETICS_MIXIN = "com.ashlauncher.client.v1_21_11.mixin.AbstractClientPlayerCapeMixin";
 
     /**
      * The FPS readout this session draws, so the real-game test can ask it -
@@ -240,6 +243,19 @@ public final class AshClient implements ClientModInitializer {
             ClientTickEvents.END_CLIENT_TICK.register(client -> hitColour.tick());
         } else {
             landed.remove(Feature.HIT_COLOUR);
+        }
+
+        // Cosmetics: ash players' capes, drawn by the game's own cape layer
+        // from ash's texture (research 0012). Looked up from ash's CDN in the
+        // background, never on the way to a frame.
+        boolean cosmeticsLanded = MixinFeature.landed(() -> net.minecraft.client.player.AbstractClientPlayer.class,
+                COSMETICS_MIXIN, why -> LOG.warn(MixinFeature.didNotLoad(Feature.COSMETICS.displayName(), why)));
+        if (cosmeticsLanded) {
+            com.ashlauncher.client.v1_21_11.cosmetics.CapeTextures.install(new Cosmetics(CapeSource.forGame(),
+                    () -> settings.get(Settings.COSMETICS), () -> settings.get(Settings.COSMETICS_HIDE_OTHERS),
+                    () -> net.minecraft.client.Minecraft.getInstance().getUser().getProfileId()));
+        } else {
+            landed.remove(Feature.COSMETICS);
         }
 
         // Snaplook: the game's own front view while Z is held, Z being a key

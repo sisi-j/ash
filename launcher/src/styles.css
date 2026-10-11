@@ -1703,6 +1703,78 @@ button {
   gap: 8px;
 }
 
+/* ---- the Wardrobe ---- */
+
+.wardrobe {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.wardrobe-preview {
+  flex-shrink: 0;
+  width: 260px;
+  height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 35%, var(--fill-2), var(--fill));
+}
+
+.wardrobe-choices h3 {
+  margin: 4px 0 4px;
+  font-size: 15px;
+}
+
+.wardrobe-hint {
+  margin: 0 0 14px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.wardrobe-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wardrobe-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 92px;
+  padding: 12px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--fill);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.wardrobe-choice:hover:not(:disabled) {
+  background: var(--fill-2);
+}
+
+.wardrobe-choice.is-selected {
+  border-color: var(--text);
+}
+
+.wardrobe-choice:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.wardrobe-swatch {
+  display: block;
+  border-radius: 3px;
+  background-color: var(--fill-3);
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
 /* ---- the News page ---- */
 
 .nav {
