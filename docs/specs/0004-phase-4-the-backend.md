@@ -241,13 +241,13 @@ The bar is Phase 3's: a test states a fact a player or the product owner would r
 
      Blocks the sign-in tickets.
   2. ~~**Cloudflare's free-plan limits for this shape:**~~ *Answered 2026-10-09 in research 0010:* one to a hundred players fit comfortably, once cosmetics lookups are static files rather than Worker requests. What it covered: D1, Durable Objects with WebSocket hibernation, cron triggers and R2. It also covers Cloudflare Access's signed header for `/admin`, and testing Workers locally. Blocks the backend skeleton's choices.
-  3. **Drawing cosmetics on each target:**
+  3. ~~**Drawing cosmetics on each target:**~~ *Answered 2026-10-10 in `docs/research/0012-drawing-cosmetics-on-both-targets.md`:* a cape is one return value on each target (`getSkin()` on 1.21.11, `getCapeId()` on 1.8.9); worn models are a render layer; the emote hooks get their own pass.
      - where each draws the cape, how to attach models to the head and body, and how to pose the player model for an emote;
      - whether Sodium touches any of it.
 
      It needs a pass through both mapped jars like research 0004's. Blocks the cosmetics tickets.
-  4. **The Blockbench export:** what to take from its format, and the licence position of exported files. Blocks the cosmetics format.
-  5. **The launcher's 3D preview:** a renderer such as skinview3d, its licence, and fetching the player's own skin texture under the launcher's content security policy. Blocks the Wardrobe.
+  4. ~~**The Blockbench export:**~~ *Answered in research 0012:* Blockbench's Bedrock geometry and animation exports, converted at build time to ash's format; assets made with Blockbench are the maker's own. what to take from its format, and the licence position of exported files. Blocks the cosmetics format.
+  5. ~~**The launcher's 3D preview:**~~ *Answered in research 0012:* skinview3d (MIT), with the skin passed as a `data:` URL from ash-core. a renderer such as skinview3d, its licence, and fetching the player's own skin texture under the launcher's content security policy. Blocks the Wardrobe.
   6. ~~**What an instance definition holds today,** and whether instance ids can collide between machines. Blocks instance sync.~~ *Answered 2026-10-10 in `docs/research/0011-what-synced-settings-carry.md`:* ids do collide, so synced instances carry a sync id. `panel.size` stays machine-local (ADR-0022, amended).
 - **Order**, as the product owner chose:
   1. the foundation: accounts, the handshake and deletion;
