@@ -14,7 +14,7 @@ use ash_core::{
     Account, Accounts, Ash, AshAccountStatus, Cancel, Catalogue, Config, DegradationNotice,
     DeletionPreview, GameStatus, Instance, InstanceGlance, InstanceId, InvocationView,
     LauncherPreferences, Loader, MachineDefaults, MachineOverrides, News, PendingSignIn, Plan,
-    PrepareEvent, ProgressSink, Runtime, ServerEntry, ServerStatus, SignInStatus,
+    PrepareEvent, ProgressSink, Runtime, ServerEntry, ServerStatus, SignInStatus, SyncStatus,
 };
 use tauri::{Emitter, Manager};
 
@@ -123,8 +123,66 @@ struct AshAccountEvent {
 fn spawn_ash_sign_in(app: tauri::AppHandle, ash: Arc<Ash>, profile_id: String) {
     tauri::async_runtime::spawn(async move {
         let status = ash.sign_in_to_ash(&profile_id).await;
+        let signed_in = status == AshAccountStatus::SignedIn;
         let _ = app.emit("ash-account", AshAccountEvent { profile_id, status });
+        // Signed in to ash just now: sync straight away rather than at the
+        // next turn of the loop.
+        if signed_in {
+            sync_and_tell(&app, &ash).await;
+        }
     });
+}
+
+// ---- synced settings (spec 0004, ADR-0022) ----
+
+/// How often the launcher syncs while it is open. A change in game reaches
+/// the account within this of the game closing.
+const SYNC_EVERY: std::time::Duration = std::time::Duration::from_secs(120);
+
+async fn sync_and_tell(app: &tauri::AppHandle, ash: &Ash) {
+    let status = ash.sync_settings().await;
+    let _ = app.emit("sync", status);
+}
+
+/// Sync at startup and then every so often, in the background. Nothing on
+/// the way to a launch ever waits on it.
+fn spawn_sync_loop(app: tauri::AppHandle, ash: Arc<Ash>) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            sync_and_tell(&app, &ash).await;
+            tokio::time::sleep(SYNC_EVERY).await;
+        }
+    });
+}
+
+#[tauri::command]
+fn sync_status(state: tauri::State<'_, AppState>) -> SyncStatus {
+    state.ash.sync_status()
+}
+
+#[tauri::command]
+async fn set_sync_enabled(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    enabled: bool,
+) -> Result<SyncStatus, UiError> {
+    let status = state.ash.set_sync_enabled(enabled).map_err(UiError::from)?;
+    if enabled {
+        let (app, ash) = (app.clone(), Arc::clone(&state.ash));
+        tauri::async_runtime::spawn(async move { sync_and_tell(&app, &ash).await });
+    }
+    Ok(status)
+}
+
+/// The player's answer about an instance deleted on another computer.
+#[tauri::command]
+async fn resolve_deleted_elsewhere(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    delete_here: bool,
+) -> Result<SyncStatus, UiError> {
+    state.ash.resolve_deleted_elsewhere(&id, delete_here).map_err(UiError::from)?;
+    Ok(state.ash.sync_status())
 }
 
 #[tauri::command]
@@ -807,6 +865,7 @@ pub fn run() {
                     spawn_ash_sign_in(app.handle().clone(), Arc::clone(&ash), account.profile_id);
                 }
             }
+            spawn_sync_loop(app.handle().clone(), Arc::clone(&ash));
             app.manage(AppState { ash, preparing: Mutex::new(HashMap::new()) });
             Ok(())
         })
@@ -826,6 +885,9 @@ pub fn run() {
             open_privacy_statement,
             news,
             mark_news_seen,
+            sync_status,
+            set_sync_enabled,
+            resolve_deleted_elsewhere,
             open_news_link,
             create_instance,
             loaders_for,

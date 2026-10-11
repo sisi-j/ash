@@ -140,6 +140,8 @@ const INSTANCES: Instance[] = [
     last_played_ms: now - 2 * HOUR,
     played_ms: 14 * HOUR + 20 * MINUTE,
     last_session: { started_ms: now - 2 * HOUR - 48 * MINUTE, ended_ms: now - 2 * HOUR },
+    sync_id: null,
+    local_only: false,
   },
   {
     id: "b",
@@ -150,6 +152,8 @@ const INSTANCES: Instance[] = [
     last_played_ms: now - 26 * HOUR,
     played_ms: 62 * HOUR + 5 * MINUTE,
     last_session: { started_ms: now - 26 * HOUR - 72 * MINUTE, ended_ms: now - 26 * HOUR },
+    sync_id: null,
+    local_only: false,
   },
   {
     id: "c",
@@ -160,10 +164,22 @@ const INSTANCES: Instance[] = [
     last_played_ms: null,
     played_ms: 0,
     last_session: null,
+    sync_id: null,
+    local_only: false,
   },
 ];
 
 const signedIn = state !== "signed-out";
+const syncStatus: real.SyncStatus = {
+  enabled: state !== "sync-off",
+  state:
+    state === "sync-off"
+      ? { state: "off" }
+      : state === "sync-unreachable"
+        ? { state: "unreachable" }
+        : { state: "synced", at_ms: now - 2 * MINUTE },
+  deleted_elsewhere: state === "sync-deleted-elsewhere" ? [{ instance_id: "b", name: "1.8.9 PvP" }] : [],
+};
 const ashStatus: AshAccountStatus =
   state === "ash-unreachable"
     ? { state: "unreachable" }
@@ -372,6 +388,9 @@ export const api: typeof real.api = {
       ? resolve({ posts: NEWS, unread: false, offline: true })
       : resolve({ posts: state === "news-empty" ? [] : NEWS, unread: state === "news-dot", offline: false }),
   markNewsSeen: nothing,
+  syncStatus: () => resolve(syncStatus),
+  setSyncEnabled: (enabled) => resolve({ ...syncStatus, enabled, state: enabled ? { state: "waiting" } : { state: "off" } }),
+  resolveDeletedElsewhere: () => resolve({ ...syncStatus, deleted_elsewhere: [] }),
   openNewsLink: async (url) => {
     (window as unknown as { openedLink?: string }).openedLink = url;
   },
@@ -479,6 +498,7 @@ export const onPrepareProgress: typeof real.onPrepareProgress = (handler) => sub
 export const onPrepareFinished: typeof real.onPrepareFinished = (handler) => subscribe(prepared, handler);
 export const onLaunchFinished: typeof real.onLaunchFinished = (handler) => subscribe(launched, handler);
 export const onAshAccount: typeof real.onAshAccount = (handler) => subscribe(ashAccount, handler);
+export const onSync: typeof real.onSync = () => Promise.resolve(() => undefined);
 
 /** What the launcher did to its own window, for the check to read back. */
 function windowDid(what: "minimise" | "close") {

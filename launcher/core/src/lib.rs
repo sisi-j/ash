@@ -15,6 +15,7 @@ mod account;
 mod ash_account;
 mod auth;
 mod catalogue;
+mod client_settings;
 mod config;
 mod depot;
 mod diagnostics;
@@ -35,6 +36,7 @@ mod recent_servers;
 mod runtime;
 mod server_list;
 mod session_server;
+mod sync;
 mod version;
 
 pub mod credentials;
@@ -62,6 +64,7 @@ pub use preferences::{LauncherPreferences, OnGameStart};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;
 pub use server_list::{Handshake, ServerEntry, ServerStatus};
+pub use sync::{DeletedElsewhere, SyncState, SyncStatus};
 pub use version::Os;
 
 use std::collections::HashMap;
@@ -156,6 +159,10 @@ pub struct Ash {
     /// How each account's last ash sign-in went, this run. An account with
     /// no attempt yet is judged by the session it has stored.
     ash_status: Mutex<HashMap<String, AshAccountStatus>>,
+    /// How the last sync this run went.
+    sync_state: Mutex<SyncState>,
+    /// Set while a sync runs, so two never overlap.
+    syncing: std::sync::atomic::AtomicBool,
 }
 
 impl Ash {
@@ -183,6 +190,8 @@ impl Ash {
             reports_logged: Mutex::new(HashMap::new()),
             statuses: Mutex::new(HashMap::new()),
             ash_status: Mutex::new(HashMap::new()),
+            sync_state: Mutex::new(SyncState::Waiting),
+            syncing: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -449,6 +458,8 @@ impl Ash {
             }
         };
         ash_account::delete(self.http.as_ref(), base, &token).await?;
+        // The account and its settings are gone; a new one starts afresh.
+        sync::forget(&self.config.data_root, profile_id);
         self.credentials.delete(&ash_account::session_key(profile_id))?;
         self.ash_status
             .lock()
@@ -462,6 +473,106 @@ impl Ash {
             .accounts
             .iter()
             .any(|a| a.profile_id == profile_id && a.ash_account_deleted)
+    }
+
+    // ---- synced settings (spec 0004, ADR-0022, research 0011) -------------
+
+    /// Sync the active account's settings: send what changed here, apply
+    /// what changed elsewhere, only while each instance's game is closed.
+    ///
+    /// Never an error, and never on the way to a launch: the adapter runs it
+    /// in the background at startup, every few minutes, and after a game
+    /// exits. A sync already running makes this one a no-op.
+    pub async fn sync_settings(&self) -> SyncStatus {
+        use std::sync::atomic::Ordering;
+        if self.syncing.swap(true, Ordering::SeqCst) {
+            return self.sync_status();
+        }
+        let state = self.sync_once().await;
+        *self.sync_state.lock().expect("sync state") = state;
+        self.syncing.store(false, Ordering::SeqCst);
+        self.sync_status()
+    }
+
+    async fn sync_once(&self) -> SyncState {
+        if !sync::enabled(&self.config.data_root) {
+            return SyncState::Off;
+        }
+        let Some(uuid) = self.accounts().active.clone() else { return SyncState::NotSignedIn };
+        if self.ash_account_deleted(&uuid) {
+            return SyncState::NotSignedIn;
+        }
+        let Some(session) = ash_account::stored_session(self.credentials.as_ref(), &uuid)
+            .filter(|s| s.expires_at > now_ms())
+        else {
+            return SyncState::NotSignedIn;
+        };
+        let running = |id: &InstanceId| matches!(self.game_status(id), Some(GameStatus::Running));
+        let ctx = sync::Context {
+            http: self.http.as_ref(),
+            base: &self.config.backend_url,
+            token: &session.token,
+            uuid: &uuid,
+            data_root: &self.config.data_root,
+            instances_root: &self.config.instances_root,
+            running: &running,
+            now: now_ms(),
+        };
+        match sync::run(&ctx).await {
+            Ok(Some(at_ms)) => SyncState::Synced { at_ms },
+            Ok(None) => SyncState::NotSignedIn,
+            Err(e) => {
+                self.diagnostics.warn("sync", e.kind());
+                SyncState::Unreachable
+            }
+        }
+    }
+
+    /// Whether sync is on here, how the last one went, and any instance
+    /// another computer deleted that is still here.
+    pub fn sync_status(&self) -> SyncStatus {
+        let enabled = sync::enabled(&self.config.data_root);
+        let state = if enabled {
+            self.sync_state.lock().expect("sync state").clone()
+        } else {
+            SyncState::Off
+        };
+        let deleted_elsewhere = match self.accounts().active {
+            Some(uuid) if enabled => {
+                sync::deleted_elsewhere(&self.config.data_root, &self.config.instances_root, &uuid)
+            }
+            _ => Vec::new(),
+        };
+        SyncStatus { enabled, state, deleted_elsewhere }
+    }
+
+    /// Turn sync on or off on this machine. Off keeps everything here as it
+    /// is, and stops sending and receiving.
+    pub fn set_sync_enabled(&self, enabled: bool) -> Result<SyncStatus, AshError> {
+        sync::set_enabled(&self.config.data_root, enabled)?;
+        if !enabled {
+            *self.sync_state.lock().expect("sync state") = SyncState::Off;
+        } else if matches!(*self.sync_state.lock().expect("sync state"), SyncState::Off) {
+            *self.sync_state.lock().expect("sync state") = SyncState::Waiting;
+        }
+        Ok(self.sync_status())
+    }
+
+    /// An instance another computer deleted: delete it here too, worlds and
+    /// all, or keep it as this machine's alone.
+    pub fn resolve_deleted_elsewhere(
+        &self,
+        id: &InstanceId,
+        delete_here: bool,
+    ) -> Result<(), AshError> {
+        if delete_here {
+            if matches!(self.game_status(id), Some(GameStatus::Running)) {
+                return Err(AshError::AlreadyRunning { id: id.to_string() });
+            }
+            self.delete_instance(id)
+        } else {
+            instance::set_sync(&self.config.instances_root, id, None, true).map(|_| ())
+        }
     }
 
     // ---- news (spec 0004) ------------------------------------------------
@@ -510,7 +621,20 @@ impl Ash {
         if !loader::is_supported(self.config.loaders, loader, version_id) {
             return Err(AshError::LoaderUnavailable { loader, version_id: version_id.to_owned() });
         }
-        instance::create(&self.config.instances_root, name, version_id, loader)
+        let created = instance::create(&self.config.instances_root, name, version_id, loader)?;
+        // Start a new modded instance with the account's settings, not the
+        // client's defaults, so its first game shows the player's own crosshair.
+        if loader != Loader::Vanilla && sync::enabled(&self.config.data_root) {
+            if let Some(uuid) = self.accounts().active {
+                let values = sync::agreed_features(&self.config.data_root, &uuid);
+                if !values.is_empty() {
+                    let game = instance::game_dir(&self.config.instances_root, &created.id);
+                    // A failure here costs only the head start; sync catches up.
+                    let _ = client_settings::set_values(&game, &values);
+                }
+            }
+        }
+        Ok(created)
     }
 
     /// The loaders a version target can run, for a UI that has to offer them.

@@ -82,6 +82,10 @@ export type Instance = {
   /** Finished sessions added together. `instanceGlance` adds a running one. */
   played_ms: number;
   last_session: Session | null;
+  /** Which instance this is on every computer the player syncs; null if it isn't synced. */
+  sync_id: string | null;
+  /** Deleted on another computer and kept here as this computer's alone. */
+  local_only: boolean;
 };
 
 /** One run of the game, from ash starting it to its exit. */
@@ -296,6 +300,19 @@ export type NewsPost = {
 
 export type News = { posts: NewsPost[]; unread: boolean; offline: boolean };
 
+/** Mirrors `ash_core::SyncState`. */
+export type SyncState =
+  | { state: "off" }
+  | { state: "not_signed_in" }
+  | { state: "waiting" }
+  | { state: "synced"; at_ms: number }
+  | { state: "unreachable" };
+
+export type DeletedElsewhere = { instance_id: InstanceId; name: string };
+
+/** Mirrors `ash_core::SyncStatus`. */
+export type SyncStatus = { enabled: boolean; state: SyncState; deleted_elsewhere: DeletedElsewhere[] };
+
 export type Accounts = {
   accounts: Account[];
   active: string | null;
@@ -350,6 +367,10 @@ export const api = {
     invoke<Accounts>("dismiss_ash_account_notice", { profileId }),
   openPrivacyStatement: () => invoke<void>("open_privacy_statement"),
   news: () => invoke<News>("news"),
+  syncStatus: () => invoke<SyncStatus>("sync_status"),
+  setSyncEnabled: (enabled: boolean) => invoke<SyncStatus>("set_sync_enabled", { enabled }),
+  resolveDeletedElsewhere: (id: InstanceId, deleteHere: boolean) =>
+    invoke<SyncStatus>("resolve_deleted_elsewhere", { id, deleteHere }),
   markNewsSeen: () => invoke<void>("mark_news_seen"),
   openNewsLink: (url: string) => invoke<void>("open_news_link", { url }),
 
@@ -471,6 +492,11 @@ export function onPrepareFinished(handler: (outcome: PrepareOutcome) => void) {
  * Launching prepares whatever is missing first, so it reports progress on
  * the same `prepare-progress` channel and finishes on this one.
  */
+/** A background sync finished; instances, preferences and server lists may have changed. */
+export function onSync(handler: (status: SyncStatus) => void) {
+  return listen<SyncStatus>("sync", (e) => handler(e.payload));
+}
+
 /** An ash sign-in in the background finished, however it went. */
 export function onAshAccount(handler: (event: AshAccountEvent) => void) {
   return listen<AshAccountEvent>("ash-account", (e) => handler(e.payload));

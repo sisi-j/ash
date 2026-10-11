@@ -14,9 +14,6 @@ use serde::Serialize;
 use crate::load_report;
 use crate::loader::LoaderPin;
 
-/// Where the client keeps its settings, relative to the game directory.
-const CLIENT_SETTINGS: &str = "config/ash.properties";
-
 /// The most of a mod's `fabric.mod.json` read for its name. Real ones are a
 /// few kilobytes; this stops a jar that claims otherwise being inflated whole.
 const MOD_JSON_LIMIT: u64 = 64 * 1024;
@@ -69,37 +66,13 @@ pub(crate) fn features(game_directory: &Path) -> AshFeatures {
 
 /// Each `<id>.enabled` value in the client's settings, by feature id.
 fn switches(game_directory: &Path) -> Option<HashMap<String, String>> {
-    let raw = fs::read_to_string(game_directory.join(CLIENT_SETTINGS)).ok()?;
+    let raw = crate::client_settings::read_text(game_directory)?;
     Some(
-        properties(&raw)
+        crate::client_settings::properties(&raw)
             .into_iter()
             .filter_map(|(key, value)| Some((key.strip_suffix(".enabled")?.to_owned(), value)))
             .collect(),
     )
-}
-
-/// The keys and values of a Java properties file, as far as ash's own
-/// settings need: comments, `=`, `:` or whitespace between a key and its
-/// value, and continued lines skipped rather than misread as keys. The keys
-/// ash reads have no escapes in them, so escapes are left as they are.
-fn properties(raw: &str) -> Vec<(String, String)> {
-    let mut pairs = Vec::new();
-    let mut continued = false;
-    for line in raw.lines() {
-        let line = line.trim_start();
-        let was_continued = continued;
-        // A line ending in an odd number of backslashes runs on to the next.
-        continued = line.chars().rev().take_while(|&c| c == '\\').count() % 2 == 1;
-        if was_continued || line.is_empty() || line.starts_with('#') || line.starts_with('!') {
-            continue;
-        }
-        let end = line.find(|c: char| c == '=' || c == ':' || c.is_whitespace());
-        let (key, rest) = line.split_at(end.unwrap_or(line.len()));
-        let rest = rest.trim_start();
-        let value = rest.strip_prefix(['=', ':']).unwrap_or(rest).trim();
-        pairs.push((key.to_owned(), value.to_owned()));
-    }
-    pairs
 }
 
 /// The player's mods that load: those in the mods folder, leaving out any
@@ -155,7 +128,7 @@ fn mod_name(jar: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::client_settings::properties;
 
     #[test]
     fn properties_read_the_way_java_reads_them() {

@@ -10,6 +10,7 @@ use crate::error::AshError;
 pub enum Method {
     Get,
     Post,
+    Put,
     Delete,
 }
 
@@ -28,6 +29,10 @@ impl HttpRequest {
 
     pub fn delete(url: impl Into<String>) -> Self {
         Self { method: Method::Delete, url: url.into(), headers: Vec::new(), body: None }
+    }
+
+    pub fn put_json(url: impl Into<String>, body: &impl Serialize) -> Result<Self, AshError> {
+        Ok(Self { method: Method::Put, ..Self::post_json(url, body)? })
     }
 
     pub fn post_json(url: impl Into<String>, body: &impl Serialize) -> Result<Self, AshError> {
@@ -163,6 +168,7 @@ impl HttpPort for ReqwestHttp {
         let mut builder = match request.method {
             Method::Get => self.client.get(&request.url),
             Method::Post => self.client.post(&request.url),
+            Method::Put => self.client.put(&request.url),
             Method::Delete => self.client.delete(&request.url),
         };
         for (name, value) in &request.headers {

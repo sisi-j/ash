@@ -248,7 +248,7 @@ The bar is Phase 3's: a test states a fact a player or the product owner would r
      It needs a pass through both mapped jars like research 0004's. Blocks the cosmetics tickets.
   4. **The Blockbench export:** what to take from its format, and the licence position of exported files. Blocks the cosmetics format.
   5. **The launcher's 3D preview:** a renderer such as skinview3d, its licence, and fetching the player's own skin texture under the launcher's content security policy. Blocks the Wardrobe.
-  6. **What an instance definition holds today,** and whether instance ids can collide between machines. Blocks instance sync.
+  6. ~~**What an instance definition holds today,** and whether instance ids can collide between machines. Blocks instance sync.~~ *Answered 2026-10-10 in `docs/research/0011-what-synced-settings-carry.md`:* ids do collide, so synced instances carry a sync id. `panel.size` stays machine-local (ADR-0022, amended).
 - **Order**, as the product owner chose:
   1. the foundation: accounts, the handshake and deletion;
   2. news;
