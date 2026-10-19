@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { describeBytes, describeKind, type Instance } from "./api";
 import { Icon } from "./icons";
-import type { Launch, Progress } from "./launch";
+import { canStart, type Launch, type Progress } from "./launch";
 import { PixelScene } from "./PixelScene";
 import { playLaunchSound } from "./sound";
 
@@ -54,7 +54,7 @@ export function LaunchArea(props: { instance: Instance; launch: Launch; sounds: 
   }, [phase.at, sounds]);
 
   const press = (e: MouseEvent<HTMLButtonElement>) => {
-    if (phase.at !== "idle") return;
+    if (!canStart(phase)) return;
     const box = e.currentTarget.getBoundingClientRect();
     const ripple = { id: nextRipple.current++, x: e.clientX - box.left, y: e.clientY - box.top };
     setRipples((all) => [...all, ripple]);
@@ -103,7 +103,7 @@ export function LaunchArea(props: { instance: Instance; launch: Launch; sounds: 
         <button
           className={`launch-button${running ? " is-playing" : ""}${phase.at === "unchecked" ? " is-unavailable" : ""}`}
           onClick={press}
-          aria-disabled={phase.at !== "idle"}
+          aria-disabled={!canStart(phase)}
           aria-live="polite"
         >
           <span className="launch-fill" style={{ width: `${fill}%` }} aria-hidden="true" />
