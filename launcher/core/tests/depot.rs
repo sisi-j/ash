@@ -398,6 +398,85 @@ async fn cancelling_before_any_download_stops_immediately() {
     assert_eq!(f.http.hits(CLIENT_URL), 0, "nothing was downloaded after cancelling");
 }
 
+// ---- checking a prepared instance is quick ---------------------------------
+
+/// Where the depot keeps one of this fixture's assets.
+fn asset_file(f: &Fixture, bytes: &[u8]) -> std::path::PathBuf {
+    let hash = sha1(bytes);
+    f.tmp.path().join("depot").join(format!("assets/objects/{}/{}", &hash[..2], hash))
+}
+
+#[tokio::test]
+async fn a_prepared_instance_is_checked_without_asking_the_network_for_anything() {
+    let f = fixture();
+    prepared(&f).await;
+    let instance = f.ash.instances().unwrap().remove(0);
+    let (version_hits, index_hits) = (f.http.hits(VERSION_URL), f.http.hits(ASSET_INDEX_URL));
+
+    let plan = f.ash.plan_instance(&instance.id).await.unwrap();
+
+    assert_eq!(plan.missing_files, 0);
+    assert_eq!(
+        f.http.hits(VERSION_URL),
+        version_hits,
+        "the version metadata, from its verified copy"
+    );
+    assert_eq!(f.http.hits(ASSET_INDEX_URL), index_hits, "the asset index, from its verified copy");
+}
+
+#[tokio::test]
+async fn a_verified_file_is_trusted_until_it_changes_on_disk() {
+    let f = fixture();
+    prepared(&f).await;
+    let instance = f.ash.instances().unwrap().remove(0);
+    let file = asset_file(&f, ASSET_A);
+    let modified = std::fs::metadata(&file).unwrap().modified().unwrap();
+
+    // Same size and the same modification time: trusted without reading it.
+    // This is what makes a check of thousands of files quick.
+    std::fs::write(&file, b"asset 1!!").unwrap();
+    std::fs::File::options().write(true).open(&file).unwrap().set_modified(modified).unwrap();
+    assert_eq!(f.ash.plan_instance(&instance.id).await.unwrap().missing_files, 0);
+
+    // Anything that writes it gives it a new modification time, and then it
+    // is hashed again and found out.
+    std::fs::File::options()
+        .write(true)
+        .open(&file)
+        .unwrap()
+        .set_modified(modified + std::time::Duration::from_secs(5))
+        .unwrap();
+    let plan = f.ash.plan_instance(&instance.id).await.unwrap();
+    assert_eq!(plan.missing_files, 1, "the changed asset is downloaded again");
+}
+
+#[tokio::test]
+async fn a_missing_or_resized_file_is_missing_whatever_was_recorded() {
+    let f = fixture();
+    prepared(&f).await;
+    let instance = f.ash.instances().unwrap().remove(0);
+
+    std::fs::remove_file(asset_file(&f, ASSET_A)).unwrap();
+    std::fs::write(asset_file(&f, ASSET_B), b"different length").unwrap();
+
+    assert_eq!(f.ash.plan_instance(&instance.id).await.unwrap().missing_files, 2);
+}
+
+#[tokio::test]
+async fn forgetting_what_was_verified_makes_the_next_check_hash_everything() {
+    let f = fixture();
+    prepared(&f).await;
+    let instance = f.ash.instances().unwrap().remove(0);
+    let file = asset_file(&f, ASSET_A);
+    let modified = std::fs::metadata(&file).unwrap().modified().unwrap();
+    std::fs::write(&file, b"asset 1!!").unwrap();
+    std::fs::File::options().write(true).open(&file).unwrap().set_modified(modified).unwrap();
+
+    std::fs::remove_file(f.tmp.path().join("depot/verified.json")).unwrap();
+
+    assert_eq!(f.ash.plan_instance(&instance.id).await.unwrap().missing_files, 1);
+}
+
 #[tokio::test]
 async fn planning_does_not_download_anything() {
     let f = fixture();

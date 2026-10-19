@@ -103,6 +103,21 @@ export type Launch = {
  * Held once, by the app, for the selected instance, so the LAUNCH area and
  * the instance's own page show the same launch rather than two copies of it.
  */
+/**
+ * Whether LAUNCH GAME takes a click: not only once the files are checked,
+ * but while they are being checked and after a check that failed. A launch
+ * checks them itself, so there is nothing to wait for - and a button that
+ * ignores the first click is the slowest thing a launcher can do.
+ */
+/** A phase a finished check may replace: nothing is under way in it. */
+function settled(phase: Phase): boolean {
+  return phase.at !== "working" && phase.at !== "running";
+}
+
+export function canStart(phase: Phase): boolean {
+  return phase.at === "idle" || phase.at === "checking" || phase.at === "unchecked";
+}
+
 export function useLaunch(id: InstanceId | null): Launch {
   const [phase, setPhase] = useState<Phase>({ at: "checking" });
   const [command, setCommand] = useState<InvocationView | null>(null);
@@ -119,9 +134,12 @@ export function useLaunch(id: InstanceId | null): Launch {
         setPhase({ at: "running" });
         return;
       }
-      setPhase({ at: "idle", plan: await api.planInstance(id) });
+      const plan = await api.planInstance(id);
+      // Only if nothing has started meanwhile: a click during the check began
+      // a launch, and the check finishing must not put LAUNCH GAME back.
+      setPhase((current) => (settled(current) ? { at: "idle", plan } : current));
     } catch (e) {
-      setPhase({ at: "unchecked", error: e as UiError });
+      setPhase((current) => (settled(current) ? { at: "unchecked", error: e as UiError } : current));
     }
   }, [id]);
 

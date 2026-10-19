@@ -334,6 +334,17 @@ const STATES: State[] = [
     },
   },
   { name: "settings", shows: "When the game starts", reach: openPage("Settings") },
+  {
+    // LAUNCH GAME takes the first click, even while the files are still being
+    // checked - and the check finishing afterwards doesn't undo the launch.
+    name: "launch-during-check",
+    shows: "DOWNLOADING",
+    reach: (page) => page.locator(".launch-button").click(),
+    verify: async (page) => {
+      await page.waitForTimeout(3000);
+      return (await page.getByText("LAUNCH GAME").count()) === 0 ? null : "the check finishing put LAUNCH GAME back mid-launch";
+    },
+  },
   { name: "sync-on", shows: "On. Synced 2 minutes ago.", reach: openPage("Settings") },
   {
     name: "sync-off",

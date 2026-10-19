@@ -409,13 +409,13 @@ export const api: typeof real.api = {
   planInstance: (id) =>
     state === "unchecked"
       ? Promise.reject({ kind: "offline", message: "ash could not reach Mojang to check this instance.", retryable: true })
-      : resolve({
+      : (state === "launch-during-check" ? new Promise((r) => window.setTimeout(r, 2500)) : resolve(null)).then(() => ({
       version_id: id,
       java_component: null,
       total_files: 4300,
       missing_files: downloads ? 1243 : 0,
       missing_bytes: downloads ? 412_000_000 : 0,
-        }),
+        })),
   prepareInstance: async () => launch(),
   ensureRuntime: () => resolve({ component: "java-runtime-delta", version_name: "21", java_executable: "java" }),
   cancelPreparation: nothing,

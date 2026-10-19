@@ -29,8 +29,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
+use std::collections::HashMap;
+use std::time::UNIX_EPOCH;
+
 use futures::stream::{self, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 
 use crate::error::AshError;
@@ -203,21 +206,107 @@ fn sha1_of(bytes: &[u8]) -> String {
     hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Already in the depot and intact?
+/// Where the depot remembers which files it has already verified.
+const VERIFIED_FILE: &str = "verified.json";
+
+/// One file as it was when its hash was last checked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Seen {
+    sha1: String,
+    size: u64,
+    modified_ns: u64,
+}
+
+/// Which depot files are already in and intact.
 ///
-/// Size is checked first because it is free; the hash is only computed when
-/// the size matches, which keeps a re-plan over thousands of assets cheap.
-fn is_present(depot_root: &Path, artifact: &Artifact) -> bool {
-    let path = depot_root.join(&artifact.path);
-    let Ok(metadata) = fs::metadata(&path) else {
-        return false;
-    };
-    if metadata.len() != artifact.size {
-        return false;
+/// A file's hash is checked once. After that it is trusted for as long as
+/// its size and modification time are what they were when it was checked,
+/// so a check over thousands of files costs a directory listing rather than
+/// reading and hashing a gigabyte. Anything that writes a file - a download,
+/// an antivirus restoring it, a player copying over it - changes its
+/// modification time, and the next check hashes it again. Deleting
+/// `verified.json` makes the next check hash everything.
+pub(crate) struct Presence {
+    depot_root: PathBuf,
+    seen: HashMap<String, Seen>,
+    changed: bool,
+}
+
+impl Presence {
+    pub(crate) fn load(depot_root: &Path) -> Self {
+        let seen = fs::read(depot_root.join(VERIFIED_FILE))
+            .ok()
+            .and_then(|raw| serde_json::from_slice(&raw).ok())
+            .unwrap_or_default();
+        Self { depot_root: depot_root.to_path_buf(), seen, changed: false }
     }
-    match fs::read(&path) {
-        Ok(bytes) => sha1_of(&bytes) == artifact.sha1,
-        Err(_) => false,
+
+    /// Already in the depot and intact?
+    ///
+    /// Size first, because it is free; then the record of the last check;
+    /// only then the hash, recorded when it matches.
+    pub(crate) fn has(&mut self, artifact: &Artifact) -> bool {
+        let path = self.depot_root.join(&artifact.path);
+        let Ok(metadata) = fs::metadata(&path) else {
+            return self.forget(&artifact.path);
+        };
+        if metadata.len() != artifact.size {
+            return self.forget(&artifact.path);
+        }
+        let modified_ns = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        let now = Seen { sha1: artifact.sha1.clone(), size: artifact.size, modified_ns };
+        if modified_ns != 0 && self.seen.get(&artifact.path) == Some(&now) {
+            return true;
+        }
+        match fs::read(&path) {
+            Ok(bytes) if sha1_of(&bytes) == artifact.sha1 => {
+                if modified_ns != 0 {
+                    self.seen.insert(artifact.path.clone(), now);
+                    self.changed = true;
+                }
+                true
+            }
+            _ => self.forget(&artifact.path),
+        }
+    }
+
+    /// A file this run has just written and verified itself.
+    pub(crate) fn record(&mut self, artifact: &Artifact) {
+        let Ok(metadata) = fs::metadata(self.depot_root.join(&artifact.path)) else { return };
+        let modified_ns = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        if modified_ns != 0 && metadata.len() == artifact.size {
+            let seen = Seen { sha1: artifact.sha1.clone(), size: artifact.size, modified_ns };
+            self.seen.insert(artifact.path.clone(), seen);
+            self.changed = true;
+        }
+    }
+
+    fn forget(&mut self, path: &str) -> bool {
+        if self.seen.remove(path).is_some() {
+            self.changed = true;
+        }
+        false
+    }
+
+    /// Keep what this check learned. Losing it costs only the next check's
+    /// time, so a failure to write is not an error.
+    pub(crate) fn save(self) {
+        if !self.changed {
+            return;
+        }
+        if let Ok(encoded) = serde_json::to_vec(&self.seen) {
+            let _ = write_atomically(&self.depot_root, VERIFIED_FILE, &encoded);
+        }
     }
 }
 
@@ -510,9 +599,15 @@ pub(crate) async fn plan(
     }
 
     if let Some(index) = &metadata.asset_index {
-        let index_bytes =
-            fetch_metadata(http, &index.url, Some(&index.sha1), Some(index.size)).await?;
-        write_atomically(depot_root, &asset_index_path(&index.id), &index_bytes)?;
+        let index_bytes = cached_or_fetched(
+            http,
+            depot_root,
+            &asset_index_path(&index.id),
+            &index.url,
+            Some(&index.sha1),
+            Some(index.size),
+        )
+        .await?;
 
         let parsed = version::parse_asset_index(&index.url, &index_bytes)?;
         for object in parsed.objects.values() {
@@ -532,8 +627,9 @@ pub(crate) async fn plan(
     artifacts.dedup_by(|a, b| a.path == b.path);
 
     let total_files = artifacts.len();
-    let missing: Vec<Artifact> =
-        artifacts.into_iter().filter(|a| !is_present(depot_root, a)).collect();
+    let mut presence = Presence::load(depot_root);
+    let missing: Vec<Artifact> = artifacts.into_iter().filter(|a| !presence.has(a)).collect();
+    presence.save();
 
     Ok(Plan {
         // The merged id, so that reading this back gets the document the
@@ -634,6 +730,16 @@ async fn cached_or_fetched(
     sha1: Option<&str>,
     size: Option<u64>,
 ) -> Result<Vec<u8>, AshError> {
+    // A document with a published hash never changes at its address, so a
+    // cached copy that matches the hash is the document: no need to ask the
+    // network for it again on every check.
+    if let Some(sha1) = sha1.filter(|s| !s.is_empty()) {
+        if let Ok(cached) = fs::read(depot_root.join(relative)) {
+            if sha1_of(&cached) == sha1 && size.is_none_or(|n| n == cached.len() as u64) {
+                return Ok(cached);
+            }
+        }
+    }
     match fetch_metadata(http, url, sha1, size).await {
         Ok(bytes) => {
             write_atomically(depot_root, relative, &bytes)?;
@@ -681,7 +787,7 @@ pub(crate) async fn download_all<S: ProgressSink + ?Sized>(
     // argument pins it to one lifetime, and `buffer_unordered` needs the
     // closure to be higher-ranked over any of them. An Artifact is three
     // strings, so this costs nothing worth the contortion of avoiding it.
-    let results: Vec<Result<(), AshError>> = stream::iter(artifacts.iter().cloned())
+    let results: Vec<Result<Artifact, AshError>> = stream::iter(artifacts.iter().cloned())
         .map(|artifact| {
             let done_files = &done_files;
             let done_bytes = &done_bytes;
@@ -694,23 +800,32 @@ pub(crate) async fn download_all<S: ProgressSink + ?Sized>(
                 let files = done_files.fetch_add(1, Ordering::SeqCst) + 1;
                 let bytes = done_bytes.fetch_add(artifact.size, Ordering::SeqCst) + artifact.size;
                 sink.emit(PrepareEvent::Downloaded {
-                    path: artifact.path,
+                    path: artifact.path.clone(),
                     bytes: artifact.size,
                     done_files: files as usize,
                     done_bytes: bytes,
                 });
-                Ok(())
+                Ok(artifact)
             }
         })
         .buffer_unordered(CONCURRENCY)
         .collect()
         .await;
 
+    // Every file that arrived was hashed on the way in: record those, so the
+    // first check after a download doesn't hash them all over again. Each
+    // result carries its own artifact, since they finish in any order.
+    let mut presence = Presence::load(depot_root);
+    for artifact in results.iter().flatten() {
+        presence.record(artifact);
+    }
+    presence.save();
+
     // Report the first real failure. Cancellation is not a failure of the
     // download, so it is reported as itself.
     for result in results {
         match result {
-            Ok(()) => {}
+            Ok(_) => {}
             Err(AshError::Cancelled) => {
                 sink.emit(PrepareEvent::Cancelled);
                 return Err(AshError::Cancelled);
@@ -719,12 +834,6 @@ pub(crate) async fn download_all<S: ProgressSink + ?Sized>(
         }
     }
     Ok(())
-}
-
-/// Already in the depot and intact? Public within the crate so runtime
-/// provisioning can skip work the same way preparation does.
-pub(crate) fn present(depot_root: &Path, artifact: &Artifact) -> bool {
-    is_present(depot_root, artifact)
 }
 
 /// Read a version's metadata back out of the depot.

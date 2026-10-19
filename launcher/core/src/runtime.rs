@@ -213,8 +213,9 @@ pub(crate) async fn provision<S: ProgressSink + ?Sized>(
     // on hash-map iteration.
     artifacts.sort_by(|a, b| a.path.cmp(&b.path));
 
-    let missing: Vec<Artifact> =
-        artifacts.iter().filter(|a| !depot::present(depot_root, a)).cloned().collect();
+    let mut presence = depot::Presence::load(depot_root);
+    let missing: Vec<Artifact> = artifacts.iter().filter(|a| !presence.has(a)).cloned().collect();
+    presence.save();
 
     sink.emit(PrepareEvent::Runtime { component: component.to_owned() });
     sink.emit(PrepareEvent::Planned {
