@@ -27,5 +27,18 @@ abstract class MinecraftClientMixin {
     @Inject(method = "tick", at = @At("RETURN"))
     private void ash$readSettingsKey(CallbackInfo info) {
         SettingsKey.tick();
+        // How long the game took to start, into its log once (BootClock).
+        // Java 8 has no ProcessHandle: the JVM's own start time instead.
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        com.ashlauncher.client.perf.BootClock.tick(
+                client.currentScreen instanceof net.minecraft.client.gui.screen.TitleScreen,
+                () -> {
+                    try {
+                        return java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime();
+                    } catch (Throwable unavailable) {
+                        return -1L;
+                    }
+                },
+                client::scheduleStop);
     }
 }

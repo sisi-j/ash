@@ -205,3 +205,20 @@ Where 1.8.9's frame goes now, from a flight recording of the benchmark with ever
 | `1.8.9-vbo-true-20261008-160816` | on | 547.7 FPS | ±1.2% | 21.6% |
 
 **No difference** on this machine: the pairs go opposite ways, and terrain's share barely moves. So ash leaves the option as the player has it. It's worth measuring again on a weaker or older GPU before anyone acts on it either way.
+
+## Boot time (19 October 2026)
+
+**The question:** after the launcher's own waits were removed (#133), can ash make the game itself reach its title screen sooner?
+
+**How:** ash's last real 1.21.11 launch was replayed from its log, with an offline name, a dummy token and a temporary game directory, so no account was used and the player's instance was untouched. Each run quit at the title screen. Every comparison alternated the two sides, after a throwaway first run. The client now logs `ash: title screen N ms after the game started` on every start (`BootClock`).
+
+| Compared | Runs each | Plain | Other side | Difference |
+| --- | --- | --- | --- | --- |
+| Java class-data sharing, from a base archive made for Mojang's runtime | 8 | 14.4 s | 14.5 s | +0.3%: none |
+| Without ash's client in the game | 5 | 13.5 s with ash | 14.1 s without | within noise: ash adds nothing measurable |
+
+**What that means:**
+- The time is Fabric and Minecraft's own startup.
+- **Class-data sharing can't help.** Mojang's runtime ships without the base archive that dynamic sharing needs. A base archive made by hand covers only the JDK's classes, and the game's classes are loaded by Fabric's own class loader, which no archive reaches.
+- **ModernFix,** the usual startup mod, has no release for 1.21.11; its Fabric support stops at 1.21.1.
+- **Nothing ships** from this. `runBootBench` stays, for comparing a future build's boot time with this one.
