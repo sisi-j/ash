@@ -30,12 +30,12 @@ mod loader;
 mod natives;
 mod news;
 mod overrides;
+mod player_certificate;
 mod preferences;
 mod profile;
 mod recent_servers;
 mod runtime;
 mod server_list;
-mod session_server;
 mod sync;
 mod version;
 mod wardrobe;
@@ -373,27 +373,21 @@ impl Ash {
             .ok_or(AshError::AccountNotFound { profile_id: session.profile_id })
     }
 
-    /// The player's half of the join handshake (ADR-0020): join the server
-    /// id derived from the backend's `challenge`, as `profile_id`, and return
-    /// that server id for the backend to check with Mojang.
+    /// The player's half of signing in to ash (ADR-0020, amended): their
+    /// key and Mojang's certificate for it, and the backend's `challenge`
+    /// signed with that key.
     ///
-    /// Refreshes the session first, as a launch does, so the Minecraft token
-    /// is current; it goes to Mojang's session server and nowhere else.
-    pub async fn join_for_ash(
+    /// The Minecraft token, current as a launch's is, goes to Mojang for the
+    /// certificate and nowhere else.
+    async fn prove_to_ash(
         &self,
         profile_id: &str,
         challenge: &str,
-    ) -> Result<String, AshError> {
+    ) -> Result<player_certificate::Proof, AshError> {
         let session = self.session(profile_id).await?;
-        let server_id = session_server::server_id_for(challenge);
-        session_server::join(
-            self.http.as_ref(),
-            &session.minecraft_token,
-            &session.profile_id,
-            &server_id,
-        )
-        .await?;
-        Ok(server_id)
+        let certificate =
+            player_certificate::fetch(self.http.as_ref(), &session.minecraft_token).await?;
+        player_certificate::prove(&certificate, challenge)
     }
 
     // ---- the ash account (spec 0004, ADR-0020) -----------------------------
@@ -437,16 +431,23 @@ impl Ash {
     async fn try_sign_in_to_ash(&self, profile_id: &str) -> Result<(), AshError> {
         let base = &self.config.backend_url;
         let challenge = ash_account::challenge(self.http.as_ref(), base).await?;
-        self.join_for_ash(profile_id, &challenge).await?;
-        // join_for_ash refreshed the account, so this is the current name.
+        let proof = self.prove_to_ash(profile_id, &challenge).await?;
+        // A refreshed session updates the account, so this is the current name.
         let username = account::load(&self.config.data_root)
             .accounts
             .into_iter()
             .find(|a| a.profile_id == profile_id)
             .map(|a| a.username)
             .ok_or_else(|| AshError::AccountNotFound { profile_id: profile_id.to_owned() })?;
-        let signed_in =
-            ash_account::redeem(self.http.as_ref(), base, &challenge, &username).await?;
+        let signed_in = ash_account::redeem(
+            self.http.as_ref(),
+            base,
+            &challenge,
+            profile_id,
+            &username,
+            &proof,
+        )
+        .await?;
         ash_account::store_session(
             self.credentials.as_ref(),
             profile_id,

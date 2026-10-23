@@ -16,7 +16,7 @@ mod common;
 const BACKEND: &str = "https://api.ash.test";
 const CHALLENGE_URL: &str = "https://api.ash.test/v1/session/challenge";
 const SESSION_URL: &str = "https://api.ash.test/v1/session";
-const JOIN_URL: &str = "https://sessionserver.mojang.com/session/minecraft/join";
+const CERTIFICATES_URL: &str = "https://api.minecraftservices.com/player/certificates";
 
 fn contract(name: &str) -> serde_json::Value {
     let path = format!("{}/tests/fixtures/backend/{name}.json", env!("CARGO_MANIFEST_DIR"));
@@ -40,10 +40,18 @@ fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64
 }
 
-/// Everything answering: the Microsoft chain, Mojang's join, and the backend.
+/// What Mojang's /player/certificates answers: a test key pair under
+/// Mojang's own labels, a stand-in for Mojang's signature, and an expiry
+/// to the microsecond, as Mojang writes it.
+fn certificates() -> serde_json::Value {
+    let path = format!("{}/tests/fixtures/player-certificates.json", env!("CARGO_MANIFEST_DIR"));
+    serde_json::from_slice(&std::fs::read(path).expect("fixture")).expect("json")
+}
+
+/// Everything answering: the Microsoft chain, Mojang's certificates, and the backend.
 fn serving() -> Arc<FakeHttp> {
     common::with_auth_routes(FakeHttp::new())
-        .route(JOIN_URL, HttpResponse::status(204))
+        .route(CERTIFICATES_URL, HttpResponse::ok(certificates().to_string()))
         .route(CHALLENGE_URL, HttpResponse::ok(contract("session-challenge").to_string()))
         .route(SESSION_URL, session_answer(true, 30 * DAY_MS))
 }
@@ -85,10 +93,11 @@ async fn signing_in_to_ash_joins_at_mojang_and_keeps_the_session_in_the_credenti
 
     assert_eq!(status, AshAccountStatus::SignedIn);
     assert_eq!(f.http.hits(CHALLENGE_URL), 1);
-    assert_eq!(f.http.hits(JOIN_URL), 1, "the join is what proves who the player is");
+    assert_eq!(f.http.hits(CERTIFICATES_URL), 1, "the player's key is what proves who they are");
     let session_body: serde_json::Value =
         serde_json::from_str(&f.http.last_body(SESSION_URL).expect("redeemed")).unwrap();
     assert_eq!(session_body["challenge"], contract("session-challenge")["challenge"]);
+    assert_eq!(session_body["uuid"], common::PLAYER_UUID);
     assert_eq!(session_body["username"], common::PLAYER_NAME);
 
     let stored = f.store.get(&format!("ash-session:{}", common::PLAYER_UUID)).unwrap();
@@ -96,6 +105,51 @@ async fn signing_in_to_ash_joins_at_mojang_and_keeps_the_session_in_the_credenti
         .expect("kept")
         .contains(contract("session")["session"]["token"].as_str().unwrap()));
     assert_eq!(f.ash.ash_account_status(common::PLAYER_UUID), AshAccountStatus::SignedIn);
+}
+
+#[tokio::test]
+async fn the_proof_is_mojang_s_certificate_as_given_and_the_challenge_signed_with_the_player_s_key()
+{
+    use aws_lc_rs::signature::{
+        KeyPair, RsaKeyPair, UnparsedPublicKey, RSA_PKCS1_2048_8192_SHA256,
+    };
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let f = signed_in(serving()).await;
+
+    f.ash.sign_in_to_ash(common::PLAYER_UUID).await;
+
+    let sent: serde_json::Value =
+        serde_json::from_str(&f.http.last_body(SESSION_URL).expect("redeemed")).unwrap();
+    let mojang = certificates();
+    let pem_bytes = |pem: &str| {
+        let body: String = pem.lines().filter(|l| !l.starts_with("-----")).collect();
+        b64.decode(body).unwrap()
+    };
+    // Passed on exactly as Mojang signed it: key, signature, and expiry to the millisecond.
+    let public_key = pem_bytes(mojang["keyPair"]["publicKey"].as_str().unwrap());
+    assert_eq!(
+        b64.decode(sent["certificate"]["public_key"].as_str().unwrap()).unwrap(),
+        public_key
+    );
+    assert_eq!(sent["certificate"]["signature"], mojang["publicKeySignatureV2"]);
+    assert_eq!(
+        sent["certificate"]["expires_at"], 1_792_945_253_123i64,
+        "2026-10-25T16:20:53.123456Z, rounded down"
+    );
+
+    // And the challenge, signed with the player's key, SHA256withRSA.
+    let private =
+        RsaKeyPair::from_pkcs8(&pem_bytes(mojang["keyPair"]["privateKey"].as_str().unwrap()))
+            .unwrap();
+    let signed = format!(
+        "ash-account-sign-in:{}",
+        contract("session-challenge")["challenge"].as_str().unwrap()
+    );
+    let signature = b64.decode(sent["signature"].as_str().unwrap()).unwrap();
+    UnparsedPublicKey::new(&RSA_PKCS1_2048_8192_SHA256, private.public_key().as_ref())
+        .verify(signed.as_bytes(), &signature)
+        .expect("the player's key signed ash's challenge");
 }
 
 #[tokio::test]
@@ -114,7 +168,8 @@ async fn no_request_to_ash_carries_a_microsoft_or_minecraft_token() {
     }
     // And the Minecraft token did go to Mojang - so the check above was able
     // to see it, had it been sent the wrong way.
-    assert!(f.http.last_body(JOIN_URL).unwrap().contains(common::MC_TOKEN));
+    let to_mojang = f.http.everything_sent_to(CERTIFICATES_URL);
+    assert!(to_mojang[0].contains(common::MC_TOKEN), "{to_mojang:?}");
 }
 
 // ---- the notice -----------------------------------------------------------------
@@ -167,20 +222,16 @@ async fn any_refusal_from_ash_is_unreachable_and_tried_again_later() {
 
 #[tokio::test]
 async fn every_sign_in_is_logged_with_the_reason_ash_s_servers_gave() {
-    let reason =
-        "Mojang's session server could not confirm the join (hasJoined answered 403); try again";
-    let body = serde_json::json!({ "error": { "kind": "mojang_unavailable", "message": reason } });
+    let reason = "Mojang did not certify that key for that player";
+    let body = serde_json::json!({ "error": { "kind": "certificate_invalid", "message": reason } });
     let f =
-        signed_in(serving().route(SESSION_URL, HttpResponse::json(503, body.to_string()))).await;
+        signed_in(serving().route(SESSION_URL, HttpResponse::json(401, body.to_string()))).await;
 
     f.ash.sign_in_to_ash(common::PLAYER_UUID).await;
 
     let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
     let line = log.lines().find(|l| l.contains("ash-sign-in")).expect("the failure is logged");
-    assert!(
-        line.contains("mojang_unavailable") && line.contains("hasJoined answered 403"),
-        "{line}"
-    );
+    assert!(line.contains("certificate_invalid") && line.contains("did not certify"), "{line}");
 
     let ok = signed_in(serving()).await;
     ok.ash.sign_in_to_ash(common::PLAYER_UUID).await;
@@ -196,7 +247,7 @@ async fn a_failed_sign_in_is_due_again_and_a_refused_or_finished_one_is_not() {
     assert!(failing.ash.ash_sign_in_due(common::PLAYER_UUID), "unreachable: try again later");
 
     let refused = signed_in(serving().route(
-        JOIN_URL,
+        CERTIFICATES_URL,
         HttpResponse::json(403, r#"{"error":"InsufficientPrivilegesException"}"#),
     ))
     .await;
@@ -211,7 +262,7 @@ async fn a_failed_sign_in_is_due_again_and_a_refused_or_finished_one_is_not() {
 #[tokio::test]
 async fn a_microsoft_account_without_multiplayer_is_told_why_and_still_plays() {
     let f = signed_in(serving().route(
-        JOIN_URL,
+        CERTIFICATES_URL,
         HttpResponse::json(403, r#"{"error":"InsufficientPrivilegesException"}"#),
     ))
     .await;
@@ -223,7 +274,7 @@ async fn a_microsoft_account_without_multiplayer_is_told_why_and_still_plays() {
     };
     assert_eq!(kind, "multiplayer_disabled");
     assert!(message.contains("Playing is unaffected"), "{message}");
-    assert_eq!(f.http.hits(SESSION_URL), 0, "nothing to redeem without a join");
+    assert_eq!(f.http.hits(SESSION_URL), 0, "nothing to redeem without a key");
 }
 
 #[tokio::test]

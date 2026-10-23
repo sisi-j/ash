@@ -14,7 +14,7 @@ The money question that ADR-0010 accepted as a risk got sharper in Phase 2. Moja
 ## Solution
 
 Phase 4 builds **the backend** and the launcher and client work that uses it. It covers four areas:
-- **ash accounts.** An account is created when a player first signs in to Microsoft in the launcher, and is keyed by their Minecraft profile UUID (ADR-0009). The player proves who they are with Mojang's own join handshake, the one a Minecraft server uses, so their Minecraft token never reaches ash's backend (ADR-0020). They can delete the account from the launcher, and an account with no sign-in for 12 months is deleted automatically.
+- **ash accounts.** An account is created when a player first signs in to Microsoft in the launcher, and is keyed by their Minecraft profile UUID (ADR-0009). The player proves who they are with the key Mojang certifies for signed chat, so their Minecraft token never reaches ash's backend (ADR-0020, amended 2026-10-23: Mojang refuses the join handshake's check from Cloudflare). They can delete the account from the launcher, and an account with no sign-in for 12 months is deleted automatically.
 - **Synced settings**, on by default when signed in. A player's feature settings, launcher preferences, instance definitions and server entries follow them between machines. Machine-local overrides never do (ADR-0011).
 - **News posts.** They're written on an admin page and shown in the launcher's News page.
 - **Cosmetics, free.** The first catalogue has capes, worn models and emotes. Every ash account is entitled to the whole catalogue. Nothing is sold in this phase, and capes are never sold (ADR-0010, amended). Other ash players see a player's cosmetics, and any player can hide other people's.
@@ -91,7 +91,7 @@ The backend runs on Cloudflare Workers, written in TypeScript, in its own public
 
 ### ash accounts and signing in
 
-- **Mojang's join handshake proves identity** (ADR-0020):
+- **Mojang's join handshake proves identity** (ADR-0020). *Replaced 2026-10-23 by the player's certified chat key: Mojang refuses the backend's check from Cloudflare (ADR-0020, amended; research 0013). The steps below are as first decided.*
   1. The backend issues a one-time challenge.
   2. The player's own machine sends it to Mojang's session server as a "join".
   3. The backend asks Mojang whether that player has joined with that challenge.

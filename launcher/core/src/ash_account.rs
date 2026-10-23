@@ -6,15 +6,17 @@
 //! launcher shows quietly, and the game launches exactly as it would have.
 //!
 //! What the backend is sent: an empty request for a challenge, then the
-//! challenge and the player's username. Never a Microsoft or Minecraft token -
-//! the Minecraft token goes to Mojang's session server, in
-//! [`crate::session_server`], and nowhere else.
+//! challenge, the player's UUID and name, their certified public key and the
+//! challenge signed with it. Never a Microsoft or Minecraft token - the
+//! Minecraft token goes to Mojang for the certificate, in
+//! [`crate::player_certificate`], and nowhere else.
 
 use serde::{Deserialize, Serialize};
 
 use crate::credentials::CredentialStore;
 use crate::error::AshError;
 use crate::http::{HttpPort, HttpRequest, HttpResponse};
+use crate::player_certificate::Proof;
 
 /// Renew an ash session this long before it ends, so a player is never
 /// signed out of ash mid-session for want of a timely renewal.
@@ -123,14 +125,25 @@ pub(crate) async fn challenge(http: &dyn HttpPort, base: &str) -> Result<String,
     Ok(body.challenge)
 }
 
+/// `POST /v1/session` with the proof of who the player is (ADR-0020,
+/// amended). The username is the player's word, for display; the UUID is the
+/// one Mojang certified their key for.
 pub(crate) async fn redeem(
     http: &dyn HttpPort,
     base: &str,
     challenge: &str,
+    profile_id: &str,
     username: &str,
+    proof: &Proof,
 ) -> Result<SignedIn, AshError> {
     let url = format!("{base}/v1/session");
-    let body = serde_json::json!({ "challenge": challenge, "username": username });
+    let body = serde_json::json!({
+        "challenge": challenge,
+        "uuid": profile_id.replace('-', "").to_ascii_lowercase(),
+        "username": username,
+        "certificate": proof.certificate,
+        "signature": proof.signature,
+    });
     let response = http.send(HttpRequest::post_json(&url, &body)?).await?;
     decode(&url, &response)
 }

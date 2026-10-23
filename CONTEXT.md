@@ -35,7 +35,7 @@ The app's record for one player, keyed by Minecraft profile UUID. Owns entitleme
 _Avoid_: user, profile, app profile
 
 **Join handshake**:
-How a player proves to the backend which Minecraft profile they are: the backend issues a one-time challenge, the player's machine joins it at Mojang's session server, and the backend asks Mojang whether that profile joined. It's what a Minecraft server does at login, so no Minecraft or Microsoft token reaches the backend (ADR-0020). The launcher and the game each do their own.
+How a player proves to the backend which Minecraft profile they are. The backend issues a one-time challenge, and the player's machine signs it with the key Mojang certifies for signed chat. The backend checks Mojang's certificate and the signature, offline, against Mojang's published keys. No Minecraft or Microsoft token reaches the backend. Until 23 October 2026 this was a join at Mojang's session server, which Mojang's firewall refuses from Cloudflare (ADR-0020, amended; research 0013). The launcher and the game each do their own.
 _Avoid_: login (that is the Microsoft sign-in), auth (unqualified), token exchange
 
 ### Launcher
