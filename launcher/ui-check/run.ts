@@ -197,6 +197,25 @@ const STATES: State[] = [
     verify: async (page) => ((await windowDid(page)) === "close" ? null : "ash did not close once the game started"),
   },
   {
+    // Closing the game window is a clean quit, and LAUNCH GAME comes back for it.
+    name: "game-closed",
+    shows: "LAUNCH GAME",
+    verify: async (page) => {
+      await page.waitForTimeout(4000);
+      return (await page.locator(".launch-button.is-playing").count()) === 0 ? null : "still PLAYING after the game closed";
+    },
+  },
+  {
+    name: "download-cancelled",
+    shows: "LAUNCH GAME",
+    reach: async (page) => {
+      await launchGame(page);
+      await page.getByText("DOWNLOADING").waitFor();
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    },
+    verify: async (page) => ((await page.getByText("DOWNLOADING").count()) === 0 ? null : "still DOWNLOADING after Cancel"),
+  },
+  {
     name: "crashed",
     shows: "OutOfMemoryError",
     // The player's own mods were off, so the crash is not pinned on them.

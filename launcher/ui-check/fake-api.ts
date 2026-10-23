@@ -276,6 +276,8 @@ function status(): real.GameStatus | null {
   statusAsked += 1;
   if (state === "playing") return { state: "running" };
   if (crashes) return statusAsked === 1 ? { state: "running" } : { state: "exited", code: 1, clean: false };
+  // The player closing the game window: a clean quit, a moment after the page first asks.
+  if (state === "game-closed") return statusAsked === 1 ? { state: "running" } : { state: "exited", code: 0, clean: true };
   return null;
 }
 
@@ -418,7 +420,9 @@ export const api: typeof real.api = {
         })),
   prepareInstance: async () => launch(),
   ensureRuntime: () => resolve({ component: "java-runtime-delta", version_name: "21", java_executable: "java" }),
-  cancelPreparation: nothing,
+  // As ash-core answers a cancel: the launch it stopped finishes as cancelled.
+  cancelPreparation: async () =>
+    emit(launched, { ok: false, invocation: null, error: { kind: "cancelled", message: "Cancelled.", retryable: true } }),
 
   launch: async () => launch(),
   launchWithoutThirdPartyMods: async () => {
