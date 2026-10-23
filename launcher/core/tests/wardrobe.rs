@@ -16,7 +16,7 @@ const COSMETICS_URL: &str = "https://api.ash.test/v1/cosmetics";
 const WARDROBE_URL: &str = "https://api.ash.test/v1/wardrobe";
 const CHALLENGE_URL: &str = "https://api.ash.test/v1/session/challenge";
 const SESSION_URL: &str = "https://api.ash.test/v1/session";
-const JOIN_URL: &str = "https://sessionserver.mojang.com/session/minecraft/join";
+const CERTIFICATES_URL: &str = "https://api.minecraftservices.com/player/certificates";
 /// The skin URL `common::with_auth_routes` gives the player.
 const SKIN_URL: &str = "https://textures/abc";
 const PNG: &[u8] = b"\x89PNG pretend";
@@ -45,7 +45,7 @@ fn session_answer() -> HttpResponse {
 
 fn serving() -> Arc<FakeHttp> {
     common::with_auth_routes(FakeHttp::new())
-        .route(JOIN_URL, HttpResponse::status(204))
+        .route(CERTIFICATES_URL, HttpResponse::ok(contract("../player-certificates")))
         .route(CHALLENGE_URL, HttpResponse::ok(contract("session-challenge")))
         .route(SESSION_URL, session_answer())
         .route(COSMETICS_URL, HttpResponse::ok(contract("cosmetics")))

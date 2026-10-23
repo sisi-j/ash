@@ -16,6 +16,12 @@ keyring = "4"
 uuid = { version = "1", features = ["v4"] }
 # Mojang publishes a SHA-1 and a size for every artifact; both get checked.
 sha1 = "0.11"
+# Signing in to ash with the player's chat key (ADR-0020, amended): RSA
+# signing from the library rustls already builds on, the certificate's base64
+# and its ISO 8601 expiry.
+aws-lc-rs = "1"
+base64 = "0.22"
+time = { version = "0.3", features = ["parsing"] }
 # Runtime-agnostic combinators. `buffer_unordered` gives bounded parallelism
 # without ash-core taking a dependency on a particular async runtime.
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
