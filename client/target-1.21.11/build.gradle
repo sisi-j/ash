@@ -118,6 +118,17 @@ loom {
             property 'ash.bench.server', (project.findProperty('bench.server') ?: '').toString()
             property 'ash.bench.lithium', project.hasProperty('bench.lithium').toString()
         }
+
+        // `./gradlew :target-1.21.11:runBootBench`: starts the game, notes how
+        // long it took to reach the title screen (BootClock), and quits. A
+        // development run, so its times are for comparing builds with each
+        // other; see benchmark-results/README.md, "Boot time".
+        bootBench {
+            client()
+            configName = 'ash boot measurement (1.21.11)'
+            runDir 'build/run/boot'
+            property 'ash.boot.exitAtTitle', 'true'
+        }
     }
 }
 

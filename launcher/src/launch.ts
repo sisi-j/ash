@@ -103,6 +103,21 @@ export type Launch = {
  * Held once, by the app, for the selected instance, so the LAUNCH area and
  * the instance's own page show the same launch rather than two copies of it.
  */
+/** A phase a finished check may replace: nothing is under way in it. */
+function settled(phase: Phase): boolean {
+  return phase.at !== "working" && phase.at !== "running";
+}
+
+/**
+ * Whether LAUNCH GAME takes a click: not only once the files are checked,
+ * but while they are being checked and after a check that failed. A launch
+ * checks them itself, so there is nothing to wait for - and a button that
+ * ignores the first click is the slowest thing a launcher can do.
+ */
+export function canStart(phase: Phase): boolean {
+  return phase.at === "idle" || phase.at === "checking" || phase.at === "unchecked";
+}
+
 export function useLaunch(id: InstanceId | null): Launch {
   const [phase, setPhase] = useState<Phase>({ at: "checking" });
   const [command, setCommand] = useState<InvocationView | null>(null);
@@ -119,11 +134,22 @@ export function useLaunch(id: InstanceId | null): Launch {
         setPhase({ at: "running" });
         return;
       }
-      setPhase({ at: "idle", plan: await api.planInstance(id) });
+      const plan = await api.planInstance(id);
+      // Only if nothing has started meanwhile: a click during the check began
+      // a launch, and the check finishing must not put LAUNCH GAME back.
+      setPhase((current) => (settled(current) ? { at: "idle", plan } : current));
     } catch (e) {
-      setPhase({ at: "unchecked", error: e as UiError });
+      setPhase((current) => (settled(current) ? { at: "unchecked", error: e as UiError } : current));
     }
   }, [id]);
+
+  // What was under way has ended - the game closed, a download finished or
+  // was cancelled - so the check that follows may put LAUNCH GAME back.
+  // Straight to "checking", which already takes a click: no wait for it.
+  const settle = useCallback(() => {
+    setPhase({ at: "checking" });
+    void replan();
+  }, [replan]);
 
   useEffect(() => {
     setPhase({ at: "checking" });
@@ -164,7 +190,7 @@ export function useLaunch(id: InstanceId | null): Launch {
       const status = await api.gameStatus(id).catch(() => null);
       if (!live || !status || status.state === "running") return;
       if (status.clean) {
-        void replan();
+        settle();
         return;
       }
       const log = await api.gameLog(id).catch(() => []);
@@ -177,7 +203,7 @@ export function useLaunch(id: InstanceId | null): Launch {
       live = false;
       clearInterval(timer);
     };
-  }, [phase.at, id, replan]);
+  }, [phase.at, id, settle]);
 
   useEffect(() => {
     const progress = onPrepareProgress((event) => {
@@ -237,7 +263,7 @@ export function useLaunch(id: InstanceId | null): Launch {
     // this only settles the phase when nothing is going to be started.
     const prepared = onPrepareFinished((outcome) => {
       if (goal.current === "play") return;
-      if (outcome.ok || outcome.error?.kind === "cancelled") void replan();
+      if (outcome.ok || outcome.error?.kind === "cancelled") settle();
       else if (outcome.error) setPhase({ at: "failed", error: outcome.error, goal: "prepare" });
     });
 
@@ -246,7 +272,7 @@ export function useLaunch(id: InstanceId | null): Launch {
         setCommand(outcome.invocation);
         setPhase({ at: "running" });
       } else if (outcome.error) {
-        if (outcome.error.kind === "cancelled") void replan();
+        if (outcome.error.kind === "cancelled") settle();
         else setPhase({ at: "failed", error: outcome.error, goal: "play" });
       }
     });
@@ -256,7 +282,7 @@ export function useLaunch(id: InstanceId | null): Launch {
       void prepared.then((un) => un());
       void launched.then((un) => un());
     };
-  }, [replan]);
+  }, [settle]);
 
   // The server the last play was going into, so trying again goes there too.
   const server = useRef<string | null>(null);

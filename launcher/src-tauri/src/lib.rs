@@ -280,7 +280,15 @@ async fn select_account(
     state: tauri::State<'_, AppState>,
     profile_id: String,
 ) -> Result<Accounts, UiError> {
-    state.ash.select_account(&profile_id).map_err(UiError::from)
+    let accounts = state.ash.select_account(&profile_id).map_err(UiError::from)?;
+    spawn_warm_session(Arc::clone(&state.ash));
+    Ok(accounts)
+}
+
+/// Get the active account's Minecraft session ready in the background, so
+/// LAUNCH GAME doesn't wait on Microsoft and Mojang when it's clicked.
+fn spawn_warm_session(ash: Arc<Ash>) {
+    tauri::async_runtime::spawn(async move { ash.warm_session().await });
 }
 
 #[tauri::command]
@@ -882,6 +890,7 @@ pub fn run() {
                     spawn_ash_sign_in(app.handle().clone(), Arc::clone(&ash), account.profile_id);
                 }
             }
+            spawn_warm_session(Arc::clone(&ash));
             spawn_sync_loop(app.handle().clone(), Arc::clone(&ash));
             app.manage(AppState { ash, preparing: Mutex::new(HashMap::new()) });
             Ok(())

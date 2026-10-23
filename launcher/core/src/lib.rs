@@ -167,6 +167,10 @@ pub struct Ash {
     syncing: std::sync::atomic::AtomicBool,
     /// Skin and cosmetic textures the Wardrobe has fetched this run.
     images: wardrobe::Images,
+    /// Each account's Minecraft session, and when it was got: reused rather
+    /// than walking the whole Microsoft chain again for every launch. In
+    /// memory only, as the token always has been.
+    sessions: Mutex<HashMap<String, (auth::Session, u64)>>,
 }
 
 impl Ash {
@@ -197,6 +201,7 @@ impl Ash {
             sync_state: Mutex::new(SyncState::Waiting),
             syncing: std::sync::atomic::AtomicBool::new(false),
             images: wardrobe::Images::default(),
+            sessions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -279,6 +284,11 @@ impl Ash {
                     account
                 };
                 self.ash_status.lock().expect("ash status").remove(&account.profile_id);
+                // Just got, so the first launch after signing in uses it.
+                self.sessions
+                    .lock()
+                    .expect("sessions")
+                    .insert(account.profile_id.clone(), ((*session).clone(), now_ms()));
                 Ok(SignInStatus::Complete { account })
             }
             Err(e) => {
@@ -308,15 +318,20 @@ impl Ash {
 
     /// Forget an account and erase its stored refresh token.
     pub fn remove_account(&self, profile_id: &str) -> Result<Accounts, AshError> {
+        self.sessions.lock().expect("sessions").remove(profile_id);
         account::remove(&self.config.data_root, self.credentials.as_ref(), profile_id)
     }
 
-    /// Exchange the stored refresh token for a usable Minecraft session.
-    ///
-    /// Called before a launch. A refresh token Microsoft rejects is dead, and
-    /// surfaces as [`AshError::SessionExpired`] so the UI can ask for a fresh
-    /// sign-in rather than failing the launch with something cryptic.
-    pub async fn ensure_session(&self, profile_id: &str) -> Result<Account, AshError> {
+    /// The account's Minecraft session: the one got within
+    /// [`Config::session_reuse`],
+    /// or a new one from its stored refresh token, whose rotated successor is
+    /// stored in its place.
+    async fn session(&self, profile_id: &str) -> Result<auth::Session, AshError> {
+        if let Some((session, got)) = self.sessions.lock().expect("sessions").get(profile_id) {
+            if u128::from(now_ms().saturating_sub(*got)) < self.config.session_reuse.as_millis() {
+                return Ok(session.clone());
+            }
+        }
         let token = account::refresh_token(self.credentials.as_ref(), profile_id)?;
         let session = auth::refresh(self.http.as_ref(), &self.client_id, &token).await?;
         account::upsert(
@@ -326,7 +341,36 @@ impl Ash {
             &session.username,
             session.skin_url.clone(),
             session.refresh_token.as_deref(),
-        )
+        )?;
+        self.sessions
+            .lock()
+            .expect("sessions")
+            .insert(session.profile_id.clone(), (session.clone(), now_ms()));
+        Ok(session)
+    }
+
+    /// Get the active account's session ready ahead of a launch, so clicking
+    /// LAUNCH GAME doesn't wait on six round trips to Microsoft and Mojang.
+    /// The adapter calls this at startup; a failure here is only a launch
+    /// that will try again.
+    pub async fn warm_session(&self) {
+        if let Some(uuid) = self.accounts().active.clone() {
+            let _ = self.session(&uuid).await;
+        }
+    }
+
+    /// Exchange the stored refresh token for a usable Minecraft session.
+    ///
+    /// Called before a launch. A refresh token Microsoft rejects is dead, and
+    /// surfaces as [`AshError::SessionExpired`] so the UI can ask for a fresh
+    /// sign-in rather than failing the launch with something cryptic.
+    pub async fn ensure_session(&self, profile_id: &str) -> Result<Account, AshError> {
+        let session = self.session(profile_id).await?;
+        self.accounts()
+            .accounts
+            .into_iter()
+            .find(|a| a.profile_id == session.profile_id)
+            .ok_or(AshError::AccountNotFound { profile_id: session.profile_id })
     }
 
     /// The player's half of the join handshake (ADR-0020): join the server
@@ -340,16 +384,7 @@ impl Ash {
         profile_id: &str,
         challenge: &str,
     ) -> Result<String, AshError> {
-        let token = account::refresh_token(self.credentials.as_ref(), profile_id)?;
-        let session = auth::refresh(self.http.as_ref(), &self.client_id, &token).await?;
-        account::upsert(
-            &self.config.data_root,
-            self.credentials.as_ref(),
-            &session.profile_id,
-            &session.username,
-            session.skin_url.clone(),
-            session.refresh_token.as_deref(),
-        )?;
+        let session = self.session(profile_id).await?;
         let server_id = session_server::server_id_for(challenge);
         session_server::join(
             self.http.as_ref(),
@@ -1205,10 +1240,20 @@ impl Ash {
         // not after several minutes of preparation.
         let accounts = self.accounts();
         let account = accounts.active_account().ok_or(AshError::NoAccountSelected)?;
-        let stored = account::refresh_token(self.credentials.as_ref(), &account.profile_id)?;
-        let session = auth::refresh(self.http.as_ref(), &self.client_id, &stored).await?;
+        let started = std::time::Instant::now();
+        let session = self.session(&account.profile_id).await?;
+        let session_ms = started.elapsed().as_millis();
 
         let (plan, runtime) = self.prepare_all(id, sink, cancel).await?;
+        // Where a launch's time goes before the game starts, for the log:
+        // the session should be ~0 once warmed, the check ~0 once verified.
+        self.diagnostics.info(
+            "launch-timing",
+            &format!(
+                "instance={id} session_ms={session_ms} files_ms={}",
+                started.elapsed().as_millis() - session_ms
+            ),
+        );
         let metadata = depot::read_metadata(&self.config.depot_root, &plan.version_id)?;
 
         let join = match how.join {

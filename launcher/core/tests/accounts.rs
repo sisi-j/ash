@@ -92,22 +92,28 @@ struct Fixture {
     ash: Ash,
     http: Arc<FakeHttp>,
     store: Arc<InMemoryCredentialStore>,
+    process: Arc<FakeProcessPort>,
     _tmp: tempfile::TempDir,
 }
 
 fn fixture() -> Fixture {
+    fixture_with(|config| config)
+}
+
+fn fixture_with(configure: impl FnOnce(Config) -> Config) -> Fixture {
     let tmp = tempfile::tempdir().expect("temp dir");
     let http = serving();
     let store = InMemoryCredentialStore::new();
+    let process = FakeProcessPort::new();
     let ash = Ash::new(
-        Config::rooted_at(tmp.path()),
+        configure(Config::rooted_at(tmp.path())),
         Arc::clone(&http) as Arc<dyn HttpPort>,
         Arc::clone(&store) as Arc<dyn CredentialStore>,
-        FakeProcessPort::new() as Arc<dyn ProcessPort>,
+        Arc::clone(&process) as Arc<dyn ProcessPort>,
         FakeServerPort::new(),
         "test-client",
     );
-    Fixture { ash, http, store, _tmp: tmp }
+    Fixture { ash, http, store, process, _tmp: tmp }
 }
 
 impl Fixture {
@@ -121,6 +127,20 @@ impl Fixture {
         self.sign_in().await;
         self.sign_in().await;
     }
+
+    /// Who the last game was started as: its username and profile UUID.
+    fn launched_as(&self) -> (String, String) {
+        let args = self.process.last().view().args;
+        let after = |flag: &str| {
+            let at = args.iter().position(|a| a == flag).expect(flag);
+            args[at + 1].clone()
+        };
+        (after("--username"), after("--uuid"))
+    }
+}
+
+fn player(p: (&str, &str)) -> (String, String) {
+    (p.1.to_owned(), p.0.to_owned())
 }
 
 fn names(accounts: &ash_core::Accounts) -> Vec<&str> {
@@ -225,10 +245,8 @@ async fn launching_presents_the_credential_of_the_chosen_account() {
 
     // This is the whole ticket. Bob signed in most recently, so anything
     // that reaches for "the newest account" rather than "the chosen one"
-    // would send Bob's refresh token and put Bob on the server.
-    let sent = f.http.last_body(common::TOKEN_URL).expect("a token request");
-    assert!(sent.contains(ALICE_REFRESH), "launched with the wrong account's credential");
-    assert!(!sent.contains(BOB_REFRESH));
+    // would put Bob on the server.
+    assert_eq!(f.launched_as(), player(ALICE), "launched as the wrong account");
 }
 
 #[tokio::test]
@@ -239,15 +257,15 @@ async fn switching_accounts_switches_who_the_next_launch_is() {
 
     f.ash.select_account(ALICE.0).expect("select alice");
     f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
-    let first = f.http.last_body(common::TOKEN_URL).expect("a token request");
+    let first = f.launched_as();
 
     f.ash.stop_game(&instance.id);
     f.ash.select_account(BOB.0).expect("select bob");
     f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
-    let second = f.http.last_body(common::TOKEN_URL).expect("a token request");
+    let second = f.launched_as();
 
-    assert!(first.contains(ALICE_REFRESH));
-    assert!(second.contains(BOB_REFRESH));
+    assert_eq!(first, player(ALICE));
+    assert_eq!(second, player(BOB));
 }
 
 // ---- signing out ------------------------------------------------------------
@@ -303,7 +321,68 @@ async fn a_signed_out_account_cannot_launch_on_a_leftover_token() {
 
     f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
 
+    assert_eq!(f.launched_as(), player(ALICE));
+    // And nothing of Bob's is left to launch on: not his refresh token, and
+    // not the session ash was keeping for him.
+    assert!(f.ash.select_account(BOB.0).is_err());
+    assert!(!f.store.keys().iter().any(|k| k.contains(BOB.0)));
+}
+
+// ---- reusing a session ---------------------------------------------------------
+
+#[tokio::test]
+async fn a_launch_after_signing_in_reuses_the_session_instead_of_asking_microsoft_again() {
+    let f = fixture();
+    f.sign_in().await;
+    let instance = f.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
+    let asked = f.http.hits(common::TOKEN_URL);
+
+    f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
+    f.ash.stop_game(&instance.id);
+    f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch again");
+
+    assert_eq!(f.http.hits(common::TOKEN_URL), asked, "neither launch walked the Microsoft chain");
+    assert_eq!(f.launched_as(), player(ALICE));
+}
+
+#[tokio::test]
+async fn a_session_older_than_the_reuse_window_is_got_again() {
+    let f = fixture_with(|config| Config { session_reuse: std::time::Duration::ZERO, ..config });
+    f.sign_in().await;
+    let instance = f.ash.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
+    let asked = f.http.hits(common::TOKEN_URL);
+
+    f.ash.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
+
+    assert_eq!(f.http.hits(common::TOKEN_URL), asked + 1);
     let sent = f.http.last_body(common::TOKEN_URL).expect("a token request");
-    assert!(sent.contains(ALICE_REFRESH));
-    assert!(!sent.contains(BOB_REFRESH), "a signed-out account's credential was still used");
+    assert!(sent.contains(ALICE_REFRESH), "refreshed with the chosen account's token");
+}
+
+#[tokio::test]
+async fn warming_the_session_up_front_leaves_the_launch_nothing_to_ask() {
+    let f = fixture_with(|config| Config {
+        session_reuse: std::time::Duration::from_secs(3600),
+        ..config
+    });
+    f.sign_in().await;
+    // A new run of the launcher: nothing kept from the sign-in.
+    let next = Ash::new(
+        Config {
+            session_reuse: std::time::Duration::from_secs(3600),
+            ..Config::rooted_at(f._tmp.path())
+        },
+        Arc::clone(&f.http) as Arc<dyn HttpPort>,
+        Arc::clone(&f.store) as Arc<dyn CredentialStore>,
+        Arc::clone(&f.process) as Arc<dyn ProcessPort>,
+        FakeServerPort::new(),
+        "test-client",
+    );
+    let instance = next.create_instance("modern", VERSION, Loader::Vanilla).expect("instance");
+
+    next.warm_session().await;
+    let asked = f.http.hits(common::TOKEN_URL);
+    next.launch(&instance.id, &NullSink, &Cancel::new()).await.expect("launch");
+
+    assert_eq!(f.http.hits(common::TOKEN_URL), asked, "the launch reused what warming got");
 }

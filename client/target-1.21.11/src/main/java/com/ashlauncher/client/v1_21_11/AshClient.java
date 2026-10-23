@@ -233,6 +233,11 @@ public final class AshClient implements ClientModInitializer {
             landed.remove(Feature.FREELOOK);
         }
         ClientTickEvents.END_CLIENT_TICK.register(client -> currentServer.tick());
+        // How long the game took to start, into its log once (BootClock).
+        ClientTickEvents.END_CLIENT_TICK.register(client -> com.ashlauncher.client.perf.BootClock.tick(
+                client.screen instanceof net.minecraft.client.gui.screens.TitleScreen,
+                () -> ProcessHandle.current().info().startInstant().map(java.time.Instant::toEpochMilli).orElse(-1L),
+                client::stop));
 
         // Hit colour: the overlay texture's red rows, rewritten when the
         // colour changes. Off, or before any change, they hold the game's own.

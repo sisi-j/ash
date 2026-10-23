@@ -15,7 +15,7 @@ import {
   type Session,
 } from "./api";
 import { Icon } from "./icons";
-import type { Launch } from "./launch";
+import { canStart, type Launch } from "./launch";
 import { LaunchArea } from "./LaunchArea";
 import { playLaunchSound } from "./sound";
 import { Face } from "./TitleBar";
@@ -336,7 +336,7 @@ function ServersCard(props: { instance: Instance; launch: Launch; sounds: boolea
                   </span>
                   <button
                     className="join"
-                    disabled={!online || launch.phase.at !== "idle"}
+                    disabled={!online || !canStart(launch.phase)}
                     aria-label={`Join ${server.name || server.address}`}
                     onClick={() => join(server.address)}
                   >
