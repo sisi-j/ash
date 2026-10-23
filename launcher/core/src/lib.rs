@@ -412,14 +412,23 @@ impl Ash {
             return AshAccountStatus::Deleted;
         }
         let status = match self.try_sign_in_to_ash(profile_id).await {
-            Ok(()) => AshAccountStatus::SignedIn,
-            Err(e) => match e.kind() {
-                "multiplayer_disabled" | "multiplayer_banned" => {
-                    AshAccountStatus::Refused { kind: e.kind().into(), message: e.user_message() }
+            Ok(()) => {
+                self.diagnostics.info("ash-sign-in", &format!("profile={profile_id} signed in"));
+                AshAccountStatus::SignedIn
+            }
+            Err(e) => {
+                // Said in the log, or a sign-in that never works is invisible.
+                self.diagnostics
+                    .warn("ash-sign-in", &format!("profile={profile_id} {}: {e}", e.kind()));
+                match e.kind() {
+                    "multiplayer_disabled" | "multiplayer_banned" => AshAccountStatus::Refused {
+                        kind: e.kind().into(),
+                        message: e.user_message(),
+                    },
+                    "session_expired" | "account_not_found" => AshAccountStatus::NotSignedIn,
+                    _ => AshAccountStatus::Unreachable,
                 }
-                "session_expired" | "account_not_found" => AshAccountStatus::NotSignedIn,
-                _ => AshAccountStatus::Unreachable,
-            },
+            }
         };
         self.ash_status.lock().expect("ash status").insert(profile_id.to_owned(), status.clone());
         status
@@ -467,6 +476,19 @@ impl Ash {
     }
 
     /// Whether `profile_id` has no ash session, or one ending within a week.
+    /// Whether to try signing `profile_id` in to ash now, in the
+    /// background: it needs a session, and the last try - if there was one
+    /// this run - didn't fail in a way trying again can't fix.
+    pub fn ash_sign_in_due(&self, profile_id: &str) -> bool {
+        if !self.needs_ash_sign_in(profile_id) {
+            return false;
+        }
+        matches!(
+            self.ash_status.lock().expect("ash status").get(profile_id),
+            None | Some(AshAccountStatus::Unreachable)
+        )
+    }
+
     pub fn needs_ash_sign_in(&self, profile_id: &str) -> bool {
         if self.ash_account_deleted(profile_id) {
             return false;
@@ -631,14 +653,27 @@ impl Ash {
     pub async fn wardrobe(&self) -> Result<Wardrobe, AshError> {
         let base = &self.config.backend_url;
         let cosmetics = wardrobe::catalogue(self.http.as_ref(), base, &self.images).await?;
-        let token = self.live_ash_token();
+        let active = self.accounts().active;
+        let mut token = self.live_ash_token();
+        // Opening the Wardrobe is wanting to wear something: sign in now,
+        // rather than saying "not signed in" until the background tries again.
+        if let (None, Some(uuid)) = (&token, &active) {
+            if !self.ash_account_deleted(uuid) {
+                self.sign_in_to_ash(uuid).await;
+                token = self.live_ash_token();
+            }
+        }
+        let ash_account = match &active {
+            Some(uuid) => self.ash_account_status(uuid),
+            None => AshAccountStatus::NotSignedIn,
+        };
         let equipped = match &token {
             Some(token) => wardrobe::equipped(self.http.as_ref(), base, token).await?,
             None => Equipped::default(),
         };
         let skin_url = self.accounts().active_account().and_then(|a| a.skin_url.clone());
         let skin = wardrobe::skin(self.http.as_ref(), &self.images, skin_url.as_deref()).await;
-        Ok(Wardrobe { signed_in: token.is_some(), cosmetics, equipped, skin })
+        Ok(Wardrobe { signed_in: token.is_some(), ash_account, cosmetics, equipped, skin })
     }
 
     /// Wear `cosmetic_id` in `slot`, or take off what's there with `None`.

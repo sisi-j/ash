@@ -117,12 +117,18 @@ const CAPES: real.Cosmetic[] = [
 ];
 
 let wearing: string | null = state === "wardrobe-none" ? null : "cape.ember";
-const wardrobe = (): real.Wardrobe => ({
-  signed_in: state !== "wardrobe-signed-out",
-  cosmetics: CAPES,
-  equipped: { cape: state === "wardrobe-signed-out" ? null : wearing, head: null, back: null },
-  skin: steve.skin_url,
-});
+/** How often the Wardrobe has been asked for: "wardrobe-try-again" signs in on the second. */
+let wardrobeAsked = 0;
+const wardrobe = (): real.Wardrobe => {
+  const out = state === "wardrobe-signed-out" || (state === "wardrobe-try-again" && wardrobeAsked < 2);
+  return {
+    signed_in: !out,
+    ash_account: out ? { state: "unreachable" } : { state: "signed_in" },
+    cosmetics: CAPES,
+    equipped: { cape: out ? null : wearing, head: null, back: null },
+    skin: steve.skin_url,
+  };
+};
 
 const NEWS: real.NewsPost[] = [
   {
@@ -419,7 +425,10 @@ export const api: typeof real.api = {
       : resolve({ posts: state === "news-empty" ? [] : NEWS, unread: state === "news-dot", offline: false }),
   markNewsSeen: nothing,
   syncStatus: () => resolve(syncStatus),
-  wardrobe: () => resolve(wardrobe()),
+  wardrobe: () => {
+    wardrobeAsked += 1;
+    return resolve(wardrobe());
+  },
   equip: async (_slot, cosmeticId) => {
     wearing = cosmeticId;
     return wardrobe();

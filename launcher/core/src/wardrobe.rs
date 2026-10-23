@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ash_account::AshAccountStatus;
 use crate::error::AshError;
 use crate::http::{HttpPort, HttpRequest, HttpResponse};
 
@@ -33,6 +34,8 @@ pub struct Equipped {
 pub struct Wardrobe {
     /// Signed in to ash: without it the catalogue shows, and nothing can be worn.
     pub signed_in: bool,
+    /// Where the player stands with ash, so "not signed in" can say why.
+    pub ash_account: AshAccountStatus,
     pub cosmetics: Vec<Cosmetic>,
     pub equipped: Equipped,
     /// The active player's own skin, as a `data:` URL, for the preview.

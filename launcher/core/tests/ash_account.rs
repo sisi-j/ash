@@ -166,6 +166,49 @@ async fn any_refusal_from_ash_is_unreachable_and_tried_again_later() {
 }
 
 #[tokio::test]
+async fn every_sign_in_is_logged_with_the_reason_ash_s_servers_gave() {
+    let reason =
+        "Mojang's session server could not confirm the join (hasJoined answered 403); try again";
+    let body = serde_json::json!({ "error": { "kind": "mojang_unavailable", "message": reason } });
+    let f =
+        signed_in(serving().route(SESSION_URL, HttpResponse::json(503, body.to_string()))).await;
+
+    f.ash.sign_in_to_ash(common::PLAYER_UUID).await;
+
+    let log = std::fs::read_to_string(f.ash.diagnostics().path()).expect("ash's log");
+    let line = log.lines().find(|l| l.contains("ash-sign-in")).expect("the failure is logged");
+    assert!(
+        line.contains("mojang_unavailable") && line.contains("hasJoined answered 403"),
+        "{line}"
+    );
+
+    let ok = signed_in(serving()).await;
+    ok.ash.sign_in_to_ash(common::PLAYER_UUID).await;
+    let log = std::fs::read_to_string(ok.ash.diagnostics().path()).expect("ash's log");
+    assert!(log.lines().any(|l| l.contains("ash-sign-in") && l.contains("signed in")), "{log}");
+}
+
+#[tokio::test]
+async fn a_failed_sign_in_is_due_again_and_a_refused_or_finished_one_is_not() {
+    let failing = signed_in(serving().host_unreachable(BACKEND)).await;
+    assert!(failing.ash.ash_sign_in_due(common::PLAYER_UUID), "never tried");
+    failing.ash.sign_in_to_ash(common::PLAYER_UUID).await;
+    assert!(failing.ash.ash_sign_in_due(common::PLAYER_UUID), "unreachable: try again later");
+
+    let refused = signed_in(serving().route(
+        JOIN_URL,
+        HttpResponse::json(403, r#"{"error":"InsufficientPrivilegesException"}"#),
+    ))
+    .await;
+    refused.ash.sign_in_to_ash(common::PLAYER_UUID).await;
+    assert!(!refused.ash.ash_sign_in_due(common::PLAYER_UUID), "trying again can't fix that");
+
+    let done = signed_in(serving()).await;
+    done.ash.sign_in_to_ash(common::PLAYER_UUID).await;
+    assert!(!done.ash.ash_sign_in_due(common::PLAYER_UUID), "signed in");
+}
+
+#[tokio::test]
 async fn a_microsoft_account_without_multiplayer_is_told_why_and_still_plays() {
     let f = signed_in(serving().route(
         JOIN_URL,
