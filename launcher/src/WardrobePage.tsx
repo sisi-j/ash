@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { SkinViewer } from "skinview3d";
-import { api, isUiError, type Cosmetic, type Wardrobe } from "./api";
+import { api, isUiError, type AshAccountStatus, type Cosmetic, type Wardrobe } from "./api";
 import { PAGES } from "./Sidebar";
 
 /**
@@ -13,11 +13,22 @@ export function WardrobePage() {
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Opening the Wardrobe signs in to ash if it has to, so this is also what
+  // "Try again" does.
+  const load = async () => {
+    setBusy(true);
+    try {
+      setWardrobe(await api.wardrobe());
+      setProblem(null);
+    } catch (e) {
+      setProblem(isUiError(e) ? e.message : "ash couldn't load the Wardrobe.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   useEffect(() => {
-    api
-      .wardrobe()
-      .then(setWardrobe)
-      .catch((e) => setProblem(isUiError(e) ? e.message : "ash couldn't load the Wardrobe."));
+    void load();
   }, []);
 
   const wear = async (cosmetic: Cosmetic | null) => {
@@ -44,9 +55,14 @@ export function WardrobePage() {
         </p>
       )}
       {wardrobe && !wardrobe.signed_in && (
-        <p className="notice" role="status">
-          Sign in to ash to wear a cape. ash signs in on its own once its servers can be reached.
-        </p>
+        <div className="notice" role="status">
+          <p>{whyNotSignedIn(wardrobe.ash_account)}</p>
+          {wardrobe.ash_account.state !== "deleted" && wardrobe.ash_account.state !== "refused" && (
+            <button className="button" disabled={busy} onClick={() => void load()}>
+              {busy ? "Signing in..." : "Try again"}
+            </button>
+          )}
+        </div>
       )}
       <div className="wardrobe">
         <Preview skin={wardrobe?.skin ?? null} cape={worn?.texture ?? null} />
@@ -76,6 +92,21 @@ export function WardrobePage() {
       </div>
     </section>
   );
+}
+
+/** Why a cape can't be chosen yet, and what happens next: never a dead end. */
+export function whyNotSignedIn(status: AshAccountStatus): string {
+  switch (status.state) {
+    case "deleted":
+      return "You deleted your ash account, so there's nothing to wear a cape on. Signing in to this Microsoft account again makes a new one.";
+    case "refused":
+      return `${status.message} Capes need an ash account.`;
+    case "not_signed_in":
+      return "ash couldn't sign you in to ash, because your Microsoft sign-in has ended. Sign in again from the account menu, then come back to wear a cape.";
+    case "unreachable":
+    case "signed_in":
+      return "ash couldn't sign you in to ash just now, so a cape can't be chosen yet. ash keeps trying in the background, or you can try again now.";
+  }
 }
 
 /**

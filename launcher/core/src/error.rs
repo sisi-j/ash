@@ -18,6 +18,11 @@ pub enum AshError {
     #[error("{url} answered {status}")]
     UnexpectedStatus { url: String, status: u16 },
 
+    /// ash's own servers said no, and said why (sisi-j/ash-backend,
+    /// contract/error.json): kept, so the log can say more than a status.
+    #[error("{url} answered {status}, {kind}: {message}")]
+    BackendFailed { url: String, status: u16, kind: String, message: String },
+
     #[error("could not parse the response from {url}: {detail}")]
     Malformed { url: String, detail: String },
 
@@ -210,6 +215,7 @@ impl AshError {
         match self {
             AshError::Transport { .. } => "transport",
             AshError::UnexpectedStatus { .. } => "unexpected_status",
+            AshError::BackendFailed { .. } => "backend_failed",
             AshError::Malformed { .. } => "malformed",
             AshError::Storage { .. } => "storage",
             AshError::OutOfSpace => "out_of_space",
@@ -263,6 +269,10 @@ impl AshError {
             }
             AshError::UnexpectedStatus { .. } => {
                 "The server returned an unexpected response. Try again shortly.".into()
+            }
+            AshError::BackendFailed { message, .. } => {
+                // One sentence, whatever the server's ends with.
+                format!("ash's servers couldn't do that this time: {}.", message.trim_end_matches('.'))
             }
             AshError::Malformed { .. } => {
                 "The response could not be understood. This is likely a bug in ash.".into()
@@ -433,6 +443,7 @@ impl AshError {
             self,
             AshError::Transport { .. }
                 | AshError::UnexpectedStatus { .. }
+                | AshError::BackendFailed { .. }
                 | AshError::SignInExpired
                 | AshError::SignInDeclined
                 | AshError::SignInFailed { .. }
@@ -527,6 +538,12 @@ mod tests {
         let every = [
             AshError::Transport { url: s.clone(), detail: s.clone() },
             AshError::UnexpectedStatus { url: s.clone(), status: 500 },
+            AshError::BackendFailed {
+                url: s.clone(),
+                status: 503,
+                kind: s.clone(),
+                message: s.clone(),
+            },
             AshError::Malformed { url: s.clone(), detail: s.clone() },
             AshError::Storage { detail: s.clone() },
             AshError::OutOfSpace,
@@ -599,6 +616,7 @@ mod tests {
         match e {
             AshError::Transport { .. }
             | AshError::UnexpectedStatus { .. }
+            | AshError::BackendFailed { .. }
             | AshError::Malformed { .. }
             | AshError::Storage { .. }
             | AshError::OutOfSpace

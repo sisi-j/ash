@@ -369,9 +369,21 @@ const STATES: State[] = [
   { name: "wardrobe-none", shows: "Only ash players see it.", reach: openPage("Wardrobe") },
   {
     name: "wardrobe-signed-out",
-    shows: "Sign in to ash to wear a cape.",
+    shows: "ash couldn't sign you in to ash just now",
     reach: openPage("Wardrobe"),
     verify: async (page) => ((await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? null : "a cape could be chosen without ash"),
+  },
+  {
+    // Not signed in on opening; Try again signs in, and the capes can be chosen.
+    name: "wardrobe-try-again",
+    shows: "ash couldn't sign you in to ash just now",
+    reach: openPage("Wardrobe"),
+    verify: async (page) => {
+      await page.getByRole("button", { name: "Try again" }).click();
+      await page.waitForTimeout(300);
+      if ((await page.getByText("ash couldn't sign you in").count()) !== 0) return "still not signed in after Try again";
+      return (await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? "the capes stayed disabled" : null;
+    },
   },
   {
     // LAUNCH GAME takes the first click, even while the files are still being

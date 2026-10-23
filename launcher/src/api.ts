@@ -316,6 +316,8 @@ export type Cosmetic = { id: string; slot: "cape" | "head" | "back"; name: strin
 /** Mirrors `ash_core::Wardrobe`. */
 export type Wardrobe = {
   signed_in: boolean;
+  /** Where the player stands with ash, so "not signed in" can say why. */
+  ash_account: AshAccountStatus;
   cosmetics: Cosmetic[];
   equipped: { cape: string | null; head: string | null; back: string | null };
   /** The active player's own skin, as a `data:` URL. */

@@ -150,6 +150,18 @@ async fn sync_and_tell(app: &tauri::AppHandle, ash: &Ash) {
 fn spawn_sync_loop(app: tauri::AppHandle, ash: Arc<Ash>) {
     tauri::async_runtime::spawn(async move {
         loop {
+            // Every account whose ash session is missing or ending, and
+            // whose last try wasn't refused: a sign-in that failed because
+            // ash's servers or Mojang couldn't answer is tried again here.
+            for account in ash.accounts().accounts {
+                if ash.ash_sign_in_due(&account.profile_id) {
+                    let status = ash.sign_in_to_ash(&account.profile_id).await;
+                    let _ = app.emit(
+                        "ash-account",
+                        AshAccountEvent { profile_id: account.profile_id, status },
+                    );
+                }
+            }
             sync_and_tell(&app, &ash).await;
             tokio::time::sleep(SYNC_EVERY).await;
         }
@@ -277,11 +289,15 @@ async fn accounts(state: tauri::State<'_, AppState>) -> Result<Accounts, UiError
 
 #[tauri::command]
 async fn select_account(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     profile_id: String,
 ) -> Result<Accounts, UiError> {
     let accounts = state.ash.select_account(&profile_id).map_err(UiError::from)?;
     spawn_warm_session(Arc::clone(&state.ash));
+    if state.ash.ash_sign_in_due(&profile_id) {
+        spawn_ash_sign_in(app, Arc::clone(&state.ash), profile_id);
+    }
     Ok(accounts)
 }
 
@@ -883,13 +899,8 @@ pub fn run() {
             if let Some(report) = self_check_report() {
                 self_check(&ash, &report);
             }
-            // Renew ash sessions that are missing or ending soon, in the
-            // background, for every account on this machine.
-            for account in ash.accounts().accounts {
-                if ash.needs_ash_sign_in(&account.profile_id) {
-                    spawn_ash_sign_in(app.handle().clone(), Arc::clone(&ash), account.profile_id);
-                }
-            }
+            // The sync loop's first turn, straight away, also renews ash
+            // sessions that are missing or ending soon.
             spawn_warm_session(Arc::clone(&ash));
             spawn_sync_loop(app.handle().clone(), Arc::clone(&ash));
             app.manage(AppState { ash, preparing: Mutex::new(HashMap::new()) });

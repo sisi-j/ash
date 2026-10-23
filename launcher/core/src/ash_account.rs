@@ -82,6 +82,18 @@ pub(crate) async fn delete(http: &dyn HttpPort, base: &str, token: &str) -> Resu
 
 // ---- the backend's answers (sisi-j/ash-backend, contract/) -----------------
 
+/// The backend's every failure (contract/error.json).
+#[derive(Deserialize)]
+struct Failure {
+    error: FailureBody,
+}
+
+#[derive(Deserialize)]
+struct FailureBody {
+    kind: String,
+    message: String,
+}
+
 #[derive(Deserialize)]
 struct Challenge {
     challenge: String,
@@ -130,7 +142,17 @@ fn decode<T: serde::de::DeserializeOwned>(
     // Every failure the backend names (contract/README.md) means the same to
     // the player: ash couldn't sign them in this time, and will try again.
     if !response.is_success() {
-        return Err(AshError::UnexpectedStatus { url: url.to_owned(), status: response.status });
+        // Its reason, when it gave one, for the log: "unavailable" alone
+        // can't tell a slow Mojang from one that turns ash away.
+        return Err(match serde_json::from_slice::<Failure>(&response.body) {
+            Ok(failure) => AshError::BackendFailed {
+                url: url.to_owned(),
+                status: response.status,
+                kind: failure.error.kind,
+                message: failure.error.message,
+            },
+            Err(_) => AshError::UnexpectedStatus { url: url.to_owned(), status: response.status },
+        });
     }
     serde_json::from_slice(&response.body)
         .map_err(|e| AshError::Malformed { url: url.to_owned(), detail: e.to_string() })

@@ -7,13 +7,16 @@ use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::FakeProcessPort;
 use ash_core::servers::FakeServerPort;
-use ash_core::{Ash, Config};
+use ash_core::{Ash, AshAccountStatus, Config};
 
 mod common;
 
 const BACKEND: &str = "https://api.ash.test";
 const COSMETICS_URL: &str = "https://api.ash.test/v1/cosmetics";
 const WARDROBE_URL: &str = "https://api.ash.test/v1/wardrobe";
+const CHALLENGE_URL: &str = "https://api.ash.test/v1/session/challenge";
+const SESSION_URL: &str = "https://api.ash.test/v1/session";
+const JOIN_URL: &str = "https://sessionserver.mojang.com/session/minecraft/join";
 /// The skin URL `common::with_auth_routes` gives the player.
 const SKIN_URL: &str = "https://textures/abc";
 const PNG: &[u8] = b"\x89PNG pretend";
@@ -31,8 +34,20 @@ fn texture_url() -> String {
     catalogue["cosmetics"][0]["texture_url"].as_str().unwrap().to_owned()
 }
 
+/// The backend's session answer, for this test's player, ending far off.
+fn session_answer() -> HttpResponse {
+    let mut body: serde_json::Value = serde_json::from_str(&contract("session")).unwrap();
+    body["account"]["uuid"] = common::PLAYER_UUID.into();
+    body["account"]["username"] = common::PLAYER_NAME.into();
+    body["session"]["expires_at"] = 99_999_999_999_999u64.into();
+    HttpResponse::ok(body.to_string())
+}
+
 fn serving() -> Arc<FakeHttp> {
     common::with_auth_routes(FakeHttp::new())
+        .route(JOIN_URL, HttpResponse::status(204))
+        .route(CHALLENGE_URL, HttpResponse::ok(contract("session-challenge")))
+        .route(SESSION_URL, session_answer())
         .route(COSMETICS_URL, HttpResponse::ok(contract("cosmetics")))
         .route(WARDROBE_URL, HttpResponse::ok(contract("wardrobe")))
         .route(texture_url(), HttpResponse::ok(PNG))
@@ -92,12 +107,30 @@ async fn the_wardrobe_shows_the_catalogue_what_is_worn_and_the_player_s_own_skin
 }
 
 #[tokio::test]
-async fn without_an_ash_session_the_catalogue_shows_and_nothing_is_worn() {
+async fn opening_the_wardrobe_without_an_ash_session_signs_in_then_and_there() {
     let f = signed_in(serving(), false).await;
 
     let wardrobe = f.ash.wardrobe().await.expect("wardrobe");
 
+    assert!(wardrobe.signed_in, "signed in on opening, not at the next background try");
+    assert_eq!(wardrobe.ash_account, AshAccountStatus::SignedIn);
+    assert_eq!(f.http.hits(SESSION_URL), 1);
+    assert_eq!(wardrobe.equipped.cape.as_deref(), Some("cape.ember"));
+    f.ash.equip("cape", Some("cape.ember")).await.expect("and can wear one");
+}
+
+#[tokio::test]
+async fn when_ash_can_t_sign_in_the_catalogue_shows_nothing_is_worn_and_the_page_says_why() {
+    let refusing = serving().route(
+        SESSION_URL,
+        HttpResponse::json(503, r#"{"error":{"kind":"mojang_unavailable","message":"x"}}"#),
+    );
+    let f = signed_in(refusing, false).await;
+
+    let wardrobe = f.ash.wardrobe().await.expect("wardrobe");
+
     assert!(!wardrobe.signed_in);
+    assert_eq!(wardrobe.ash_account, AshAccountStatus::Unreachable);
     assert_eq!(wardrobe.cosmetics.len(), 1);
     assert_eq!(wardrobe.equipped.cape, None);
     assert_eq!(f.http.hits(WARDROBE_URL), 0);
