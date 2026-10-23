@@ -154,6 +154,38 @@ Every feature is level.
 
 None depended on a feature, and nothing recorded explains them. In the second sitting, every run drew 246 to 255 sections, logged at its end, and none came out fast. So the fast runs left out remain unexplained; if they come back, the section count is the first thing to compare.
 
+## FPS marks for cosmetics, 23 October 2026
+
+The same laptop and scene as the FPS marks above, plugged in. Each target's runs were in one sitting: everything on, cosmetics off, everything on. The change and its uncertainty are worked out as above. The player is a spectator in first person, so no cape is drawn: what this measures is the cape hooks and the background lookup.
+
+| Target | Off | On | Change | Uncertainty |
+| --- | --- | --- | --- | --- |
+| 1.8.9 | 883.3 FPS | 882.6 FPS | -0.1% | ±1.6% |
+| 1.21.11 | 1086.3 FPS | 1101.9 FPS | +1.4% | ±0.4% |
+
+Cosmetics are level on both.
+
+**Frame rates are higher than on 8 October** (about 880 against 575 on 1.8.9, and 1,090 against 700 on 1.21.11). Medal, Lunar Client and CurseForge were closed for this sitting, and they weren't checked for before. So compare runs only within one sitting.
+
+**Two sittings were left out**, both on this day, before those apps were closed:
+- In the first, the laptop was in light use. Five of six runs marked themselves not comparable, and on 1.8.9 the cosmetics-off run reached 935 FPS against 395 and 493 for the runs either side. The game's `display_update`, a quarter of every other 1.8.9 frame, was missing from its profile, which fits a game window that was covered.
+- In the second, nobody used the laptop, but four of six runs were over the 2% limit.
+
+**On 1.21.11, runs landed at one of two speeds.** Each run was steady within itself (under ±0.6%), but came out at either about 1,100 or about 920 FPS, whichever setting it had:
+
+| Run | Cosmetics | Average | Uncertainty | 1% low |
+| --- | --- | --- | --- | --- |
+| 1.21.11-marks-base-20261023-215124 | on | 1093.4 FPS | ±0.4% | 430.1 FPS |
+| 1.21.11-marks-cosmetics-off-20261023-215517 | off | 1086.3 FPS | ±0.3% | 429.8 FPS |
+| 1.21.11-marks-base-20261023-220037 | on | 923.5 FPS | ±0.4% | 410.6 FPS |
+| 1.21.11-marks-base-20261023-220520 | on | 1110.5 FPS | ±0.2% | 429.4 FPS |
+| 1.21.11-marks-cosmetics-off-20261023-220937 | off | 913.3 FPS | ±0.2% | 391.0 FPS |
+| 1.21.11-marks-base-20261023-221325 | on | 921.2 FPS | ±0.6% | 378.5 FPS |
+
+Averaging a run at one speed with a run at the other says nothing about cosmetics: the second sitting's own three would read +11.2%. So the mark is from the three fast runs. The three slow ones, -off-220937 against -220037 and -221325, give +1.0% ±0.4%, which is level too.
+
+The section counts don't explain it: slow runs drew 248 and 255 sections, as usual. The cause is unknown. If it comes back, logging the GPU's clock speed during the runs is the next thing to try.
+
 ## Lithium on 1.21.11 (#44), 8 October 2026
 
 The same laptop, in one sitting: Lithium `0.21.4+mc1.21.11` off, on, off, on. First in singleplayer, then on a vanilla dedicated server on this machine (127.0.0.1, `-Pbench.server`), each after a throwaway warm-up run. ash's features were on their defaults throughout. Only the summaries are committed.

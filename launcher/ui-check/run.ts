@@ -354,6 +354,26 @@ const STATES: State[] = [
   },
   { name: "settings", shows: "When the game starts", reach: openPage("Settings") },
   {
+    name: "wardrobe",
+    shows: "Only ash players see it.",
+    reach: openPage("Wardrobe"),
+    verify: async (page) => {
+      if ((await page.getByRole("radio", { name: "Ember" }).getAttribute("aria-checked")) !== "true") return "Ember not shown as worn";
+      await page.getByRole("radio", { name: "Midnight" }).click();
+      await page.waitForTimeout(200);
+      return (await page.getByRole("radio", { name: "Midnight" }).getAttribute("aria-checked")) === "true"
+        ? null
+        : "choosing Midnight didn't wear it";
+    },
+  },
+  { name: "wardrobe-none", shows: "Only ash players see it.", reach: openPage("Wardrobe") },
+  {
+    name: "wardrobe-signed-out",
+    shows: "Sign in to ash to wear a cape.",
+    reach: openPage("Wardrobe"),
+    verify: async (page) => ((await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? null : "a cape could be chosen without ash"),
+  },
+  {
     // LAUNCH GAME takes the first click, even while the files are still being
     // checked - and the check finishing afterwards doesn't undo the launch.
     name: "launch-during-check",

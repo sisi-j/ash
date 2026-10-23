@@ -138,6 +138,15 @@ public final class Settings {
             "Draw the game's fancy clouds with half the work; they look exactly as the game's own do. 1.8.9 only."
                     + " true or false.");
 
+    public static final OnOff COSMETICS = new OnOff(Feature.COSMETICS, Category.COSMETICS,
+            "Capes on ash players, yours included. Only ash players see them.", "cosmetics.enabled", true,
+            "Draw ash players' capes, yours included, chosen in the launcher's Wardrobe. Only ash players see"
+                    + " them. true or false.");
+
+    public static final OnOff COSMETICS_HIDE_OTHERS = new OnOff(Feature.COSMETICS, "cosmetics.hide-others",
+            "Hide other players' cosmetics", false,
+            "Show only your own cosmetics, so nothing on other players distracts from a fight. true or false.");
+
     public static final OnOff FASTER_VIEW_SCAN = new OnOff(Feature.FASTER_VIEW_SCAN, Category.PERFORMANCE,
             "Checks the blocks round you for what you can see only when one changes. Looks exactly the same.",
             "faster-view-scan.enabled", true,
@@ -186,7 +195,8 @@ public final class Settings {
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
             HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
             HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION,
-            PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR, FASTER_CLOUDS, FASTER_VIEW_SCAN));
+            PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR, FASTER_CLOUDS, FASTER_VIEW_SCAN, COSMETICS,
+            COSMETICS_HIDE_OTHERS));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;

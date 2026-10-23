@@ -152,7 +152,8 @@ class SettingsTest {
                 Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT,
                 Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH,
                 Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION, Settings.PANEL_SIZE,
-                Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR, Settings.FASTER_CLOUDS, Settings.FASTER_VIEW_SCAN),
+                Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR, Settings.FASTER_CLOUDS, Settings.FASTER_VIEW_SCAN,
+                Settings.COSMETICS, Settings.COSMETICS_HIDE_OTHERS),
                 Settings.declared());
 
         Settings.load(configDir);
@@ -223,7 +224,13 @@ class SettingsTest {
                         + "faster-clouds.enabled=true\n"
                         + "# Reuse the game's scan of the blocks round the camera until one of them changes; what you"
                         + " see is exactly the same. 1.8.9 only. true or false.\n"
-                        + "faster-view-scan.enabled=true\n",
+                        + "faster-view-scan.enabled=true\n"
+                        + "# Draw ash players' capes, yours included, chosen in the launcher's Wardrobe. Only ash"
+                        + " players see them. true or false.\n"
+                        + "cosmetics.enabled=true\n"
+                        + "# Show only your own cosmetics, so nothing on other players distracts from a fight."
+                        + " true or false.\n"
+                        + "cosmetics.hide-others=false\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

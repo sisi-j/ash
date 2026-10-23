@@ -120,6 +120,17 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         checkAshLoaded();
 
+        // ash's CDN, for the cape test, from before the game first asks
+        // whose cape is whose: a profile that wasn't there is not asked about
+        // again for a couple of minutes.
+        TestCdn cdn;
+        try {
+            cdn = new TestCdn();
+        } catch (java.io.IOException couldNotStart) {
+            fail("the test's CDN did not start on port " + TestCdn.PORT + ": " + couldNotStart);
+            return;
+        }
+
         // Flat, because generation is the slow part of starting a world and a
         // software-GL runner is slow enough already. On the client thread,
         // because that is the only thread the game will start a world from.
@@ -153,6 +164,8 @@ public final class AshSmokeTest implements ClientModInitializer {
         toggleSprintWorks(client);
         freelookWorks(client);
         snaplookWorks(client);
+        capeWorks(client);
+        cdn.close();
         pingReadoutIsHiddenInSingleplayer(client);
         settingsScreenWorks(client);
         crosshairOptionsWork(client);
@@ -230,6 +243,7 @@ public final class AshSmokeTest implements ClientModInitializer {
             "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
             "{ \"id\": \"faster-clouds\", \"name\": \"Faster clouds\", \"status\": \"loaded\" }",
             "{ \"id\": \"faster-view-scan\", \"name\": \"Faster view scan\", \"status\": \"loaded\" }",
+            "{ \"id\": \"cosmetics\", \"name\": \"Cosmetics\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             expectReportSays(feature);
@@ -832,6 +846,31 @@ public final class AshSmokeTest implements ClientModInitializer {
                 fail("letting go of snaplook left view " + back + ", not the " + had + " it had");
             }
         }
+        onClient(client, () -> client.options.perspective = 0);
+    }
+
+    /**
+     * The player's ash cape, from the test's CDN, drawn by the game's own cape
+     * renderer in place of its texture (spec 0004, step 4): the cape texture
+     * the renderer asks the player for is ash's, and a screenshot from behind
+     * shows it.
+     */
+    private static void capeWorks(MinecraftClient client) {
+        long deadline = System.currentTimeMillis() + 20_000L;
+        while (true) {
+            net.minecraft.util.Identifier cape = onClient(client, () -> client.player.getSkinId());
+            if (cape != null && cape.getNamespace().equals("ash")) {
+                break;
+            }
+            if (System.currentTimeMillis() > deadline) {
+                fail("the player's cape was never ash's from " + TestCdn.CAPE + "; it was " + cape + ", for player "
+                        + onClient(client, () -> client.player.getUuid()));
+            }
+            pause(200L);
+        }
+        onClient(client, () -> client.options.perspective = 1);
+        pause(500L);
+        screenshot(client, "ash-cape.png");
         onClient(client, () -> client.options.perspective = 0);
     }
 

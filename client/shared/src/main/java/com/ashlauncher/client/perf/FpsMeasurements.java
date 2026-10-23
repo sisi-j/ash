@@ -20,7 +20,9 @@ import java.util.List;
  * runs between two with everything on. The change is the off run's average
  * against the average of the two either side, and its uncertainty is the three
  * runs' together. A feature whose three runs did not agree with themselves was
- * run again, three runs at a time, in a second sitting. The results, and the
+ * run again, three runs at a time, in a second sitting. Cosmetics, added
+ * later, were measured on 23 October 2026 the same way, in sittings of their
+ * own. The results, and the
  * runs left out and why, are in {@code client/benchmark-results}, under
  * <i>FPS marks</i>.
  *
@@ -103,7 +105,18 @@ public final class FpsMeasurements {
             new FpsMeasurement(Feature.HIT_COLOUR, Target.V1_21_11, 713.3, 702.7, 0.8,
                     "1.21.11-marks-hit-colour-off-20261008-052031",
                     "1.21.11-marks-base-20261008-051627",
-                    "1.21.11-marks-base-20261008-052517")
+                    "1.21.11-marks-base-20261008-052517"),
+            // Cosmetics, 23 October 2026, in sittings of their own. On 1.21.11
+            // the runs came out at one of two speeds, whatever was switched,
+            // so the mark is from three runs at the same speed.
+            new FpsMeasurement(Feature.COSMETICS, Target.V1_8_9, 883.3, 882.6, 1.6,
+                    "1.8.9-marks-cosmetics-off-20261023-214411",
+                    "1.8.9-marks-base-20261023-214035",
+                    "1.8.9-marks-base-20261023-214746"),
+            new FpsMeasurement(Feature.COSMETICS, Target.V1_21_11, 1086.3, 1101.9, 0.4,
+                    "1.21.11-marks-cosmetics-off-20261023-215517",
+                    "1.21.11-marks-base-20261023-215124",
+                    "1.21.11-marks-base-20261023-220520")
     ));
 
     private FpsMeasurements() {

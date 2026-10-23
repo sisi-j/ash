@@ -1,11 +1,12 @@
 import { Icon, type IconName } from "./icons";
 
 /** The launcher's pages, one per sidebar button. */
-export type Page = "play" | "mods" | "news" | "settings";
+export type Page = "play" | "wardrobe" | "mods" | "news" | "settings";
 
 /** Each page's name and icon, in the sidebar's order; Settings sits apart at the bottom. */
 export const PAGES: Record<Page, { label: string; icon: IconName }> = {
   play: { label: "Play", icon: "play" },
+  wardrobe: { label: "Wardrobe", icon: "wardrobe" },
   mods: { label: "Mods", icon: "mods" },
   news: { label: "News", icon: "news" },
   settings: { label: "Settings", icon: "settings" },

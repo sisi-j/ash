@@ -64,6 +64,17 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext context) {
+        // ash's CDN, for the cape test, from before the game first asks who
+        // wears what: the player's own skin is asked for as soon as a hand is
+        // drawn, and a profile that wasn't there is not asked again for a while.
+        try (TestCdn cdn = new TestCdn()) {
+            runTestWithCdn(context);
+        } catch (IOException couldNotStart) {
+            throw new AssertionError("the test's CDN did not start on port " + TestCdn.PORT, couldNotStart);
+        }
+    }
+
+    private void runTestWithCdn(ClientGameTestContext context) {
         // Far enough in that the vanilla client is ticking rather than merely
         // started.
         context.waitTicks(20);
@@ -108,6 +119,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             "{ \"id\": \"snaplook\", \"name\": \"Snaplook\", \"status\": \"loaded\" }",
             "{ \"id\": \"ping-readout\", \"name\": \"Ping readout\", \"status\": \"loaded\" }",
             "{ \"id\": \"hit-colour\", \"name\": \"Hit colour\", \"status\": \"loaded\" }",
+            "{ \"id\": \"cosmetics\", \"name\": \"Cosmetics\", \"status\": \"loaded\" }",
             "{ \"id\": \"settings-screen\", \"name\": \"ash's settings screen\", \"status\": \"loaded\" }",
         }) {
             assertReportSays(feature);
@@ -155,6 +167,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             toggleSprintWorks(context, server);
             freelookWorks(context, server);
             snaplookWorks(context);
+            capeWorks(context);
             pingReadoutWorks(context);
             settingsScreenWorks(context);
             crosshairOptionsWork(context);
@@ -659,6 +672,29 @@ public class AshLoadsGameTest implements FabricClientGameTest {
                 throw new AssertionError("letting go of snaplook left " + back + ", not the " + had + " it had");
             }
         }
+        context.runOnClient(c -> c.options.setCameraType(CameraType.FIRST_PERSON));
+    }
+
+    /**
+     * The player's ash cape, from the test's CDN, drawn by the game's own cape
+     * layer in place of its texture (spec 0004, step 4): the skin the game
+     * draws the player with carries ash's texture, and a screenshot from
+     * behind shows it.
+     */
+    private static void capeWorks(ClientGameTestContext context) {
+        long deadline = System.nanoTime() + 20_000_000_000L;
+        while (!context.computeOnClient(c -> {
+            var cape = c.player.getSkin().cape();
+            return cape != null && cape.texturePath().getNamespace().equals("ash");
+        })) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("the player's skin never carried ash's cape from " + TestCdn.CAPE);
+            }
+            context.waitTicks(2);
+        }
+        context.runOnClient(c -> c.options.setCameraType(CameraType.THIRD_PERSON_BACK));
+        context.waitTicks(5);
+        context.takeScreenshot("ash-cape");
         context.runOnClient(c -> c.options.setCameraType(CameraType.FIRST_PERSON));
     }
 

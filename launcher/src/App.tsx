@@ -24,6 +24,7 @@ import { InstancePage } from "./InstancePage";
 import { useLaunch } from "./launch";
 import { LaunchFailure } from "./LaunchFailure";
 import { NewsPage } from "./NewsPage";
+import { WardrobePage } from "./WardrobePage";
 import { DeletedElsewhereQuestion } from "./Sync";
 import { PlayPage } from "./PlayPage";
 import { SettingsPage } from "./SettingsPage";
@@ -315,6 +316,8 @@ export default function App() {
             headline="Mods are coming soon"
             detail="Third-party mods you add to an instance will show here."
           />
+        ) : page === "wardrobe" ? (
+          <WardrobePage />
         ) : page === "news" ? (
           <NewsPage news={news} />
         ) : page === "settings" ? (

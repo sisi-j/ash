@@ -22,7 +22,8 @@
     "BufferBuilderOffsetsAccess",
     "WorldRendererViewScanMixin",
     "WorldViewScanMixin",
-    "AchievementNotificationPanelMixin"
+    "AchievementNotificationPanelMixin",
+    "AbstractClientPlayerEntityCapeMixin"
   ],
   "injectors": {
     "defaultRequire": 0

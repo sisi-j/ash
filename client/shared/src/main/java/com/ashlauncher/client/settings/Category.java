@@ -8,7 +8,8 @@ public enum Category {
     PVP("PvP"),
     HUD("HUD"),
     MOVEMENT("Movement"),
-    PERFORMANCE("Performance");
+    PERFORMANCE("Performance"),
+    COSMETICS("Cosmetics");
 
     private final String displayName;
 
