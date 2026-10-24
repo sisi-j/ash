@@ -45,7 +45,7 @@ A named, isolated game directory paired with exactly one version target and exac
 _Avoid_: profile, installation, version, pack
 
 **Version target**:
-A specific Minecraft version ash supports as a first-class build. Not a range — each target is its own build and its own maintenance burden.
+A specific Minecraft version ash supports as a first-class build: 1.21.11, 1.20.4 and 1.8.9. Not a range — each target is its own build and its own maintenance burden.
 _Avoid_: version range, supported version, MC version
 
 **Loader**:
@@ -115,7 +115,7 @@ The feature that draws a **mark** at the crosshair when the server confirms one 
 _Avoid_: hit marker (in docs), hitmarker, damage indicator
 
 **Third-party mod**:
-A mod the player supplies themselves, loaded only when they opt in. It lives in the instance's `mods` folder, which is the player's alone: ash hands its own client and bundled mods to the loader by path and never puts anything there. While third-party mods are off, the loader is pointed at an empty folder of ash's instead. The opt-in is per instance, off by default, and machine-local: it decides which files in this machine's folder load. A crash with them on names them and offers to play without them, once, without changing the setting.
+A mod the player supplies themselves, loaded only when they opt in. It lives in the instance's `mods` folder, which is the player's alone: ash hands its own client and bundled mods to the loader by path, and puts something there only when the player installs it from the Mods page (ADR-0026). While third-party mods are off, the loader is pointed at an empty folder of ash's instead. The opt-in is per instance, off by default, and machine-local: it decides which files in this machine's folder load. A crash with them on names them and offers to play without them, once, without changing the setting.
 _Avoid_: mod (unqualified), external mod, custom mod
 
 ### Cosmetics
@@ -161,3 +161,13 @@ _Avoid_: favourite, bookmark, saved server
 **News post**:
 One entry in the launcher's news and changelog feed, written and published on the backend's `/admin` page, which Cloudflare Access guards.
 _Avoid_: announcement, article, update
+
+### Releasing
+
+**Release**:
+One version of ash, published to GitHub Releases on its own when a merge to `main` changes the version and its installer passes the installed-app test (ADR-0025). Alpha releases are numbered `0.1.0-alpha.N`, and are ordinary releases rather than GitHub pre-releases.
+_Avoid_: build (that's any compile), deploy (that's the backend)
+
+**Update**:
+A newer release, offered by the launcher when it starts, with its section of `CHANGELOG.md` as what's new. Signed with ash's update key, and installed only when the player chooses, never while a game ash started is running.
+_Avoid_: patch, upgrade, news post (that's the News page)

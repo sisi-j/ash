@@ -1,5 +1,7 @@
 # Two version targets to start: 1.8.9 and 1.21.11
 
+> **Amended 2026-10-24:** a third target, 1.20.4, is added for the alpha (ADR-0027, spec 0005), ahead of any bulk addition.
+
 The original brief called for 1.16 through 1.21.x plus 1.8.9, but a range is not a set — each minor version is its own mixin target, and every feature would be written and regression-tested six or seven times. Starting with 1.8.9 and one modern target exercises both loader paths and covers where competitive players actually are, at the smallest maintenance surface that proves the pattern.
 
 ## Revised 2026-09-15: the modern target is 1.21.11, and that is now a choice
