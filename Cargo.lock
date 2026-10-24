@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "ash-core"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "aws-lc-rs",
@@ -93,10 +93,11 @@ dependencies = [
 
 [[package]]
 name = "ash-launcher"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "ash-core",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
