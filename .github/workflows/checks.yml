@@ -190,6 +190,8 @@ jobs:
           cache-dependency-path: launcher/package-lock.json
       - run: npm ci
         working-directory: launcher
+      # One version everywhere, with its CHANGELOG.md section (ADR-0025).
+      - run: node scripts/release.mjs check
       - run: npx tsc --noEmit
         working-directory: launcher
       # Unit tests on node's own runner: the news Markdown parser.
@@ -264,9 +266,21 @@ jobs:
         working-directory: launcher
 
       # The installer a player gets: `build:installer`, which carries the
-      # client jars.
-      - run: npm run build:installer
+      # client jars. With the update key (every run but a fork's pull
+      # request), the update files are signed too, so this is the very
+      # installer a release publishes (ADR-0025).
+      - name: Build the installer
         working-directory: launcher
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            npm run build:installer -- --config src-tauri/tauri.release.conf.json
+          else
+            npm run build:installer
+          fi
 
       # Silently, per machine, as the installer is configured to install;
       # the runner is an administrator, so there is no prompt to answer.
@@ -286,3 +300,63 @@ jobs:
           $check = Start-Process -FilePath $exe.FullName -ArgumentList '--self-check', "`"$report`"" -Wait -PassThru
           if (Test-Path $report) { Get-Content $report } else { Write-Output 'no report was written' }
           if ($check.ExitCode -ne 0) { throw "the installed ash's self-check exited with $($check.ExitCode)" }
+
+      # Kept for the release job: what was installed and checked here is
+      # what it publishes.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ash-installer
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/nsis/*-setup.exe.sig
+          if-no-files-found: error
+
+  release:
+    # A merge to main whose version is dated in CHANGELOG.md and has no
+    # release yet publishes it: the installer every job above has passed,
+    # its signature, and the updater's latest.json (ADR-0025). Anything else
+    # skips. An ordinary release, not a pre-release, because "latest" -
+    # which the updater and the download page read - skips pre-releases.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [rust, client, client-game-test, typescript, backend-contract, installed]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Decide
+        id: decide
+        run: |
+          version=$(node scripts/release.mjs version)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$(node scripts/release.mjs status)" != release ]; then
+            echo "$version is unreleased in CHANGELOG.md: nothing to publish."
+          elif gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version is already released."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.decide.outputs.publish == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: ash-installer
+          path: installer
+      - name: Publish
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          version='${{ steps.decide.outputs.version }}'
+          setup=$(ls installer/*-setup.exe)
+          name=$(basename "$setup")
+          if [ ! -f "$setup.sig" ]; then echo "no update signature for $name"; exit 1; fi
+          cp "$setup" installer/ash-setup.exe
+          url="https://github.com/${{ github.repository }}/releases/download/v$version/$name"
+          node scripts/release.mjs latest-json "$url" "$setup.sig" > installer/latest.json
+          node scripts/release.mjs notes > notes.md
+          gh release create "v$version" --title "ash $version" --notes-file notes.md \
+            --target "${{ github.sha }}" --latest \
+            "$setup" "$setup.sig" installer/ash-setup.exe installer/latest.json

@@ -16,6 +16,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 ash-core.workspace = true
 serde.workspace = true
+# tauri::generate_context! writes plugin configuration (the updater's key) as JSON values.
+serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
