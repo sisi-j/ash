@@ -21,4 +21,6 @@ serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+# Updates (ADR-0025): signed releases, checked against the key in tauri.conf.json.
+tauri-plugin-updater = "2"
 tokio = { workspace = true, features = ["time"] }

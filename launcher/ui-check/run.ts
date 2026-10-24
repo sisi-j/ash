@@ -373,6 +373,37 @@ const STATES: State[] = [
     reach: openPage("Wardrobe"),
     verify: async (page) => ((await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? null : "a cape could be chosen without ash"),
   },
+  // Updates (ADR-0025): offered with what's new, never while a game runs.
+  {
+    name: "update-available",
+    shows: "ash 0.1.0-alpha.2 is ready.",
+    verify: async (page) => {
+      await page.getByRole("button", { name: "What's new" }).click();
+      return (await page.getByText("search Modrinth from the Mods page").count()) === 1 ? null : "what's new didn't open";
+    },
+  },
+  {
+    name: "update-installing",
+    shows: "Downloading… 40%",
+    reach: (page) => page.getByRole("button", { name: "Update", exact: true }).click(),
+  },
+  {
+    name: "update-failed",
+    shows: "the download was interrupted",
+    reach: (page) => page.getByRole("button", { name: "Update", exact: true }).click(),
+  },
+  {
+    name: "update-blocked",
+    shows: "Close the game to update",
+    verify: async (page) =>
+      (await page.getByRole("button", { name: "Update", exact: true }).isDisabled()) ? null : "Update could start mid-game",
+  },
+  {
+    name: "update-later",
+    shows: "LAUNCH GAME",
+    reach: (page) => page.getByRole("button", { name: "Later" }).click(),
+    verify: async (page) => ((await page.getByText("is ready.").count()) === 0 ? null : "Later didn't hide the bar"),
+  },
   {
     // Not signed in on opening; Try again signs in, and the capes can be chosen.
     name: "wardrobe-try-again",

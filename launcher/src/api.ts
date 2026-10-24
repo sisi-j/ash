@@ -362,6 +362,11 @@ export function isUiError(value: unknown): value is UiError {
 
 // ---- commands --------------------------------------------------------------
 
+/** Mirrors the launcher's `AvailableUpdate`: a newer release, and its what's new (ADR-0025). */
+export type AvailableUpdate = { version: string; notes: string };
+
+export type UpdateProgress = { downloaded: number; total: number | null };
+
 export const api = {
   catalogue: () => invoke<Catalogue>("catalogue"),
   refreshCatalogue: () => invoke<Catalogue>("refresh_catalogue"),
@@ -390,6 +395,10 @@ export const api = {
     invoke<SyncStatus>("resolve_deleted_elsewhere", { id, deleteHere }),
   markNewsSeen: () => invoke<void>("mark_news_seen"),
   openNewsLink: (url: string) => invoke<void>("open_news_link", { url }),
+  /** A newer release, or null - also when the check couldn't be made. */
+  checkForUpdate: () => invoke<AvailableUpdate | null>("check_for_update"),
+  /** Install it: ash closes and the new version opens. Refused while a game runs. */
+  installUpdate: () => invoke<void>("install_update"),
 
   planInstance: (id: InstanceId) => invoke<Plan>("plan_instance", { id }),
   /** Returns as soon as the work is scheduled; watch the events for outcome. */
@@ -517,6 +526,11 @@ export function onSync(handler: (status: SyncStatus) => void) {
 /** An ash sign-in in the background finished, however it went. */
 export function onAshAccount(handler: (event: AshAccountEvent) => void) {
   return listen<AshAccountEvent>("ash-account", (e) => handler(e.payload));
+}
+
+/** How far an update's download has got. */
+export function onUpdateProgress(handler: (progress: UpdateProgress) => void) {
+  return listen<UpdateProgress>("update-progress", (e) => handler(e.payload));
 }
 
 export function onLaunchFinished(handler: (outcome: LaunchOutcome) => void) {

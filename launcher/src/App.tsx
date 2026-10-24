@@ -19,6 +19,7 @@ import {
   LOADER_LABELS,
 } from "./api";
 import { AshAccountNotice } from "./AshAccount";
+import { UpdateBar } from "./UpdateBar";
 import { Icon } from "./icons";
 import { InstancePage } from "./InstancePage";
 import { useLaunch } from "./launch";
@@ -281,6 +282,8 @@ export default function App() {
             {error.message}
           </p>
         )}
+
+        <UpdateBar gameRunning={launch.phase.at === "running"} />
 
         {!signingIn &&
           sync?.deleted_elsewhere.map((gone) => (

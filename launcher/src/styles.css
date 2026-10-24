@@ -1703,6 +1703,46 @@ button {
   gap: 8px;
 }
 
+/* ---- the update bar (ADR-0025) ---- */
+
+.update-bar {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--fill);
+  font-size: 13px;
+}
+
+.update-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.update-bar-row p {
+  flex: 1;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.update-bar-row b {
+  color: var(--text);
+}
+
+.update-bar-failed {
+  margin: 10px 0 0;
+  color: var(--red-text);
+}
+
+.update-bar-notes {
+  margin: 12px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 /* ---- the Wardrobe ---- */
 
 .wardrobe {
