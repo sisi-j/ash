@@ -225,4 +225,4 @@ Everything Phase 4 has built ships in it: ash accounts, news, synced settings an
 
 ## Tracker
 
-To be filed as a GitHub issue labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`, with its tickets as sub-issues and blocking links set. This file is the source of truth, and the issue is the tracker entry.
+Filed as [#139](https://github.com/sisi-j/ash/issues/139), labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`. Its 15 tickets are sub-issues, across this repository, [`sisi-j/ash-backend`](https://github.com/sisi-j/ash-backend) (#19) and `sisi-j/ash-site` (#4), with blocking links set. This file is the source of truth, and the issue is the tracker entry.
