@@ -362,6 +362,15 @@ export function isUiError(value: unknown): value is UiError {
 
 // ---- commands --------------------------------------------------------------
 
+/** What a "Copy report" is about (spec 0005). */
+export type ReportRequest = {
+  instance: InstanceId | null;
+  errorKind: string | null;
+  errorMessage: string | null;
+  /** A crash: the game's last output goes in too. */
+  crashed: boolean;
+};
+
 /** Links the launcher shows that can change without a release (spec 0005). */
 export type Links = { feedback_url: string | null };
 
@@ -401,6 +410,8 @@ export const api = {
   /** This launcher's version, as released: `0.1.0-alpha.1`. */
   appVersion: () => invoke<string>("app_version"),
   links: () => invoke<Links>("links"),
+  /** The text "Copy report" shows and copies. Never sent anywhere. */
+  report: (request: ReportRequest) => invoke<string>("report", request),
   /** Opens the Discord invite ash last saw; the window never names the address. */
   openFeedbackLink: () => invoke<void>("open_feedback_link"),
   firstRunNoteDismissed: () => invoke<boolean>("first_run_note_dismissed"),

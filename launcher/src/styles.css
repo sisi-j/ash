@@ -1678,6 +1678,47 @@ button {
   cursor: pointer;
 }
 
+.error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.error > span {
+  flex: 1;
+}
+
+.error-report {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.report-scrim {
+  z-index: 30;
+}
+
+.report {
+  max-width: 640px;
+}
+
+.report-note {
+  margin: 8px 0 12px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.report-text {
+  max-height: 260px;
+  overflow: auto;
+  text-align: left;
+  font-size: 11px;
+}
+
 /* A feature of ash's did not load. A quiet grey line, not a box and not red:
    the game still played, there is nothing to click, and nothing the player
    did wrong. */

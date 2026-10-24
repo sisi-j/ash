@@ -35,9 +35,11 @@ mod player_certificate;
 mod preferences;
 mod profile;
 mod recent_servers;
+mod report;
 mod runtime;
 mod server_list;
 mod sync;
+pub mod system;
 mod version;
 mod wardrobe;
 
@@ -702,6 +704,40 @@ impl Ash {
     }
 
     // ---- the alpha (spec 0005) -------------------------------------------
+
+    /// "Copy report": ash's version and Windows', the instance and error it's
+    /// about, the end of a crashed game's output, and the end of ash's own
+    /// log. Shown to the player before it's copied; ash never sends it.
+    pub fn report(
+        &self,
+        ash_version: &str,
+        instance: Option<&InstanceId>,
+        error_kind: Option<&str>,
+        error_message: Option<&str>,
+        crashed: bool,
+    ) -> String {
+        let describe = |id: &InstanceId| -> Option<String> {
+            let found = self.instance(id).ok()?;
+            let loader = match found.loader {
+                Loader::Vanilla => "vanilla",
+                Loader::Fabric => "Fabric",
+                Loader::LegacyFabric => "Legacy Fabric",
+            };
+            let mods = self.overrides(id).map(|o| o.third_party_mods).unwrap_or(false);
+            Some(format!(
+                "{}, {loader}, your mods {}",
+                found.version_id,
+                if mods { "on" } else { "off" }
+            ))
+        };
+        let subject = report::ReportSubject {
+            instance: instance.and_then(describe),
+            error_kind: error_kind.map(str::to_owned),
+            error_message: error_message.map(str::to_owned),
+            game_output: instance.filter(|_| crashed).map(|id| self.game_log(id)),
+        };
+        report::build(ash_version, &system::windows_version(), self.diagnostics.path(), &subject)
+    }
 
     /// The links the launcher shows, fresh from ash's backend, or the last
     /// ones seen when it can't be reached.

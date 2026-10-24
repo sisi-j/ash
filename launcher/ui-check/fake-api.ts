@@ -464,6 +464,20 @@ export const api: typeof real.api = {
     (window as unknown as { openedLink?: string }).openedLink = url;
   },
   appVersion: () => resolve("0.1.0-alpha.1"),
+  report: (request) =>
+    resolve(
+      [
+        "ash report",
+        "ash: 0.1.0-alpha.1",
+        "Windows: Windows 11 Pro 24H2 (build 26200)",
+        "Instance: 1.21.11, Fabric, your mods off",
+        `Error: ${request.errorKind}: ${request.errorMessage}`,
+        ...(request.crashed ? ["", "--- the game's last 200 lines ---", ...CRASH_LOG] : []),
+        "",
+        "--- ash's last 200 log lines ---",
+        "2026-10-24T21:00:00Z  INFO  launch  instance=npm-test version=1.21.11",
+      ].join("\n"),
+    ),
   links: () => resolve({ feedback_url: state === "no-feedback-link" ? null : "https://discord.gg/ash-alpha" }),
   openFeedbackLink: async () => {
     (window as unknown as { openedFeedback?: boolean }).openedFeedback = true;

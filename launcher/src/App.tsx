@@ -8,6 +8,7 @@ import {
   type Accounts as AccountList,
   type AshAccountStatus,
   type Links,
+  type ReportRequest,
   type News,
   onSync,
   type SyncStatus,
@@ -20,6 +21,7 @@ import {
   LOADER_LABELS,
 } from "./api";
 import { AshAccountNotice } from "./AshAccount";
+import { ReportDialog } from "./ReportDialog";
 import { UpdateBar } from "./UpdateBar";
 import { Icon } from "./icons";
 import { InstancePage } from "./InstancePage";
@@ -117,6 +119,8 @@ export default function App() {
   useEffect(() => {
     api.news().then(setNews).catch(() => setNews(null));
   }, []);
+  // "Copy report" from a page's error (spec 0005).
+  const [reporting, setReporting] = useState<ReportRequest | null>(null);
   // The alpha (spec 0005): the version, the feedback link, and the first-run note.
   const [version, setVersion] = useState<string | null>(null);
   const [links, setLinks] = useState<Links | null>(null);
@@ -291,10 +295,20 @@ export default function App() {
 
       <main className="main">
         {error && (
-          <p className="error" role="alert" onClick={() => setError(null)}>
-            {error.message}
-          </p>
+          <div className="error" role="alert" onClick={() => setError(null)}>
+            <span>{error.message}</span>
+            <button
+              className="error-report"
+              onClick={(e) => {
+                e.stopPropagation();
+                setReporting({ instance: selected?.id ?? null, errorKind: error.kind, errorMessage: error.message, crashed: false });
+              }}
+            >
+              Copy report
+            </button>
+          </div>
         )}
+        {reporting && <ReportDialog request={reporting} onClose={() => setReporting(null)} />}
 
         <UpdateBar gameRunning={launch.phase.at === "running"} />
 
@@ -414,6 +428,7 @@ export default function App() {
           onRetry={launch.retry}
           onPlayWithoutMods={launch.playWithoutMods}
           onClose={launch.dismiss}
+          instance={selected?.id ?? null}
         />
       )}
     </div>

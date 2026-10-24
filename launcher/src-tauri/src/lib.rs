@@ -895,6 +895,24 @@ fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+/// The text "Copy report" shows and copies (spec 0005).
+#[tauri::command]
+fn report(
+    state: tauri::State<'_, AppState>,
+    instance: Option<InstanceId>,
+    error_kind: Option<String>,
+    error_message: Option<String>,
+    crashed: bool,
+) -> String {
+    state.ash.report(
+        env!("CARGO_PKG_VERSION"),
+        instance.as_ref(),
+        error_kind.as_deref(),
+        error_message.as_deref(),
+        crashed,
+    )
+}
+
 #[tauri::command]
 async fn links(state: tauri::State<'_, AppState>) -> Result<ash_core::Links, UiError> {
     Ok(state.ash.links().await)
@@ -1043,6 +1061,7 @@ pub fn run() {
             check_for_update,
             install_update,
             app_version,
+            report,
             links,
             open_feedback_link,
             first_run_note_dismissed,

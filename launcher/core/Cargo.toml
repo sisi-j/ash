@@ -44,6 +44,11 @@ tokio = { version = "1", features = ["net", "time", "io-util", "rt"] }
 # as the game resolves them.
 hickory-resolver = "0.26"
 
+# Which Windows, for a report, and how much memory the computer has: two
+# read-only calls (src/system.rs).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Registry", "Win32_System_SystemInformation"] }
+
 [dev-dependencies]
 tokio.workspace = true
 tempfile = "3"

@@ -373,6 +373,18 @@ const STATES: State[] = [
     reach: openPage("Wardrobe"),
     verify: async (page) => ((await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? null : "a cape could be chosen without ash"),
   },
+  // "Copy report" (spec 0005): shown in full before it's copied.
+  {
+    name: "crashed-report",
+    shows: "Windows 11 Pro 24H2",
+    reach: (page) => page.getByRole("button", { name: "Copy report" }).click(),
+    verify: async (page) => {
+      if ((await page.getByText("OutOfMemoryError").count()) < 1) return "the game's output isn't in the report";
+      if ((await page.getByText("can include server addresses").count()) !== 1) return "no word on what the game's output can hold";
+      await page.keyboard.press("Escape");
+      return (await page.getByText("The game crashed").count()) === 1 ? null : "Escape closed the crash panel too";
+    },
+  },
   // The alpha (spec 0005): the tag, the note, "Send feedback", the version.
   {
     name: "alpha-note",
