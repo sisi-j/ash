@@ -1173,6 +1173,13 @@ impl Ash {
     ///
     /// The first time it answers that the game has exited, the session ends
     /// in the instance's metadata - which is why the window asks until then.
+    /// Whether any game ash started is still running: what an update waits
+    /// for, since installing one closes ash (ADR-0025).
+    pub fn any_game_running(&self) -> bool {
+        let games = self.games.lock().unwrap();
+        games.values().any(|game| matches!(game.process.status(), GameStatus::Running))
+    }
+
     pub fn game_status(&self, id: &InstanceId) -> Option<GameStatus> {
         let mut games = self.games.lock().unwrap();
         let game = games.get_mut(id.as_str())?;

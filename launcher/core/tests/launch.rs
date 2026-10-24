@@ -683,6 +683,22 @@ async fn a_game_that_has_exited_can_be_launched_again() {
 }
 
 #[tokio::test]
+async fn an_update_waits_while_a_game_runs_and_not_after() {
+    let f = fixture();
+    assert!(!f.ash.any_game_running(), "nothing started yet");
+    let id = f.ready().await;
+    f.launch(&id).await;
+    assert!(f.ash.any_game_running());
+
+    let closed = fixture_with(
+        FakeProcessPort::new().set_status(GameStatus::Exited { code: Some(0), clean: true }),
+    );
+    let id = closed.ready().await;
+    closed.launch(&id).await;
+    assert!(!closed.ash.any_game_running(), "a game that closed holds nothing up");
+}
+
+#[tokio::test]
 async fn a_failed_spawn_leaves_nothing_recorded_as_running() {
     let f = fixture_with(FakeProcessPort::new().fail_to_spawn("the runtime is not executable"));
     let id = f.ready().await;

@@ -308,7 +308,7 @@ let statusAsked = 0;
 const crashes = state.startsWith("crashed");
 function status(): real.GameStatus | null {
   statusAsked += 1;
-  if (state === "playing") return { state: "running" };
+  if (state === "playing" || state === "update-blocked") return { state: "running" };
   if (crashes) return statusAsked === 1 ? { state: "running" } : { state: "exited", code: 1, clean: false };
   // The player closing the game window: a clean quit, a moment after the page first asks.
   if (state === "game-closed") return statusAsked === 1 ? { state: "running" } : { state: "exited", code: 0, clean: true };
@@ -328,6 +328,7 @@ const CRASH_LOG = [
 const progress = new Set<(event: PrepareEvent) => void>();
 const prepared = new Set<(outcome: PrepareOutcome) => void>();
 const launched = new Set<(outcome: LaunchOutcome) => void>();
+const updating = new Set<(progress: real.UpdateProgress) => void>();
 const ashAccount = new Set<(event: AshAccountEvent) => void>();
 
 function subscribe<T>(handlers: Set<(value: T) => void>, handler: (value: T) => void) {
@@ -425,6 +426,30 @@ export const api: typeof real.api = {
       : resolve({ posts: state === "news-empty" ? [] : NEWS, unread: state === "news-dot", offline: false }),
   markNewsSeen: nothing,
   syncStatus: () => resolve(syncStatus),
+  // An update in the update-* states; none elsewhere, as when ash is current.
+  checkForUpdate: () =>
+    resolve(
+      state.startsWith("update-")
+        ? {
+            version: "0.1.0-alpha.2",
+            notes: ["- **Mods:** search Modrinth from the Mods page.", "- Fixed the PLAYING button after a game closes."].join(
+              "\n",
+            ),
+          }
+        : null,
+    ),
+  installUpdate: () => {
+    if (state === "update-failed") {
+      return Promise.reject({
+        kind: "update_failed",
+        message: "The update couldn't be installed (the download was interrupted). This version keeps working; try again later.",
+        retryable: true,
+      });
+    }
+    // Downloading, and then ash would close: the promise never settles here.
+    window.setTimeout(() => emit(updating, { downloaded: 4_000_000, total: 10_000_000 }), 100);
+    return new Promise<void>(() => undefined);
+  },
   wardrobe: () => {
     wardrobeAsked += 1;
     return resolve(wardrobe());
@@ -543,6 +568,7 @@ export const appWindow: typeof real.appWindow = {
 export const onPrepareProgress: typeof real.onPrepareProgress = (handler) => subscribe(progress, handler);
 export const onPrepareFinished: typeof real.onPrepareFinished = (handler) => subscribe(prepared, handler);
 export const onLaunchFinished: typeof real.onLaunchFinished = (handler) => subscribe(launched, handler);
+export const onUpdateProgress: typeof real.onUpdateProgress = (handler) => subscribe(updating, handler);
 export const onAshAccount: typeof real.onAshAccount = (handler) => subscribe(ashAccount, handler);
 export const onSync: typeof real.onSync = () => Promise.resolve(() => undefined);
 

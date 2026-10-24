@@ -887,11 +887,86 @@ fn self_check(ash: &Ash, report: &std::path::Path) -> ! {
     std::process::exit(code)
 }
 
+// ---- updates (spec 0005, ADR-0025) ----
+
+/// A newer release than this one: its version and its "what's new", the
+/// version's section of CHANGELOG.md.
+#[derive(Serialize)]
+struct AvailableUpdate {
+    version: String,
+    notes: String,
+}
+
+/// Whether a newer release exists. Never an error: a check that can't be
+/// made offers nothing, and never costs a launch.
+#[tauri::command]
+async fn check_for_update(app: tauri::AppHandle) -> Option<AvailableUpdate> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app.updater().ok()?.check().await.ok()??;
+    Some(AvailableUpdate {
+        version: update.version.clone(),
+        notes: update.body.clone().unwrap_or_default(),
+    })
+}
+
+#[derive(Clone, Serialize)]
+struct UpdateProgress {
+    downloaded: u64,
+    total: Option<u64>,
+}
+
+/// Download the update, check its signature, and install it, which closes
+/// ash and opens the new version. Refused while a game ash started runs.
+#[tauri::command]
+async fn install_update(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), UiError> {
+    use tauri_plugin_updater::UpdaterExt;
+    if state.ash.any_game_running() {
+        return Err(UiError {
+            kind: "game_running",
+            message: "Close the game first: ash can't update while a game it started is running."
+                .into(),
+            retryable: true,
+        });
+    }
+    let failed = |detail: String| {
+        UiError {
+        kind: "update_failed",
+        message: format!("The update couldn't be installed ({detail}). This version keeps working; try again later."),
+        retryable: true,
+    }
+    };
+    let update = app
+        .updater()
+        .map_err(|e| failed(e.to_string()))?
+        .check()
+        .await
+        .map_err(|e| failed(e.to_string()))?
+        .ok_or_else(|| failed("it's no longer offered".into()))?;
+    let progress = app.clone();
+    let mut downloaded = 0u64;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let _ = progress.emit("update-progress", UpdateProgress { downloaded, total });
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| failed(e.to_string()))?;
+    // On Windows the installer has taken over by now; elsewhere, restart into it.
+    app.restart()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // In `setup` rather than on the builder, because the client jars live
         // in the installation and only an `AppHandle` knows where that is.
         .setup(|app| {
@@ -928,6 +1003,8 @@ pub fn run() {
             wardrobe,
             equip,
             open_news_link,
+            check_for_update,
+            install_update,
             create_instance,
             loaders_for,
             instances,

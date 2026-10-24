@@ -71,11 +71,20 @@ function Post(props: { post: NewsPost }) {
       </div>
       <h3 className="news-title">{post.title}</h3>
       <div className="news-body">
-        {parseMarkdown(post.body).map((block, i) => (
-          <BlockView key={i} block={block} />
-        ))}
+        <MarkdownBody markdown={post.body} />
       </div>
     </article>
+  );
+}
+
+/** A body in the agreed Markdown subset, drawn from a parsed tree: a news post, or an update's what's new. */
+export function MarkdownBody(props: { markdown: string }) {
+  return (
+    <>
+      {parseMarkdown(props.markdown).map((block, i) => (
+        <BlockView key={i} block={block} />
+      ))}
+    </>
   );
 }
 
