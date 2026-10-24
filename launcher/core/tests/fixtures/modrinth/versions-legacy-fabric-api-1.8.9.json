@@ -1,0 +1,96 @@
+[
+ {
+  "game_versions": [
+   "1.3.2",
+   "1.4.7",
+   "1.5.2",
+   "1.6.4",
+   "1.7.10",
+   "1.8",
+   "1.8.9",
+   "1.9.4",
+   "1.10.2",
+   "1.11.2",
+   "1.12.2"
+  ],
+  "loaders": [
+   "legacy-fabric"
+  ],
+  "environment": "client_or_server_prefers_both",
+  "id": "Znk9CSGQ",
+  "project_id": "9CJED7xi",
+  "author_id": "D0JTj7xp",
+  "featured": false,
+  "name": "Legacy Fabric API 1.13.5",
+  "version_number": "1.13.5",
+  "changelog": "A changelog can be found at https://github.com/Legacy-Fabric/fabric/commits",
+  "changelog_url": null,
+  "date_published": "2026-05-31T14:00:45.920465Z",
+  "downloads": 15691,
+  "version_type": "release",
+  "status": "listed",
+  "requested_status": null,
+  "files": [
+   {
+    "id": "UPIfO5bk",
+    "hashes": {
+     "sha1": "0fdd09f7a75e33eef8fac7b182e8aa2466dc9c30",
+     "sha512": "8000fa3b97a5136c2667bf9aef67aecf782e6d86716fdd589cbf0271ca2b188a171a31a0ab58731fab03cb08c47f98a43f9a3fd75cc5fd16011aefad9372d3ff"
+    },
+    "url": "https://cdn.modrinth.com/data/9CJED7xi/versions/Znk9CSGQ/legacy-fabric-api-1.13.5.jar",
+    "filename": "legacy-fabric-api-1.13.5.jar",
+    "primary": true,
+    "size": 1992764,
+    "file_type": null
+   }
+  ],
+  "dependencies": []
+ },
+ {
+  "game_versions": [
+   "1.3.2",
+   "1.4.7",
+   "1.5.2",
+   "1.6.4",
+   "1.7.10",
+   "1.8",
+   "1.8.9",
+   "1.9.4",
+   "1.10.2",
+   "1.11.2",
+   "1.12.2"
+  ],
+  "loaders": [
+   "legacy-fabric"
+  ],
+  "environment": "client_or_server_prefers_both",
+  "id": "PsSjRDfi",
+  "project_id": "9CJED7xi",
+  "author_id": "D0JTj7xp",
+  "featured": false,
+  "name": "Legacy Fabric API 1.13.4",
+  "version_number": "1.13.4",
+  "changelog": "A changelog can be found at https://github.com/Legacy-Fabric/fabric/commits",
+  "changelog_url": null,
+  "date_published": "2026-05-23T15:02:18.128731Z",
+  "downloads": 1481,
+  "version_type": "release",
+  "status": "listed",
+  "requested_status": null,
+  "files": [
+   {
+    "id": "c28W5J2K",
+    "hashes": {
+     "sha1": "296708d4998e17e6a3dcc23efea90a6cab828102",
+     "sha512": "e19f81c8789244fbc627c69c4c18969cee7f4c264c62918bd6873315e35294fb3506741355787f906e4fc3e78c16e2cbec5431814cc5d3f047a8d4ce16fb7b44"
+    },
+    "url": "https://cdn.modrinth.com/data/9CJED7xi/versions/PsSjRDfi/legacy-fabric-api-1.13.4.jar",
+    "filename": "legacy-fabric-api-1.13.4.jar",
+    "primary": true,
+    "size": 1996384,
+    "file_type": null
+   }
+  ],
+  "dependencies": []
+ }
+]
