@@ -1,0 +1,104 @@
+[
+ {
+  "game_versions": [
+   "1.21.11"
+  ],
+  "loaders": [
+   "fabric",
+   "quilt"
+  ],
+  "environment": "client_only",
+  "id": "cLkYaVuL",
+  "project_id": "mOgUt4GM",
+  "author_id": "uF4fzWRt",
+  "featured": false,
+  "name": "v17.0.1 for 1.21.11",
+  "version_number": "17.0.1",
+  "changelog": "- Add uzbek localization, thanks itsbilolbek",
+  "changelog_url": null,
+  "date_published": "2026-09-24T19:10:38.528627Z",
+  "downloads": 1911732,
+  "version_type": "release",
+  "status": "listed",
+  "requested_status": null,
+  "files": [
+   {
+    "id": "bAifUZD2",
+    "hashes": {
+     "sha1": "d5612d70bda58e0179b177ca9990e57471e67d19",
+     "sha512": "cb68cc39c8da66d05a1d2054a0e7b62144881e0cdb5fd681bc4f337b1313fafac394246f4e0aa0c4b6343db9e9750250a00c1bb72689b762da685ce1ccfee51f"
+    },
+    "url": "https://cdn.modrinth.com/data/mOgUt4GM/versions/cLkYaVuL/modmenu-17.0.1.jar",
+    "filename": "modmenu-17.0.1.jar",
+    "primary": true,
+    "size": 960882,
+    "file_type": null
+   }
+  ],
+  "dependencies": [
+   {
+    "version_id": null,
+    "project_id": "P7dR8mSH",
+    "file_name": null,
+    "dependency_type": "required"
+   },
+   {
+    "version_id": null,
+    "project_id": "eXts2L7r",
+    "file_name": null,
+    "dependency_type": "required"
+   }
+  ]
+ },
+ {
+  "game_versions": [
+   "1.21.11"
+  ],
+  "loaders": [
+   "fabric",
+   "quilt"
+  ],
+  "environment": "client_only",
+  "id": "j2vTurvl",
+  "project_id": "mOgUt4GM",
+  "author_id": "uF4fzWRt",
+  "featured": false,
+  "name": "v17.0.1-beta.1 for 1.21.11",
+  "version_number": "17.0.1-beta.1",
+  "changelog": "- Again fix selection and scroll amount not restoring, thanks fishstiz (resolves #1020)\n- Apply SHOW_LIBRARIES config to child mods; thanks to NotRyken\n- Fix mod list entry width after filtering thanks to Zaxoosh (resolves #1015)\n- Improve how update checking is executed (thanks litetex)\n- Fix extra comma in es_es.json\n- Delete untranslated l18n files (thanks Madis0)\n- Delete untranslated l18n files (thanks Madis0)\n- Fix non-numeric update versions getting v prefix (thanks JustPyrrha)\n- Add timeouts for HTTP workers to prevent hangs (thanks litetex)",
+  "changelog_url": null,
+  "date_published": "2026-07-09T02:48:13.704315Z",
+  "downloads": 1738346,
+  "version_type": "beta",
+  "status": "listed",
+  "requested_status": null,
+  "files": [
+   {
+    "id": "Mr3yIFZx",
+    "hashes": {
+     "sha512": "41dfe92fd56928974635e90579eb08aee056ebfce52b80658e4a12288a57d18ec909107e3f3d1af5eae2f98e55fb16aa929e67f47d8aa5040fc44c548cadf3a2",
+     "sha1": "3fdcb2b8ec85ebdab1c344f0eec19ddf37512ca1"
+    },
+    "url": "https://cdn.modrinth.com/data/mOgUt4GM/versions/j2vTurvl/modmenu-17.0.1-beta.1.jar",
+    "filename": "modmenu-17.0.1-beta.1.jar",
+    "primary": true,
+    "size": 958351,
+    "file_type": null
+   }
+  ],
+  "dependencies": [
+   {
+    "version_id": null,
+    "project_id": "P7dR8mSH",
+    "file_name": null,
+    "dependency_type": "required"
+   },
+   {
+    "version_id": null,
+    "project_id": "eXts2L7r",
+    "file_name": null,
+    "dependency_type": "required"
+   }
+  ]
+ }
+]
