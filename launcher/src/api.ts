@@ -388,6 +388,18 @@ export type InstalledMod = {
   icon_url: string | null;
 };
 
+/** Mirrors `ash_core::ModEntry`: one jar in an instance's `mods` folder. */
+export type ModEntry = {
+  file_name: string;
+  enabled: boolean;
+  title: string;
+  version: string | null;
+  from_modrinth: boolean;
+  icon_url: string | null;
+  /** The ash feature it does the same job as, if any. */
+  overlaps: string | null;
+};
+
 export type InstallOutcome = {
   installed: InstalledMod[];
   /** Third-party mods were off for the instance, and installing turned them on. */
@@ -526,6 +538,10 @@ export const api = {
   searchMods: (id: InstanceId, query: string, offset: number) => invoke<ModSearch>("search_mods", { id, query, offset }),
   installMod: (id: InstanceId, projectId: string) => invoke<InstallOutcome>("install_mod", { id, projectId }),
   installedMods: (id: InstanceId) => invoke<InstalledMod[]>("installed_mods", { id }),
+  listMods: (id: InstanceId) => invoke<ModEntry[]>("list_mods", { id }),
+  setModEnabled: (id: InstanceId, fileName: string, enabled: boolean) =>
+    invoke<ModEntry[]>("set_mod_enabled", { id, fileName, enabled }),
+  removeMod: (id: InstanceId, fileName: string) => invoke<ModEntry[]>("remove_mod", { id, fileName }),
   revealGameDirectory: (id: InstanceId) =>
     invoke<void>("reveal_game_directory", { id }),
   /** ash's own log: the first thing anyone asks for when a launch fails. */

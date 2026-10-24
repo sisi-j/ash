@@ -36,6 +36,12 @@ type State = {
  * LAUNCH GAME, once it can be clicked: before the instance's files have
  * been checked it is shown but ignores clicks.
  */
+/** The Mods page's Browse Modrinth view. */
+const browseMods = async (page: Page) => {
+  await openPage("Mods")(page);
+  await page.getByRole("tab", { name: "Browse Modrinth" }).click();
+};
+
 const launchGame = (page: Page) => page.locator('.launch-button[aria-disabled="false"]').click();
 const openInstance = (page: Page) => page.getByRole("button", { name: "1.21.11 settings" }).click();
 const openPage = (label: string) => (page: Page) => page.getByRole("navigation").getByRole("button", { name: label }).click();
@@ -376,7 +382,7 @@ const STATES: State[] = [
   {
     name: "mods",
     shows: "Mod Menu",
-    reach: openPage("Mods"),
+    reach: browseMods,
     verify: async (page) => {
       await page.getByLabel("Search mods").fill("iri");
       await page.waitForTimeout(600);
@@ -387,7 +393,7 @@ const STATES: State[] = [
     name: "mods-installed",
     shows: "Your mods are now on for",
     reach: async (page) => {
-      await openPage("Mods")(page);
+      await browseMods(page);
       await page.getByRole("button", { name: "Install Iris Shaders" }).click();
     },
     verify: async (page) => {
@@ -400,8 +406,24 @@ const STATES: State[] = [
     name: "mods-incompatible",
     shows: "Remove OptiFabric first",
     reach: async (page) => {
-      await openPage("Mods")(page);
+      await browseMods(page);
       await page.getByRole("button", { name: "Install Iris Shaders" }).click();
+    },
+  },
+  { name: "mods-empty", shows: "No mods in 1.21.11 yet.", reach: openPage("Mods") },
+  {
+    name: "mods-list",
+    shows: "Does what ash’s Freelook does.",
+    reach: openPage("Mods"),
+    verify: async (page) => {
+      if ((await page.getByText("added by hand").count()) !== 1) return "a hand-added jar isn't marked";
+      const handMod = page.getByRole("switch", { name: "Hand Mod on" });
+      if ((await handMod.getAttribute("aria-checked")) !== "false") return "a mod that's off shows on";
+      await handMod.click();
+      if ((await handMod.getAttribute("aria-checked")) !== "true") return "the switch didn't turn it on";
+      await page.getByRole("button", { name: "Remove Sodium" }).click();
+      await page.getByRole("button", { name: "Remove", exact: true }).click();
+      return (await page.getByText("Sodium", { exact: true }).count()) === 0 ? null : "Remove left it listed";
     },
   },
   {

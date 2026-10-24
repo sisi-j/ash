@@ -187,6 +187,11 @@ pub enum AshError {
     #[error("{title} is incompatible with {with}")]
     ModIncompatible { title: String, with: String },
 
+    /// Switching or removing a mod while its game runs: Windows holds the
+    /// jars the game loaded.
+    #[error("instance {id}'s mods are in use by the running game")]
+    ModsInUse { id: String },
+
     /// `servers.dat` could not be read, so ash will not write it.
     #[error("the server list could not be read, so it was left as it is")]
     ServerListUnreadable,
@@ -272,6 +277,7 @@ impl AshError {
             AshError::ModsNeedFabric => "mods_need_fabric",
             AshError::ModUnavailable { .. } => "mod_unavailable",
             AshError::ModIncompatible { .. } => "mod_incompatible",
+            AshError::ModsInUse { .. } => "mods_in_use",
             AshError::ServerListUnreadable => "server_list_unreadable",
             AshError::InvalidServerName { .. } => "invalid_server_name",
         }
@@ -446,6 +452,9 @@ impl AshError {
             AshError::ModUnavailable { title } => {
                 format!("{title} has no version for this instance's Minecraft version yet.")
             }
+            AshError::ModsInUse { .. } => {
+                "Close the game to change its mods. It has them open while it runs.".into()
+            }
             AshError::ModIncompatible { title, with } => {
                 format!("{title} doesn't work with {with}, which this instance has. Remove {with} first to install it.")
             }
@@ -614,6 +623,7 @@ mod tests {
             AshError::ModsNeedFabric,
             AshError::ModUnavailable { title: s.clone() },
             AshError::ModIncompatible { title: s.clone(), with: s.clone() },
+            AshError::ModsInUse { id: s.clone() },
         ];
 
         // This says the list has no variant in it twice. It cannot say the
@@ -689,7 +699,8 @@ mod tests {
             | AshError::InvalidServerName { .. }
             | AshError::ModsNeedFabric
             | AshError::ModUnavailable { .. }
-            | AshError::ModIncompatible { .. } => {}
+            | AshError::ModIncompatible { .. }
+            | AshError::ModsInUse { .. } => {}
         }
     }
 }

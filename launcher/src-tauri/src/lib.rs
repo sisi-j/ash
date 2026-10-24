@@ -225,6 +225,33 @@ async fn install_mod(
 }
 
 #[tauri::command]
+fn list_mods(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<ash_core::ModEntry>, UiError> {
+    state.ash.list_mods(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
+fn set_mod_enabled(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    file_name: String,
+    enabled: bool,
+) -> Result<Vec<ash_core::ModEntry>, UiError> {
+    state.ash.set_mod_enabled(&id, &file_name, enabled).map_err(UiError::from)
+}
+
+#[tauri::command]
+fn remove_mod(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    file_name: String,
+) -> Result<Vec<ash_core::ModEntry>, UiError> {
+    state.ash.remove_mod(&id, &file_name).map_err(UiError::from)
+}
+
+#[tauri::command]
 fn installed_mods(
     state: tauri::State<'_, AppState>,
     id: InstanceId,
@@ -1093,6 +1120,9 @@ pub fn run() {
             search_mods,
             install_mod,
             installed_mods,
+            list_mods,
+            set_mod_enabled,
+            remove_mod,
             report,
             links,
             open_feedback_link,

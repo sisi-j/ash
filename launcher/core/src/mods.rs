@@ -382,6 +382,8 @@ pub(crate) async fn install(
     let mut ids: Vec<String> = plan.versions.iter().map(|v| v.project_id.clone()).collect();
     ids.extend(plan.optional.iter().cloned());
     let known = projects(http, base, &ids).await?;
+    // The mod asked for is known already; the rest come from the batch.
+    let known: Vec<&Project> = std::iter::once(&root_project).chain(known.iter()).collect();
     let title_of = |id: &str| {
         known.iter().find(|p| p.id == id).map(|p| p.title.clone()).unwrap_or_else(|| id.to_owned())
     };
@@ -438,6 +440,158 @@ pub(crate) async fn install(
     }
     let optional = plan.optional.iter().map(|id| title_of(id)).collect();
     Ok((done, optional))
+}
+
+// ---- what's in the folder (#146) ---------------------------------------------
+
+/// Mods on Modrinth that do what an ash feature does, by project id, and that
+/// feature's name (ADR-0026). Noted, never blocked: ash's features step aside
+/// when a mod clashes with their hooks (ADR-0017). Only clear overlaps of
+/// widely used mods; a tab-list ping isn't ash's on-screen ping readout.
+const OVERLAPS: &[(&str, &str)] = &[
+    ("g4pR0Fmy", "Freelook"),      // Freelook
+    ("DSA6X7rF", "Freelook"),      // FreeLook (the original)
+    ("S1v2ASLQ", "Freelook"),      // Freelook (Perspective Mod)
+    ("N8Pmw3EX", "Toggle sprint"), // Toggle Sprint
+    ("gQ6IIk5e", "Toggle sprint"), // Toggle Sprint
+    ("i9xRThb3", "Toggle sprint"), // PolySprint
+    ("DIlqwRFH", "FPS readout"),   // FPS - Display
+    ("hKRDgptX", "FPS readout"),   // FPS Display+
+    ("o1tyE5vJ", "Crosshair"),     // Custom Crosshair Mod
+    ("obfJASPU", "Crosshair"),     // PolyCrosshair
+    ("6zatK8W5", "Hit colour"),    // DamageTint
+    ("VXFg68YU", "Hit colour"),    // HitColor
+    ("vJofZXEN", "Hit colour"),    // Hit Color
+    ("4Hi9HZKQ", "Snaplook"),      // Snaplook
+    ("sAFPANmp", "Snaplook"),      // BehindYou
+];
+
+pub(crate) fn overlap(project_id: &str) -> Option<&'static str> {
+    OVERLAPS.iter().find(|(id, _)| *id == project_id).map(|(_, feature)| *feature)
+}
+
+const DISABLED: &str = ".disabled";
+
+/// One jar in the instance's `mods` folder, however it got there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ModEntry {
+    /// Its name on disk, without `.disabled`.
+    pub file_name: String,
+    pub enabled: bool,
+    pub title: String,
+    pub version: Option<String>,
+    /// Installed by ash from Modrinth, rather than added by hand.
+    pub from_modrinth: bool,
+    pub icon_url: Option<String>,
+    /// The ash feature it does the same job as, if any.
+    pub overlaps: Option<String>,
+}
+
+/// A jar's own name and version, from its `fabric.mod.json`.
+fn jar_metadata(path: &Path) -> Option<(String, Option<String>)> {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(path).ok()?).ok()?;
+    let mut text = String::new();
+    archive.by_name("fabric.mod.json").ok()?.read_to_string(&mut text).ok()?;
+    let meta: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let name = meta["name"].as_str().or_else(|| meta["id"].as_str())?.to_owned();
+    Some((name, meta["version"].as_str().map(str::to_owned)))
+}
+
+/// Every jar in the folder, on or off, by name.
+pub(crate) fn list(instance_dir: &Path, mods_dir: &Path) -> Vec<ModEntry> {
+    let record = installed(instance_dir);
+    let Ok(entries) = std::fs::read_dir(mods_dir) else { return Vec::new() };
+    let mut mods: Vec<ModEntry> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let (file_name, enabled) = match name.strip_suffix(DISABLED) {
+                Some(base) => (base.to_owned(), false),
+                None => (name.clone(), true),
+            };
+            if !file_name.ends_with(".jar") {
+                return None;
+            }
+            Some(match record.iter().find(|m| m.file_name == file_name) {
+                Some(m) => ModEntry {
+                    file_name,
+                    enabled,
+                    title: m.title.clone(),
+                    version: Some(m.version_number.clone()),
+                    from_modrinth: true,
+                    icon_url: m.icon_url.clone(),
+                    overlaps: overlap(&m.project_id).map(str::to_owned),
+                },
+                None => {
+                    let (title, version) = jar_metadata(&entry.path())
+                        .unwrap_or_else(|| (file_name.trim_end_matches(".jar").to_owned(), None));
+                    ModEntry {
+                        file_name,
+                        enabled,
+                        title,
+                        version,
+                        from_modrinth: false,
+                        icon_url: None,
+                        overlaps: None,
+                    }
+                }
+            })
+        })
+        .collect();
+    mods.sort_by_key(|m| m.title.to_lowercase());
+    mods
+}
+
+/// A jar's name as the Mods page sent it: a plain `.jar` file name, nothing
+/// that could reach outside the folder.
+fn plain_jar(file_name: &str) -> Result<&str, AshError> {
+    let plain = file_name.ends_with(".jar")
+        && !file_name.contains(['/', '\\', ':'])
+        && file_name != ".jar"
+        && !file_name.starts_with('.');
+    if plain {
+        Ok(file_name)
+    } else {
+        Err(AshError::FileVanished { path: file_name.to_owned() })
+    }
+}
+
+/// Turn a mod on or off: the `.jar.disabled` rename other launchers use too.
+pub(crate) fn set_enabled(mods_dir: &Path, file_name: &str, enabled: bool) -> Result<(), AshError> {
+    let file_name = plain_jar(file_name)?;
+    let on = mods_dir.join(file_name);
+    let off = mods_dir.join(format!("{file_name}{DISABLED}"));
+    let (from, to) = if enabled { (off, on) } else { (on, off) };
+    if !from.exists() {
+        return if to.exists() {
+            Ok(())
+        } else {
+            Err(AshError::FileVanished { path: file_name.to_owned() })
+        };
+    }
+    std::fs::rename(from, to).map_err(AshError::writing("switching a mod"))
+}
+
+/// Remove a mod's file, on or off, and ash's record of it.
+pub(crate) fn remove(
+    instance_dir: &Path,
+    mods_dir: &Path,
+    file_name: &str,
+) -> Result<(), AshError> {
+    let file_name = plain_jar(file_name)?;
+    for path in [mods_dir.join(file_name), mods_dir.join(format!("{file_name}{DISABLED}"))] {
+        if path.exists() {
+            std::fs::remove_file(path).map_err(AshError::writing("removing a mod"))?;
+        }
+    }
+    let mut record = installed(instance_dir);
+    let before = record.len();
+    record.retain(|m| m.file_name != file_name);
+    if record.len() != before {
+        save(instance_dir, record)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

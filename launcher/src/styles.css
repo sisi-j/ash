@@ -1854,11 +1854,33 @@ button {
   white-space: normal;
 }
 
+.mods-views {
+  margin: 0 0 14px;
+}
+
+.mod-row.is-off .mod-icon,
+.mod-row.is-off .mod-text {
+  opacity: 0.5;
+}
+
+.mod-text .mod-overlap {
+  color: var(--text-2);
+  white-space: normal;
+}
+
+.mod-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+}
+
 .mods-done {
   margin: 0 0 14px;
 }
 
 .mods-more {
+  align-self: flex-start;
   margin: 14px 0 0;
 }
 

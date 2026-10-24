@@ -323,6 +323,17 @@ const MODS = [
 ].map((m, i) => ({ ...m, icon_url: capeTexture(["#2f7d4f", "#6d3fbf", "#3f6dbf"][i]!) }));
 const installedProjects = new Set<string>();
 
+/** The instance's mods folder, in the mods-list state; empty elsewhere. */
+let folderMods: real.ModEntry[] =
+  state === "mods-list"
+    ? [
+        { file_name: "sodium.jar", enabled: true, title: "Sodium", version: "0.8.14", from_modrinth: true, icon_url: MODS[0]!.icon_url, overlaps: null },
+        { file_name: "freelook.jar", enabled: true, title: "Freelook", version: "1.3.0", from_modrinth: true, icon_url: null, overlaps: "Freelook" },
+        { file_name: "handmod-2.3.4.jar", enabled: false, title: "Hand Mod", version: "2.3.4", from_modrinth: false, icon_url: null, overlaps: null },
+      ]
+    : [];
+const folder = () => folderMods.map((m) => ({ ...m }));
+
 const CRASH_LOG = [
   "[Render thread/INFO]: Loaded 1371 recipes",
   "[Render thread/ERROR]: Unreported exception thrown!",
@@ -503,6 +514,15 @@ export const api: typeof real.api = {
     return new Promise((done) => window.setTimeout(() => done({ installed, mods_turned_on: true, optional: [] }), 150));
   },
   installedMods: () => resolve([]),
+  listMods: () => resolve(folder()),
+  setModEnabled: (_id, fileName, enabled) => {
+    folderMods = folderMods.map((m) => (m.file_name === fileName ? { ...m, enabled } : m));
+    return resolve(folder());
+  },
+  removeMod: (_id, fileName) => {
+    folderMods = folderMods.filter((m) => m.file_name !== fileName);
+    return resolve(folder());
+  },
   report: (request) =>
     resolve(
       [

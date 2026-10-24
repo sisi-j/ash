@@ -344,3 +344,100 @@ async fn installed_mods_are_marked_in_a_search() {
     assert!(sodium.installed);
     assert!(found.hits.iter().filter(|h| h.project_id != SODIUM).all(|h| !h.installed));
 }
+
+// ---- what's in the folder (#146) ------------------------------------------------
+
+fn jar(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/tests/fixtures/jars/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+#[tokio::test]
+async fn the_list_names_every_jar_from_ash_s_record_or_the_jar_s_own_metadata() {
+    let f = fixture(modrinth());
+    let id = f.instance("1.21.11", Loader::Fabric);
+    f.ash.install_mod(&id, SODIUM).await.unwrap();
+    let mods = f.ash.mods_directory(&id).unwrap();
+    std::fs::write(mods.join("handmod-2.3.4.jar"), jar("hand-added.jar")).unwrap();
+    std::fs::write(mods.join("mystery.jar"), jar("no-metadata.jar")).unwrap();
+    std::fs::write(mods.join("notes.txt"), "not a mod").unwrap();
+
+    let listed = f.ash.list_mods(&id).unwrap();
+
+    let shown: Vec<(&str, Option<&str>, bool)> =
+        listed.iter().map(|m| (m.title.as_str(), m.version.as_deref(), m.from_modrinth)).collect();
+    assert_eq!(
+        shown,
+        [
+            ("Hand Mod", Some("2.3.4"), false),
+            ("mystery", None, false),
+            ("Sodium", Some("mc1.21.11-0.8.14-fabric"), true)
+        ]
+    );
+    assert!(listed.iter().all(|m| m.enabled));
+}
+
+#[tokio::test]
+async fn a_mod_turns_off_and_on_by_the_rename_other_launchers_use() {
+    let f = fixture(modrinth());
+    let id = f.instance("1.21.11", Loader::Fabric);
+    f.ash.install_mod(&id, SODIUM).await.unwrap();
+    let file = "sodium-fabric-0.8.14+mc1.21.11.jar";
+
+    let off = f.ash.set_mod_enabled(&id, file, false).unwrap();
+    assert!(!off[0].enabled);
+    assert_eq!(f.mods(&id), [format!("{file}.disabled")]);
+    assert_eq!(off[0].title, "Sodium", "still known by name while off");
+
+    let on = f.ash.set_mod_enabled(&id, file, true).unwrap();
+    assert!(on[0].enabled);
+    assert_eq!(f.mods(&id), [file]);
+}
+
+#[tokio::test]
+async fn removing_a_mod_takes_its_file_and_ash_s_record_of_it() {
+    let f = fixture(modrinth());
+    let id = f.instance("1.21.11", Loader::Fabric);
+    f.ash.install_mod(&id, IRIS).await.unwrap();
+    f.ash.set_mod_enabled(&id, "iris-fabric-1.10.8+mc1.21.11.jar", false).unwrap();
+
+    let left = f.ash.remove_mod(&id, "iris-fabric-1.10.8+mc1.21.11.jar").unwrap();
+
+    assert_eq!(left.iter().map(|m| m.title.as_str()).collect::<Vec<_>>(), ["Sodium"]);
+    assert_eq!(f.mods(&id), ["sodium-fabric-0.8.14+mc1.21.11.jar"]);
+    assert_eq!(f.ash.installed_mods(&id).unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_mod_that_does_what_an_ash_feature_does_says_which() {
+    let http = modrinth();
+    let freelook = "g4pR0Fmy";
+    serve_versions(&http, freelook, json!([version(freelook, "fl1", "release", json!([]))]));
+    http.route(
+        format!("{MODRINTH}/project/{freelook}"),
+        HttpResponse::ok(project(freelook, "Freelook").to_string()),
+    );
+    let f = fixture(http);
+    let id = f.instance("1.21.11", Loader::Fabric);
+    f.ash.install_mod(&id, freelook).await.unwrap();
+    f.ash.install_mod(&id, SODIUM).await.unwrap();
+
+    let listed = f.ash.list_mods(&id).unwrap();
+
+    let notes: Vec<(&str, Option<&str>)> =
+        listed.iter().map(|m| (m.title.as_str(), m.overlaps.as_deref())).collect();
+    assert_eq!(notes, [("Freelook", Some("Freelook")), ("Sodium", None)]);
+}
+
+#[tokio::test]
+async fn a_name_that_reaches_outside_the_folder_is_refused() {
+    let f = fixture(modrinth());
+    let id = f.instance("1.21.11", Loader::Fabric);
+    let outside = f.ash.mods_directory(&id).unwrap().parent().unwrap().join("options.txt");
+    std::fs::write(&outside, "keep me").unwrap();
+
+    for name in ["../options.txt", r"..\options.txt", r"C:\Windows\x.jar", "../x.jar"] {
+        assert!(f.ash.remove_mod(&id, name).is_err(), "{name}");
+        assert!(f.ash.set_mod_enabled(&id, name, false).is_err(), "{name}");
+    }
+    assert!(outside.exists());
+}

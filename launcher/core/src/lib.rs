@@ -64,7 +64,7 @@ pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use links::Links;
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
-pub use mods::{InstallOutcome, InstalledMod, ModHit, ModSearch};
+pub use mods::{InstallOutcome, InstalledMod, ModEntry, ModHit, ModSearch};
 pub use news::{News, NewsKind, NewsPost};
 pub use overrides::{MachineDefaults, MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use preferences::{LauncherPreferences, OnGameStart};
@@ -1219,6 +1219,45 @@ impl Ash {
             self.set_overrides(id, overrides)?;
         }
         Ok(InstallOutcome { installed, mods_turned_on, optional })
+    }
+
+    /// Every jar in the instance's `mods` folder, on or off, however it got
+    /// there: ash's record names what it installed, a jar's own
+    /// `fabric.mod.json` names the rest.
+    pub fn list_mods(&self, id: &InstanceId) -> Result<Vec<ModEntry>, AshError> {
+        let mods_dir = self.mods_directory(id)?;
+        Ok(mods::list(&instance::instance_dir(&self.config.instances_root, id), &mods_dir))
+    }
+
+    /// Turn one mod on or off. Refused while the game runs: it has the jars open.
+    pub fn set_mod_enabled(
+        &self,
+        id: &InstanceId,
+        file_name: &str,
+        enabled: bool,
+    ) -> Result<Vec<ModEntry>, AshError> {
+        self.mods_not_in_use(id)?;
+        mods::set_enabled(&self.mods_directory(id)?, file_name, enabled)?;
+        self.list_mods(id)
+    }
+
+    /// Remove one mod, and ash's record of it. Refused while the game runs.
+    pub fn remove_mod(&self, id: &InstanceId, file_name: &str) -> Result<Vec<ModEntry>, AshError> {
+        self.mods_not_in_use(id)?;
+        let mods_dir = self.mods_directory(id)?;
+        mods::remove(
+            &instance::instance_dir(&self.config.instances_root, id),
+            &mods_dir,
+            file_name,
+        )?;
+        self.list_mods(id)
+    }
+
+    fn mods_not_in_use(&self, id: &InstanceId) -> Result<(), AshError> {
+        if matches!(self.game_status(id), Some(GameStatus::Running)) {
+            return Err(AshError::ModsInUse { id: id.as_str().to_owned() });
+        }
+        Ok(())
     }
 
     /// The mods ash installed in this instance, from its `ash-mods.json`.
