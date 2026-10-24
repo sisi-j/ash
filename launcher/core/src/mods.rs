@@ -1,0 +1,453 @@
+//! Mods from Modrinth (spec 0005, ADR-0026, research 0014): searched for an
+//! instance's version and loader, installed with what they require, each file
+//! checked against Modrinth's SHA-512 before it goes into the instance's
+//! `mods` folder.
+//!
+//! The folder stays the player's: ash puts a file there only when the player
+//! installs that mod. What ash installed is recorded in the instance's
+//! `ash-mods.json`, for listing and, later, updating.
+
+use std::collections::{HashSet, VecDeque};
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha512};
+
+use crate::error::AshError;
+use crate::http::{HttpPort, HttpRequest};
+use crate::loader::Loader;
+
+/// Fabric API on Modrinth. ash bundles the whole of it on modern targets, so
+/// a dependency on it is already met there (research 0014 §5).
+const FABRIC_API: &str = "P7dR8mSH";
+
+const MANIFEST: &str = "ash-mods.json";
+
+/// Modrinth asks every client to name itself uniquely. The repository, not a
+/// person: nobody's address goes to a third party.
+const USER_AGENT: &str =
+    concat!("sisi-j/ash/", env!("CARGO_PKG_VERSION"), " (+https://github.com/sisi-j/ash)");
+
+/// Modrinth's name for an instance's loader, or none for vanilla.
+pub(crate) fn loader_tag(loader: Loader) -> Option<&'static str> {
+    match loader {
+        Loader::Vanilla => None,
+        Loader::Fabric => Some("fabric"),
+        Loader::LegacyFabric => Some("legacy-fabric"),
+    }
+}
+
+// ---- what the Mods page shows ----------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ModHit {
+    pub project_id: String,
+    pub slug: String,
+    pub title: String,
+    pub description: String,
+    pub icon_url: Option<String>,
+    pub downloads: u64,
+    /// Already in this instance, from Modrinth.
+    pub installed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ModSearch {
+    pub hits: Vec<ModHit>,
+    pub total: u64,
+}
+
+/// One mod ash installed, as `ash-mods.json` records it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstalledMod {
+    pub project_id: String,
+    pub title: String,
+    pub version_id: String,
+    pub version_number: String,
+    /// `release`, `beta` or `alpha`.
+    pub version_type: String,
+    pub file_name: String,
+    pub sha512: String,
+    pub icon_url: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Manifest {
+    mods: Vec<InstalledMod>,
+}
+
+/// What installing a mod did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct InstallOutcome {
+    /// The mod and each dependency newly installed or replaced, in order.
+    pub installed: Vec<InstalledMod>,
+    /// Third-party mods were off for this instance, and installing turned them on.
+    pub mods_turned_on: bool,
+    /// Optional dependencies, by name, listed rather than installed.
+    pub optional: Vec<String>,
+}
+
+// ---- Modrinth's answers (research 0014) -------------------------------------
+
+#[derive(Deserialize)]
+struct SearchBody {
+    hits: Vec<SearchHit>,
+    total_hits: u64,
+}
+
+#[derive(Deserialize)]
+struct SearchHit {
+    project_id: String,
+    slug: String,
+    title: String,
+    #[serde(default)]
+    description: String,
+    icon_url: Option<String>,
+    #[serde(default)]
+    downloads: u64,
+}
+
+#[derive(Deserialize, Clone)]
+struct Version {
+    id: String,
+    project_id: String,
+    version_number: String,
+    version_type: String,
+    files: Vec<VersionFile>,
+    #[serde(default)]
+    dependencies: Vec<Dependency>,
+}
+
+#[derive(Deserialize, Clone)]
+struct VersionFile {
+    url: String,
+    filename: String,
+    #[serde(default)]
+    primary: bool,
+    hashes: Hashes,
+}
+
+#[derive(Deserialize, Clone)]
+struct Hashes {
+    sha512: String,
+}
+
+#[derive(Deserialize, Clone)]
+struct Dependency {
+    version_id: Option<String>,
+    project_id: Option<String>,
+    dependency_type: String,
+}
+
+#[derive(Deserialize)]
+struct Project {
+    id: String,
+    title: String,
+    icon_url: Option<String>,
+}
+
+// ---- asking -----------------------------------------------------------------
+
+/// Query-string encoding: what isn't unreserved is %-escaped.
+fn encode(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+async fn get_json<T: serde::de::DeserializeOwned>(
+    http: &dyn HttpPort,
+    url: &str,
+) -> Result<T, AshError> {
+    let mut request = HttpRequest::get(url);
+    request.headers.push(("User-Agent".into(), USER_AGENT.into()));
+    let response = http.send(request).await?;
+    if !response.is_success() {
+        return Err(AshError::UnexpectedStatus { url: url.to_owned(), status: response.status });
+    }
+    serde_json::from_slice(&response.body)
+        .map_err(|e| AshError::Malformed { url: url.to_owned(), detail: e.to_string() })
+}
+
+pub(crate) async fn search(
+    http: &dyn HttpPort,
+    base: &str,
+    tag: &str,
+    game_version: &str,
+    query: &str,
+    offset: u32,
+    installed: &[InstalledMod],
+) -> Result<ModSearch, AshError> {
+    let facets =
+        format!(r#"[["project_type:mod"],["versions:{game_version}"],["categories:{tag}"]]"#);
+    // With nothing typed, the most downloaded is a sensible first page.
+    let index = if query.trim().is_empty() { "downloads" } else { "relevance" };
+    let url = format!(
+        "{base}/search?query={}&facets={}&index={index}&limit=20&offset={offset}",
+        encode(query.trim()),
+        encode(&facets)
+    );
+    let body: SearchBody = get_json(http, &url).await?;
+    Ok(ModSearch {
+        total: body.total_hits,
+        hits: body
+            .hits
+            .into_iter()
+            .map(|h| ModHit {
+                installed: installed.iter().any(|m| m.project_id == h.project_id),
+                project_id: h.project_id,
+                slug: h.slug,
+                title: h.title,
+                description: h.description,
+                icon_url: h.icon_url,
+                downloads: h.downloads,
+            })
+            .collect(),
+    })
+}
+
+async fn versions(
+    http: &dyn HttpPort,
+    base: &str,
+    project: &str,
+    tag: &str,
+    game_version: &str,
+) -> Result<Vec<Version>, AshError> {
+    let url = format!(
+        "{base}/project/{}/version?loaders={}&game_versions={}",
+        encode(project),
+        encode(&format!(r#"["{tag}"]"#)),
+        encode(&format!(r#"["{game_version}"]"#))
+    );
+    get_json(http, &url).await
+}
+
+/// The newest release; failing that, the newest of any type (research 0014 §3).
+/// Modrinth lists them newest first.
+fn choose(versions: Vec<Version>) -> Option<Version> {
+    let release = versions.iter().position(|v| v.version_type == "release");
+    match release {
+        Some(i) => versions.into_iter().nth(i),
+        None => versions.into_iter().next(),
+    }
+}
+
+async fn projects(
+    http: &dyn HttpPort,
+    base: &str,
+    ids: &[String],
+) -> Result<Vec<Project>, AshError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let list =
+        format!("[{}]", ids.iter().map(|id| format!("\"{id}\"")).collect::<Vec<_>>().join(","));
+    get_json(http, &format!("{base}/projects?ids={}", encode(&list))).await
+}
+
+// ---- the record --------------------------------------------------------------
+
+pub(crate) fn manifest_path(instance_dir: &Path) -> PathBuf {
+    instance_dir.join(MANIFEST)
+}
+
+pub(crate) fn installed(instance_dir: &Path) -> Vec<InstalledMod> {
+    std::fs::read(manifest_path(instance_dir))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Manifest>(&bytes).ok())
+        .map(|m| m.mods)
+        .unwrap_or_default()
+}
+
+pub(crate) fn save(instance_dir: &Path, mods: Vec<InstalledMod>) -> Result<(), AshError> {
+    let encoded = serde_json::to_vec_pretty(&Manifest { mods })
+        .map_err(|e| AshError::Storage { detail: format!("encoding ash-mods.json: {e}") })?;
+    std::fs::write(manifest_path(instance_dir), encoded)
+        .map_err(AshError::writing("writing ash-mods.json"))
+}
+
+// ---- installing ----------------------------------------------------------------
+
+/// Everything installing `root` takes: the versions to fetch, in order, and
+/// the optional dependencies to mention. Nothing is written.
+struct Plan {
+    versions: Vec<Version>,
+    optional: Vec<String>,
+}
+
+/// What a mod is being installed into.
+pub(crate) struct Target<'a> {
+    pub loader: Loader,
+    pub game_version: &'a str,
+}
+
+/// A project's name, for an error about it; its id if even that can't be had.
+async fn title(http: &dyn HttpPort, base: &str, project: &str) -> String {
+    get_json::<Project>(http, &format!("{base}/project/{}", encode(project)))
+        .await
+        .map(|p| p.title)
+        .unwrap_or_else(|_| project.to_owned())
+}
+
+async fn plan(
+    http: &dyn HttpPort,
+    base: &str,
+    target: &Target<'_>,
+    tag: &str,
+    root: &Project,
+    have: &[InstalledMod],
+) -> Result<Plan, AshError> {
+    let (loader, game_version) = (target.loader, target.game_version);
+    let named = |project: &str| if project == root.id { Some(root.title.clone()) } else { None };
+    let mut queue: VecDeque<(String, Option<String>)> = VecDeque::from([(root.id.clone(), None)]);
+    let mut seen = HashSet::new();
+    let mut planned: Vec<Version> = Vec::new();
+    let mut optional = Vec::new();
+    while let Some((project, pinned)) = queue.pop_front() {
+        if loader == Loader::Fabric && project == FABRIC_API {
+            continue; // ash's bundle has it (research 0014 §5)
+        }
+        if !seen.insert(project.clone()) {
+            continue;
+        }
+        let existing = have.iter().find(|m| m.project_id == project);
+        let version = match &pinned {
+            Some(id) => {
+                get_json::<Version>(http, &format!("{base}/version/{}", encode(id))).await?
+            }
+            None => match choose(versions(http, base, &project, tag, game_version).await?) {
+                Some(version) => version,
+                None => {
+                    let title = match named(&project) {
+                        Some(title) => title,
+                        None => title(http, base, &project).await,
+                    };
+                    return Err(AshError::ModUnavailable { title });
+                }
+            },
+        };
+        // A dependency already here stays, unless it pins another version.
+        let keep = project != root.id
+            && existing.is_some_and(|m| pinned.is_none() || m.version_id == version.id);
+        if keep {
+            continue;
+        }
+        for dep in &version.dependencies {
+            let Some(dep_project) = dep.project_id.clone() else { continue };
+            match dep.dependency_type.as_str() {
+                "required" => queue.push_back((dep_project, dep.version_id.clone())),
+                "optional" => optional.push(dep_project),
+                "incompatible" => {
+                    if let Some(clash) = have.iter().find(|m| m.project_id == dep_project) {
+                        let title = match named(&version.project_id) {
+                            Some(title) => title,
+                            None => title(http, base, &version.project_id).await,
+                        };
+                        return Err(AshError::ModIncompatible { title, with: clash.title.clone() });
+                    }
+                }
+                _ => {} // embedded: inside the jar already
+            }
+        }
+        planned.push(version);
+    }
+    Ok(Plan { versions: planned, optional })
+}
+
+fn sha512_hex(bytes: &[u8]) -> String {
+    Sha512::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Install `root` into the instance: the mod and what it requires, each file
+/// checked before it's moved in, then recorded.
+pub(crate) async fn install(
+    http: &dyn HttpPort,
+    base: &str,
+    target: &Target<'_>,
+    instance_dir: &Path,
+    mods_dir: &Path,
+    root: &str,
+) -> Result<(Vec<InstalledMod>, Vec<String>), AshError> {
+    let tag = loader_tag(target.loader).ok_or(AshError::ModsNeedFabric)?;
+    let have = installed(instance_dir);
+    let root_project: Project = get_json(http, &format!("{base}/project/{}", encode(root))).await?;
+    let plan = plan(http, base, target, tag, &root_project, &have).await?;
+
+    let mut ids: Vec<String> = plan.versions.iter().map(|v| v.project_id.clone()).collect();
+    ids.extend(plan.optional.iter().cloned());
+    let known = projects(http, base, &ids).await?;
+    let title_of = |id: &str| {
+        known.iter().find(|p| p.id == id).map(|p| p.title.clone()).unwrap_or_else(|| id.to_owned())
+    };
+    let icon_of = |id: &str| known.iter().find(|p| p.id == id).and_then(|p| p.icon_url.clone());
+
+    std::fs::create_dir_all(mods_dir).map_err(AshError::writing("creating the mods folder"))?;
+    let mut record = have.clone();
+    let mut done = Vec::new();
+    for version in &plan.versions {
+        let file = version
+            .files
+            .iter()
+            .find(|f| f.primary)
+            .or_else(|| version.files.first())
+            .ok_or_else(|| AshError::ModUnavailable { title: title_of(&version.project_id) })?;
+        let mut request = HttpRequest::get(&file.url);
+        request.headers.push(("User-Agent".into(), USER_AGENT.into()));
+        let response = http.send(request).await?;
+        if !response.is_success() {
+            return Err(AshError::UnexpectedStatus {
+                url: file.url.clone(),
+                status: response.status,
+            });
+        }
+        if sha512_hex(&response.body) != file.hashes.sha512.to_ascii_lowercase() {
+            return Err(AshError::VerificationFailed { path: file.filename.clone() });
+        }
+        // Written beside, then moved in: a half-written jar never sits in the folder.
+        let part = mods_dir.join(format!("{}.part", file.filename));
+        std::fs::write(&part, &response.body).map_err(AshError::writing("writing a mod"))?;
+        std::fs::rename(&part, mods_dir.join(&file.filename))
+            .map_err(AshError::writing("moving a mod into place"))?;
+        // The version it replaces, if any, goes.
+        if let Some(old) = record.iter().find(|m| m.project_id == version.project_id) {
+            if old.file_name != file.filename {
+                let _ = std::fs::remove_file(mods_dir.join(&old.file_name));
+                let _ = std::fs::remove_file(mods_dir.join(format!("{}.disabled", old.file_name)));
+            }
+        }
+        record.retain(|m| m.project_id != version.project_id);
+        let entry = InstalledMod {
+            project_id: version.project_id.clone(),
+            title: title_of(&version.project_id),
+            version_id: version.id.clone(),
+            version_number: version.version_number.clone(),
+            version_type: version.version_type.clone(),
+            file_name: file.filename.clone(),
+            sha512: file.hashes.sha512.to_ascii_lowercase(),
+            icon_url: icon_of(&version.project_id),
+        };
+        record.push(entry.clone());
+        done.push(entry);
+        save(instance_dir, record.clone())?;
+    }
+    let optional = plan.optional.iter().map(|id| title_of(id)).collect();
+    Ok((done, optional))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_values_are_escaped_and_plain_ones_left_alone() {
+        assert_eq!(encode("sodium"), "sodium");
+        assert_eq!(encode(r#"[["versions:1.21.11"]]"#), "%5B%5B%22versions%3A1.21.11%22%5D%5D");
+        assert_eq!(encode("mod menu"), "mod%20menu");
+    }
+}

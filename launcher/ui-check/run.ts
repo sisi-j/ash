@@ -317,7 +317,6 @@ const STATES: State[] = [
     verify: async (page) => ((await page.locator(".instance-page").count()) === 0 ? null : "still on the instance page after deleting"),
   },
   { name: "new-instance", shows: "Built for", reach: (page) => page.getByRole("button", { name: "New", exact: true }).click() },
-  { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
   {
     name: "news",
     shows: "ash 0.2: your ash account",
@@ -372,6 +371,46 @@ const STATES: State[] = [
     shows: "ash couldn't sign you in to ash just now",
     reach: openPage("Wardrobe"),
     verify: async (page) => ((await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? null : "a cape could be chosen without ash"),
+  },
+  // Mods from Modrinth (ADR-0026).
+  {
+    name: "mods",
+    shows: "Mod Menu",
+    reach: openPage("Mods"),
+    verify: async (page) => {
+      await page.getByLabel("Search mods").fill("iri");
+      await page.waitForTimeout(600);
+      return (await page.getByText("Sodium", { exact: true }).count()) === 0 ? null : "the search didn't narrow the list";
+    },
+  },
+  {
+    name: "mods-installed",
+    shows: "Your mods are now on for",
+    reach: async (page) => {
+      await openPage("Mods")(page);
+      await page.getByRole("button", { name: "Install Iris Shaders" }).click();
+    },
+    verify: async (page) => {
+      if ((await page.getByText("Installed Iris Shaders and Sodium.").count()) !== 1) return "didn't say what it installed";
+      if (!(await page.getByRole("button", { name: "Sodium installed" }).isDisabled())) return "the dependency still offers Install";
+      return (await page.getByRole("button", { name: "Iris Shaders installed" }).isDisabled()) ? null : "Install still offered";
+    },
+  },
+  {
+    name: "mods-incompatible",
+    shows: "Remove OptiFabric first",
+    reach: async (page) => {
+      await openPage("Mods")(page);
+      await page.getByRole("button", { name: "Install Iris Shaders" }).click();
+    },
+  },
+  {
+    name: "mods-vanilla",
+    shows: "Mods need a Fabric instance.",
+    reach: async (page) => {
+      await openPage("Mods")(page);
+      await page.getByRole("radio", { name: /Vanilla/ }).click();
+    },
   },
   // "Copy report" (spec 0005): shown in full before it's copied.
   {

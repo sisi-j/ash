@@ -315,6 +315,14 @@ function status(): real.GameStatus | null {
   return null;
 }
 
+/** Modrinth, as the Mods page sees it: icons as data URLs, since the check runs offline. */
+const MODS = [
+  { project_id: "sodium", slug: "sodium", title: "Sodium", description: "The fastest rendering optimization mod for Minecraft.", downloads: 112_400_000 },
+  { project_id: "iris", slug: "iris", title: "Iris Shaders", description: "A modern shader pack loader for Minecraft, compatible with Sodium.", downloads: 75_100_000 },
+  { project_id: "modmenu", slug: "modmenu", title: "Mod Menu", description: "Adds a mod menu to view the list of mods you have installed.", downloads: 61_900_000 },
+].map((m, i) => ({ ...m, icon_url: capeTexture(["#2f7d4f", "#6d3fbf", "#3f6dbf"][i]!) }));
+const installedProjects = new Set<string>();
+
 const CRASH_LOG = [
   "[Render thread/INFO]: Loaded 1371 recipes",
   "[Render thread/ERROR]: Unreported exception thrown!",
@@ -464,6 +472,37 @@ export const api: typeof real.api = {
     (window as unknown as { openedLink?: string }).openedLink = url;
   },
   appVersion: () => resolve("0.1.0-alpha.1"),
+  searchMods: (_id, query) =>
+    resolve({
+      total: 3,
+      hits: MODS.filter((m) => m.title.toLowerCase().includes(query.toLowerCase())).map((m) => ({
+        ...m,
+        installed: installedProjects.has(m.project_id),
+      })),
+    }),
+  installMod: (_id, projectId) => {
+    if (state === "mods-incompatible") {
+      return Promise.reject({
+        kind: "mod_incompatible",
+        message: "Iris Shaders doesn't work with OptiFabric, which this instance has. Remove OptiFabric first to install it.",
+        retryable: false,
+      });
+    }
+    installedProjects.add(projectId);
+    const mod = MODS.find((m) => m.project_id === projectId)!;
+    const installed = [mod, ...(projectId === "iris" ? [MODS[0]!] : [])].map((m) => ({
+      project_id: m.project_id,
+      title: m.title,
+      version_id: "v1",
+      version_number: "1.0.0",
+      version_type: "release",
+      file_name: `${m.slug}.jar`,
+      sha512: "",
+      icon_url: null,
+    }));
+    return new Promise((done) => window.setTimeout(() => done({ installed, mods_turned_on: true, optional: [] }), 150));
+  },
+  installedMods: () => resolve([]),
   report: (request) =>
     resolve(
       [

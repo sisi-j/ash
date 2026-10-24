@@ -21,6 +21,7 @@ import {
   LOADER_LABELS,
 } from "./api";
 import { AshAccountNotice } from "./AshAccount";
+import { ModsPage } from "./ModsPage";
 import { ReportDialog } from "./ReportDialog";
 import { UpdateBar } from "./UpdateBar";
 import { Icon } from "./icons";
@@ -32,7 +33,7 @@ import { WardrobePage } from "./WardrobePage";
 import { DeletedElsewhereQuestion } from "./Sync";
 import { PlayPage } from "./PlayPage";
 import { SettingsPage } from "./SettingsPage";
-import { EmptyPage, Sidebar, type Page } from "./Sidebar";
+import { Sidebar, type Page } from "./Sidebar";
 import { SignIn } from "./SignIn";
 import { TitleBar } from "./TitleBar";
 
@@ -365,11 +366,14 @@ export default function App() {
             onCancel={signedIn ? () => setSigningIn(false) : undefined}
           />
         ) : page === "mods" ? (
-          // Until third-party mods can be added to an instance (#46).
-          <EmptyPage
-            page="mods"
-            headline="Mods are coming soon"
-            detail="Third-party mods you add to an instance will show here."
+          <ModsPage
+            instances={instances}
+            selected={selectedId}
+            onSelect={setSelectedId}
+            onNewInstance={() => {
+              setPage("play");
+              setPlayView("new");
+            }}
           />
         ) : page === "wardrobe" ? (
           <WardrobePage />

@@ -173,6 +173,20 @@ pub enum AshError {
     #[error("the server list changed since it was read")]
     ServerListChanged,
 
+    // ---- mods (spec 0005, ADR-0026) ----
+    /// Mods are for Fabric instances; a vanilla one has no loader to load them.
+    #[error("mods need a Fabric instance")]
+    ModsNeedFabric,
+
+    /// Modrinth has no version of the mod for this instance's game version
+    /// and loader.
+    #[error("{title} has no version for this instance")]
+    ModUnavailable { title: String },
+
+    /// The mod declares itself incompatible with one the instance has.
+    #[error("{title} is incompatible with {with}")]
+    ModIncompatible { title: String, with: String },
+
     /// `servers.dat` could not be read, so ash will not write it.
     #[error("the server list could not be read, so it was left as it is")]
     ServerListUnreadable,
@@ -255,6 +269,9 @@ impl AshError {
             AshError::InvalidServerAddress { .. } => "invalid_server_address",
             AshError::ServerListInUse { .. } => "server_list_in_use",
             AshError::ServerListChanged => "server_list_changed",
+            AshError::ModsNeedFabric => "mods_need_fabric",
+            AshError::ModUnavailable { .. } => "mod_unavailable",
+            AshError::ModIncompatible { .. } => "mod_incompatible",
             AshError::ServerListUnreadable => "server_list_unreadable",
             AshError::InvalidServerName { .. } => "invalid_server_name",
         }
@@ -423,6 +440,15 @@ impl AshError {
                 "The server list changed since ash last read it. Look again and try once more."
                     .into()
             }
+            AshError::ModsNeedFabric => {
+                "Mods need a Fabric instance. Make one with New, then add mods to it here.".into()
+            }
+            AshError::ModUnavailable { title } => {
+                format!("{title} has no version for this instance's Minecraft version yet.")
+            }
+            AshError::ModIncompatible { title, with } => {
+                format!("{title} doesn't work with {with}, which this instance has. Remove {with} first to install it.")
+            }
             AshError::ServerListUnreadable => {
                 "ash couldn't read this instance's server list, so it hasn't changed it. Edit it in \
                  the game's Multiplayer screen."
@@ -585,6 +611,9 @@ mod tests {
             AshError::ServerListChanged,
             AshError::ServerListUnreadable,
             AshError::InvalidServerName { name: s.clone() },
+            AshError::ModsNeedFabric,
+            AshError::ModUnavailable { title: s.clone() },
+            AshError::ModIncompatible { title: s.clone(), with: s.clone() },
         ];
 
         // This says the list has no variant in it twice. It cannot say the
@@ -657,7 +686,10 @@ mod tests {
             | AshError::ServerListInUse { .. }
             | AshError::ServerListChanged
             | AshError::ServerListUnreadable
-            | AshError::InvalidServerName { .. } => {}
+            | AshError::InvalidServerName { .. }
+            | AshError::ModsNeedFabric
+            | AshError::ModUnavailable { .. }
+            | AshError::ModIncompatible { .. } => {}
         }
     }
 }

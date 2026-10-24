@@ -203,6 +203,35 @@ async fn equip(
     state.ash.equip(&slot, cosmetic_id.as_deref()).await.map_err(UiError::from)
 }
 
+// ---- mods (spec 0005, ADR-0026) ----
+
+#[tauri::command]
+async fn search_mods(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    query: String,
+    offset: u32,
+) -> Result<ash_core::ModSearch, UiError> {
+    state.ash.search_mods(&id, &query, offset).await.map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn install_mod(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    project_id: String,
+) -> Result<ash_core::InstallOutcome, UiError> {
+    state.ash.install_mod(&id, &project_id).await.map_err(UiError::from)
+}
+
+#[tauri::command]
+fn installed_mods(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<ash_core::InstalledMod>, UiError> {
+    state.ash.installed_mods(&id).map_err(UiError::from)
+}
+
 /// The player's answer about an instance deleted on another computer.
 #[tauri::command]
 async fn resolve_deleted_elsewhere(
@@ -1061,6 +1090,9 @@ pub fn run() {
             check_for_update,
             install_update,
             app_version,
+            search_mods,
+            install_mod,
+            installed_mods,
             report,
             links,
             open_feedback_link,

@@ -51,6 +51,9 @@ pub struct Config {
     /// A value so a test points it at a fake host. Nothing ash does to play
     /// depends on it answering.
     pub backend_url: String,
+    /// Modrinth's API (research 0014), without a trailing slash. A value so a
+    /// test points it at a fake.
+    pub modrinth_url: String,
     /// How long a Minecraft session is reused before the Microsoft chain is
     /// walked again. Mojang's tokens last 24 hours; four are left as margin
     /// for a game started near the end. A value so a test can make every
@@ -82,6 +85,7 @@ impl Config {
             client_root: base.join("client"),
             server_timeout: Duration::from_secs(3),
             backend_url: "https://api.ashlauncher.com".into(),
+            modrinth_url: "https://api.modrinth.com/v2".into(),
             session_reuse: Duration::from_secs(20 * 60 * 60),
         }
     }

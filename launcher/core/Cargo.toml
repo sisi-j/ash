@@ -16,6 +16,8 @@ keyring = "4"
 uuid = { version = "1", features = ["v4"] }
 # Mojang publishes a SHA-1 and a size for every artifact; both get checked.
 sha1 = "0.11"
+# Modrinth publishes a SHA-512 for every mod file (research 0014).
+sha2 = "0.11"
 # Signing in to ash with the player's chat key (ADR-0020, amended): RSA
 # signing from the library rustls already builds on, the certificate's base64
 # and its ISO 8601 expiry.

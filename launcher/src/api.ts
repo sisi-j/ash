@@ -362,6 +362,40 @@ export function isUiError(value: unknown): value is UiError {
 
 // ---- commands --------------------------------------------------------------
 
+/** Mirrors `ash_core::ModHit`: one Modrinth search result (spec 0005, ADR-0026). */
+export type ModHit = {
+  project_id: string;
+  slug: string;
+  title: string;
+  description: string;
+  icon_url: string | null;
+  downloads: number;
+  /** Already in this instance, from Modrinth. */
+  installed: boolean;
+};
+
+export type ModSearch = { hits: ModHit[]; total: number };
+
+/** Mirrors `ash_core::InstalledMod`: one mod ash installed, as `ash-mods.json` has it. */
+export type InstalledMod = {
+  project_id: string;
+  title: string;
+  version_id: string;
+  version_number: string;
+  version_type: string;
+  file_name: string;
+  sha512: string;
+  icon_url: string | null;
+};
+
+export type InstallOutcome = {
+  installed: InstalledMod[];
+  /** Third-party mods were off for the instance, and installing turned them on. */
+  mods_turned_on: boolean;
+  /** Optional dependencies, by name, listed rather than installed. */
+  optional: string[];
+};
+
 /** What a "Copy report" is about (spec 0005). */
 export type ReportRequest = {
   instance: InstanceId | null;
@@ -489,6 +523,9 @@ export const api = {
   deleteInstance: (id: InstanceId) => invoke<void>("delete_instance", { id }),
   /** The instance's `mods` folder, the player's, opened in the file manager. */
   revealModsFolder: (id: InstanceId) => invoke<void>("reveal_mods_folder", { id }),
+  searchMods: (id: InstanceId, query: string, offset: number) => invoke<ModSearch>("search_mods", { id, query, offset }),
+  installMod: (id: InstanceId, projectId: string) => invoke<InstallOutcome>("install_mod", { id, projectId }),
+  installedMods: (id: InstanceId) => invoke<InstalledMod[]>("installed_mods", { id }),
   revealGameDirectory: (id: InstanceId) =>
     invoke<void>("reveal_game_directory", { id }),
   /** ash's own log: the first thing anyone asks for when a launch fails. */

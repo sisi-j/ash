@@ -28,6 +28,7 @@ mod launch;
 mod links;
 mod load_report;
 mod loader;
+mod mods;
 mod natives;
 mod news;
 mod overrides;
@@ -63,6 +64,7 @@ pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use links::Links;
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
+pub use mods::{InstallOutcome, InstalledMod, ModHit, ModSearch};
 pub use news::{News, NewsKind, NewsPost};
 pub use overrides::{MachineDefaults, MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
 pub use preferences::{LauncherPreferences, OnGameStart};
@@ -1163,6 +1165,66 @@ impl Ash {
         cancel: &Cancel,
     ) -> Result<InvocationView, AshError> {
         self.start(id, How { without_third_party_mods: true, ..How::default() }, sink, cancel).await
+    }
+
+    // ---- mods (spec 0005, ADR-0026) ---------------------------------------
+
+    /// Mods on Modrinth for this instance's version and loader, the most
+    /// downloaded first when nothing is typed.
+    pub async fn search_mods(
+        &self,
+        id: &InstanceId,
+        query: &str,
+        offset: u32,
+    ) -> Result<ModSearch, AshError> {
+        let instance = self.instance(id)?;
+        let tag = mods::loader_tag(instance.loader).ok_or(AshError::ModsNeedFabric)?;
+        let have = mods::installed(&instance::instance_dir(&self.config.instances_root, id));
+        mods::search(
+            self.http.as_ref(),
+            &self.config.modrinth_url,
+            tag,
+            &instance.version_id,
+            query,
+            offset,
+            &have,
+        )
+        .await
+    }
+
+    /// Install a mod from Modrinth, and what it requires, into the instance.
+    /// Turns the instance's third-party mods on, if they were off, since the
+    /// player asked for this one: the outcome says so.
+    pub async fn install_mod(
+        &self,
+        id: &InstanceId,
+        project_id: &str,
+    ) -> Result<InstallOutcome, AshError> {
+        let instance = self.instance(id)?;
+        let mods_dir = self.mods_directory(id)?;
+        let target = mods::Target { loader: instance.loader, game_version: &instance.version_id };
+        let (installed, optional) = mods::install(
+            self.http.as_ref(),
+            &self.config.modrinth_url,
+            &target,
+            &instance::instance_dir(&self.config.instances_root, id),
+            &mods_dir,
+            project_id,
+        )
+        .await?;
+        let mut overrides = self.overrides(id)?;
+        let mods_turned_on = !overrides.third_party_mods;
+        if mods_turned_on {
+            overrides.third_party_mods = true;
+            self.set_overrides(id, overrides)?;
+        }
+        Ok(InstallOutcome { installed, mods_turned_on, optional })
+    }
+
+    /// The mods ash installed in this instance, from its `ash-mods.json`.
+    pub fn installed_mods(&self, id: &InstanceId) -> Result<Vec<InstalledMod>, AshError> {
+        self.instance(id)?;
+        Ok(mods::installed(&instance::instance_dir(&self.config.instances_root, id)))
     }
 
     /// The instance's `mods` folder, the player's, for opening in the file
