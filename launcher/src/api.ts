@@ -362,6 +362,9 @@ export function isUiError(value: unknown): value is UiError {
 
 // ---- commands --------------------------------------------------------------
 
+/** Links the launcher shows that can change without a release (spec 0005). */
+export type Links = { feedback_url: string | null };
+
 /** Mirrors the launcher's `AvailableUpdate`: a newer release, and its what's new (ADR-0025). */
 export type AvailableUpdate = { version: string; notes: string };
 
@@ -395,6 +398,13 @@ export const api = {
     invoke<SyncStatus>("resolve_deleted_elsewhere", { id, deleteHere }),
   markNewsSeen: () => invoke<void>("mark_news_seen"),
   openNewsLink: (url: string) => invoke<void>("open_news_link", { url }),
+  /** This launcher's version, as released: `0.1.0-alpha.1`. */
+  appVersion: () => invoke<string>("app_version"),
+  links: () => invoke<Links>("links"),
+  /** Opens the Discord invite ash last saw; the window never names the address. */
+  openFeedbackLink: () => invoke<void>("open_feedback_link"),
+  firstRunNoteDismissed: () => invoke<boolean>("first_run_note_dismissed"),
+  dismissFirstRunNote: () => invoke<void>("dismiss_first_run_note"),
   /** A newer release, or null - also when the check couldn't be made. */
   checkForUpdate: () => invoke<AvailableUpdate | null>("check_for_update"),
   /** Install it: ash closes and the new version opens. Refused while a game runs. */

@@ -330,12 +330,22 @@ async fn no_machine_local_value_is_written_into_the_directory_a_sync_would_carry
     for (path, text) in &carried {
         for leaked in [DESKTOP_MEMORY_MB.to_string(), "3840".to_owned(), "2160".to_owned()] {
             assert!(
-                !text.contains(&leaked),
+                !contains_number(text, &leaked),
                 "{} carries a machine-local value: {leaked}",
                 path.display()
             );
         }
     }
+}
+
+/// Whether `number` appears on its own, not inside a longer one: a creation
+/// time of 1792943840123 holds "3840" without carrying a screen width.
+fn contains_number(text: &str, number: &str) -> bool {
+    text.match_indices(number).any(|(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + number.len()..].chars().next();
+        !before.is_some_and(|c| c.is_ascii_digit()) && !after.is_some_and(|c| c.is_ascii_digit())
+    })
 }
 
 #[tokio::test]

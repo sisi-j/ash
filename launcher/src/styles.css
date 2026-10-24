@@ -147,6 +147,24 @@ button {
   letter-spacing: -0.04em;
 }
 
+.alpha-tag {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--fill-2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-version {
+  margin: 24px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
 .window-controls {
   display: flex;
   align-self: stretch;

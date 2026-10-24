@@ -463,6 +463,14 @@ export const api: typeof real.api = {
   openNewsLink: async (url) => {
     (window as unknown as { openedLink?: string }).openedLink = url;
   },
+  appVersion: () => resolve("0.1.0-alpha.1"),
+  links: () => resolve({ feedback_url: state === "no-feedback-link" ? null : "https://discord.gg/ash-alpha" }),
+  openFeedbackLink: async () => {
+    (window as unknown as { openedFeedback?: boolean }).openedFeedback = true;
+  },
+  // Shown only where a state is about it, so every other screenshot stays as it was.
+  firstRunNoteDismissed: () => resolve(state !== "alpha-note"),
+  dismissFirstRunNote: nothing,
   openPrivacyStatement: async () => {
     (window as unknown as { openedPrivacy?: boolean }).openedPrivacy = true;
   },

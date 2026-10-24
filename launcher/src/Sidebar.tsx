@@ -17,22 +17,36 @@ export const PAGES: Record<Page, { label: string; icon: IconName }> = {
  * change, so after the first look the icon is enough, and the space goes to
  * the page instead.
  */
-export function Sidebar(props: { page: Page; onOpen: (page: Page) => void; unread?: Page[] }) {
+export function Sidebar(props: {
+  page: Page;
+  onOpen: (page: Page) => void;
+  unread?: Page[];
+  /** "Send feedback", when there's a link to send it to (spec 0005). */
+  onFeedback?: (() => void) | undefined;
+}) {
+  const button = (page: Page, bottom: boolean) => (
+    <button
+      key={page}
+      className={`nav${bottom ? " nav-bottom" : ""}`}
+      data-label={PAGES[page].label}
+      aria-label={props.unread?.includes(page) ? `${PAGES[page].label}, something new` : PAGES[page].label}
+      aria-current={props.page === page ? "page" : undefined}
+      onClick={() => props.onOpen(page)}
+    >
+      <Icon name={PAGES[page].icon} />
+      {props.unread?.includes(page) && <span className="nav-dot" aria-hidden />}
+    </button>
+  );
+  // The pages, then at the bottom "Send feedback" (when there's a link), then Settings.
   return (
     <nav className="sidebar">
-      {(Object.keys(PAGES) as Page[]).map((page) => (
-        <button
-          key={page}
-          className={`nav${page === "settings" ? " nav-bottom" : ""}`}
-          data-label={PAGES[page].label}
-          aria-label={props.unread?.includes(page) ? `${PAGES[page].label}, something new` : PAGES[page].label}
-          aria-current={props.page === page ? "page" : undefined}
-          onClick={() => props.onOpen(page)}
-        >
-          <Icon name={PAGES[page].icon} />
-          {props.unread?.includes(page) && <span className="nav-dot" aria-hidden />}
+      {(Object.keys(PAGES) as Page[]).filter((page) => page !== "settings").map((page) => button(page, false))}
+      {props.onFeedback && (
+        <button className="nav nav-bottom" data-label="Send feedback" aria-label="Send feedback" onClick={props.onFeedback}>
+          <Icon name="feedback" />
         </button>
-      ))}
+      )}
+      {button("settings", !props.onFeedback)}
     </nav>
   );
 }

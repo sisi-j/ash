@@ -7,6 +7,7 @@ import {
   onAshAccount,
   type Accounts as AccountList,
   type AshAccountStatus,
+  type Links,
   type News,
   onSync,
   type SyncStatus,
@@ -116,6 +117,16 @@ export default function App() {
   useEffect(() => {
     api.news().then(setNews).catch(() => setNews(null));
   }, []);
+  // The alpha (spec 0005): the version, the feedback link, and the first-run note.
+  const [version, setVersion] = useState<string | null>(null);
+  const [links, setLinks] = useState<Links | null>(null);
+  const [noteDismissed, setNoteDismissed] = useState(true);
+  useEffect(() => {
+    api.appVersion().then(setVersion).catch(() => setVersion(null));
+    api.links().then(setLinks).catch(() => setLinks(null));
+    api.firstRunNoteDismissed().then(setNoteDismissed).catch(() => setNoteDismissed(true));
+  }, []);
+  const sendFeedback = links?.feedback_url ? () => void api.openFeedbackLink().catch(fail) : undefined;
   useEffect(() => {
     if (page !== "news") return;
     api
@@ -265,9 +276,11 @@ export default function App() {
         onSelect={selectAccount}
         onSignOut={removeAccount}
         onAdd={() => setSigningIn(true)}
+        alpha={version?.includes("-alpha") ?? false}
       />
       <Sidebar
         page={page}
+        onFeedback={sendFeedback}
         unread={news?.unread && page !== "news" ? ["news"] : []}
         onOpen={(next) => {
           setPage(next);
@@ -293,6 +306,31 @@ export default function App() {
               onAnswer={(deleteHere) => void answerDeletedElsewhere(gone.instance_id, deleteHere)}
             />
           ))}
+
+        {signedIn && !signingIn && !noteDismissed && (
+          <div className="ash-account-notice" role="status">
+            <p>
+              <b>This is an alpha: things may break.</b>
+              {sendFeedback ? " Tell us on Discord, and it shapes what comes next." : " Your feedback shapes what comes next."}
+            </p>
+            <div className="ash-account-notice-actions">
+              {sendFeedback && (
+                <button className="button" onClick={sendFeedback}>
+                  Send feedback
+                </button>
+              )}
+              <button
+                className="button"
+                onClick={() => {
+                  setNoteDismissed(true);
+                  void api.dismissFirstRunNote().catch(() => undefined);
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
 
         {active?.ash_account_notice && !signingIn && (
           <AshAccountNotice account={active} onDismiss={() => void dismissAshNotice(active.profile_id)} />
@@ -333,6 +371,7 @@ export default function App() {
             onDeleteAshAccount={deleteAshAccount}
             sync={sync}
             onSyncToggle={(enabled) => void toggleSync(enabled)}
+            version={version}
           />
         ) : playView === "new" ? (
           <section className="page">
