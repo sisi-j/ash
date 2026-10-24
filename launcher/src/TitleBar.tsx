@@ -11,11 +11,14 @@ import { Icon } from "./icons";
  * bar's text drag too; its buttons do not, because Tauri never starts a drag
  * from something clickable.
  */
-export function TitleBar(props: Omit<AccountChoices, "accounts"> & { accounts: Accounts | null }) {
-  const { accounts, ...choices } = props;
+export function TitleBar(
+  props: Omit<AccountChoices, "accounts"> & { accounts: Accounts | null; alpha: boolean },
+) {
+  const { accounts, alpha, ...choices } = props;
   return (
     <header className="titlebar" data-tauri-drag-region="deep">
       <span className="wordmark">ash</span>
+      {alpha && <span className="alpha-tag">alpha</span>}
 
       {accounts && <AccountMenu accounts={accounts} {...choices} />}
 

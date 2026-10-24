@@ -32,6 +32,8 @@ export function SettingsPage(props: {
   onDeleteAshAccount: () => Promise<boolean>;
   sync: SyncStatus | null;
   onSyncToggle: (enabled: boolean) => void;
+  /** This launcher's version, to quote in feedback. */
+  version: string | null;
 }) {
   const { preferences } = props;
 
@@ -110,6 +112,7 @@ export function SettingsPage(props: {
           </div>
         </div>
       </div>
+      {props.version && <p className="settings-version numeric">ash {props.version}</p>}
     </section>
   );
 }

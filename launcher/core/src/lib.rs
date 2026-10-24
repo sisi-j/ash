@@ -25,6 +25,7 @@ mod glance;
 mod installation;
 mod instance;
 mod launch;
+mod links;
 mod load_report;
 mod loader;
 mod natives;
@@ -57,6 +58,7 @@ pub use error::AshError;
 pub use glance::{AshFeatures, InstanceGlance, LastSession};
 pub use installation::InstallationCheck;
 pub use instance::{DeletionPreview, Instance, InstanceId, Session};
+pub use links::Links;
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
 pub use news::{News, NewsKind, NewsPost};
@@ -697,6 +699,30 @@ impl Ash {
     /// The player opened the News page; its dot goes until a newer post.
     pub fn mark_news_seen(&self) -> Result<(), AshError> {
         news::mark_seen(&self.config.data_root)
+    }
+
+    // ---- the alpha (spec 0005) -------------------------------------------
+
+    /// The links the launcher shows, fresh from ash's backend, or the last
+    /// ones seen when it can't be reached.
+    pub async fn links(&self) -> Links {
+        links::links(self.http.as_ref(), &self.config.backend_url, &self.config.data_root).await
+    }
+
+    /// The links ash last saw, without asking anyone: what "Send feedback"
+    /// opens, so a click never waits on the network.
+    pub fn cached_links(&self) -> Links {
+        links::cached(&self.config.data_root)
+    }
+
+    /// Whether the first-run note ("this is an alpha") has been dismissed on
+    /// this machine.
+    pub fn first_run_note_dismissed(&self) -> bool {
+        links::note_dismissed(&self.config.data_root)
+    }
+
+    pub fn dismiss_first_run_note(&self) -> Result<(), AshError> {
+        links::dismiss_note(&self.config.data_root)
     }
 
     /// The player has seen "an ash account was made for you".

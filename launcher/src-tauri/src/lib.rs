@@ -887,6 +887,43 @@ fn self_check(ash: &Ash, report: &std::path::Path) -> ! {
     std::process::exit(code)
 }
 
+// ---- the alpha (spec 0005) ----
+
+/// This launcher's version, as released: `0.1.0-alpha.1`.
+#[tauri::command]
+fn app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+#[tauri::command]
+async fn links(state: tauri::State<'_, AppState>) -> Result<ash_core::Links, UiError> {
+    Ok(state.ash.links().await)
+}
+
+/// "Send feedback": the Discord invite ash last saw, opened in the browser.
+/// Read here rather than taken from the window, so nothing else can open.
+#[tauri::command]
+fn open_feedback_link(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
+    let refused = || UiError {
+        kind: "open_failed",
+        message: "There's no feedback link yet. Try again once ash's servers can be reached."
+            .into(),
+        retryable: true,
+    };
+    let url = state.ash.cached_links().feedback_url.ok_or_else(refused)?;
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|_| refused())
+}
+
+#[tauri::command]
+fn first_run_note_dismissed(state: tauri::State<'_, AppState>) -> bool {
+    state.ash.first_run_note_dismissed()
+}
+
+#[tauri::command]
+fn dismiss_first_run_note(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
+    state.ash.dismiss_first_run_note().map_err(UiError::from)
+}
+
 // ---- updates (spec 0005, ADR-0025) ----
 
 /// A newer release than this one: its version and its "what's new", the
@@ -1005,6 +1042,11 @@ pub fn run() {
             open_news_link,
             check_for_update,
             install_update,
+            app_version,
+            links,
+            open_feedback_link,
+            first_run_note_dismissed,
+            dismiss_first_run_note,
             create_instance,
             loaders_for,
             instances,

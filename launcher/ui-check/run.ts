@@ -373,6 +373,34 @@ const STATES: State[] = [
     reach: openPage("Wardrobe"),
     verify: async (page) => ((await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? null : "a cape could be chosen without ash"),
   },
+  // The alpha (spec 0005): the tag, the note, "Send feedback", the version.
+  {
+    name: "alpha-note",
+    shows: "This is an alpha: things may break.",
+    verify: async (page) => {
+      if ((await page.locator(".alpha-tag").count()) !== 1) return "no alpha tag by the logo";
+      await page.locator(".ash-account-notice").getByRole("button", { name: "Send feedback" }).click();
+      const opened = await page.evaluate(() => (window as unknown as { openedFeedback?: boolean }).openedFeedback);
+      if (!opened) return "Send feedback opened nothing";
+      await page.getByRole("button", { name: "OK", exact: true }).click();
+      return (await page.getByText("This is an alpha").count()) === 0 ? null : "OK didn't dismiss the note";
+    },
+  },
+  {
+    name: "feedback-in-sidebar",
+    shows: "LAUNCH GAME",
+    verify: async (page) =>
+      (await page.locator("nav.sidebar").getByRole("button", { name: "Send feedback" }).count()) === 1
+        ? null
+        : "no Send feedback in the sidebar",
+  },
+  {
+    name: "no-feedback-link",
+    shows: "LAUNCH GAME",
+    verify: async (page) =>
+      (await page.getByRole("button", { name: "Send feedback" }).count()) === 0 ? null : "a feedback link with nowhere to go",
+  },
+  { name: "settings-version", shows: "ash 0.1.0-alpha.1", reach: openPage("Settings") },
   // Updates (ADR-0025): offered with what's new, never while a game runs.
   {
     name: "update-available",
