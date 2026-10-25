@@ -1,14 +1,15 @@
 //! How far a starting game has got, read off its own output: the last steps
-//! of the LAUNCH bar, between Java starting and the title screen.
+//! of the LAUNCH bar, between Java starting and the game's window opening.
 //!
-//! Each step is a line the game prints anyway (checked in 1.8.9, 1.20.4 and
-//! 1.21.11 logs), so nothing is guessed from time:
+//! Each step is a line the game prints anyway, so nothing is guessed from
+//! time:
 //!
 //! - Fabric Loader's `Loading N mods:` - the mods are loading;
-//! - `Reloading ResourceManager:` - the window is up and resources are loading;
-//! - the ash client's `ash: title screen N ms` - the title screen is up. A
-//!   vanilla instance has no ash client, so for it `Sound engine started`,
-//!   among the last lines of the first load, stands in.
+//! - `Backend library:` (1.20.4, 1.21.11) or `LWJGL Version:` (1.8.9) - the
+//!   game is about to open its window, which is where a launch is done: the
+//!   rest of the loading shows in the game's own window. Each is printed by
+//!   the game's main class just before it creates the window (checked in
+//!   each version's jar).
 //!
 //! Lines are matched inside log4j's XML as well as in plain text, so this
 //! reads the raw output, never a rendering of it.
@@ -22,56 +23,41 @@ pub enum BootStage {
     /// The JVM and the loader are starting.
     Starting,
     LoadingMods,
-    LoadingResources,
-    /// The title screen is up.
+    /// The game's window is opening: the launch is done.
     Ready,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct GameBoot {
     pub stage: BootStage,
-    /// How many mods Fabric Loader said it is loading, ash's own among them.
-    pub mods: Option<u32>,
+    /// How many of the player's own mods this launch loads: the jars switched
+    /// on in the instance's `mods` folder, when their mods are on. Not
+    /// Fabric Loader's count, which also counts every module of Fabric API,
+    /// the game, Java and the libraries inside mods.
+    pub players_mods: u32,
 }
 
-impl GameBoot {
-    pub(crate) const STARTING: GameBoot = GameBoot { stage: BootStage::Starting, mods: None };
-
-    /// The further of two readings. The output kept is only its tail, so a
-    /// step once seen stays seen after its line has scrolled out.
-    pub(crate) fn furthest(self, other: GameBoot) -> GameBoot {
-        GameBoot { stage: self.stage.max(other.stage), mods: self.mods.or(other.mods) }
-    }
-}
-
-/// How far the game has got, by its output so far.
-pub(crate) fn read(output: &[String], ash_client: bool) -> GameBoot {
-    let mut boot = GameBoot::STARTING;
+/// The step the game's output so far shows. Nothing printed yet is starting.
+pub(crate) fn read(output: &[String]) -> BootStage {
+    let mut stage = BootStage::Starting;
     for line in output {
-        if let Some(n) = mods_loading(line) {
-            boot.mods = Some(n);
-            boot.stage = boot.stage.max(BootStage::LoadingMods);
+        if line.contains("Backend library: ") || line.contains("LWJGL Version: ") {
+            return BootStage::Ready;
         }
-        if line.contains("Reloading ResourceManager") {
-            boot.stage = boot.stage.max(BootStage::LoadingResources);
-        }
-        let ready = if ash_client {
-            line.contains("ash: title screen")
-        } else {
-            line.contains("Sound engine started")
-        };
-        if ready {
-            boot.stage = BootStage::Ready;
+        if mods_loading(line) {
+            stage = BootStage::LoadingMods;
         }
     }
-    boot
+    stage
 }
 
-/// N, from Fabric Loader's `Loading N mods:`.
-fn mods_loading(line: &str) -> Option<u32> {
-    let after = &line[line.find("Loading ")? + "Loading ".len()..];
-    let (n, rest) = after.split_once(' ')?;
-    rest.starts_with("mods").then(|| n.parse().ok()).flatten()
+/// Fabric Loader's `Loading N mods:`.
+fn mods_loading(line: &str) -> bool {
+    let Some(at) = line.find("Loading ") else { return false };
+    let after = &line[at + "Loading ".len()..];
+    after
+        .split_once(' ')
+        .is_some_and(|(n, rest)| n.parse::<u32>().is_ok() && rest.starts_with("mods"))
 }
 
 #[cfg(test)]
@@ -83,22 +69,21 @@ mod tests {
     }
 
     #[test]
-    fn a_fabric_game_walks_through_each_step() {
-        let mut output = lines(&["[18:44:45] [main/INFO]: Loading 50 mods:"]);
-        assert_eq!(read(&output, true), GameBoot { stage: BootStage::LoadingMods, mods: Some(50) });
+    fn a_fabric_game_is_ready_as_its_window_opens() {
+        let mut output = lines(&["[18:34:54] [main/INFO]: Loading 61 mods:"]);
+        assert_eq!(read(&output), BootStage::LoadingMods);
 
-        output.push(
-            "[18:45:03] [Render thread/INFO]: Reloading ResourceManager: vanilla, ash".into(),
-        );
-        output.push("[18:45:05] [Render thread/INFO]: Sound engine started".into());
-        assert_eq!(
-            read(&output, true).stage,
-            BootStage::LoadingResources,
-            "an ash game waits for ash's line"
-        );
+        output.push("[18:44:55] [Render thread/INFO]: Backend library: LWJGL version 3.3.3".into());
+        assert_eq!(read(&output), BootStage::Ready);
+    }
 
-        output.push("ash: title screen 21480 ms after the game started".into());
-        assert_eq!(read(&output, true).stage, BootStage::Ready);
+    #[test]
+    fn a_1_8_9_game_is_ready_as_its_window_opens() {
+        let output = lines(&[
+            "[16:18:45] [main/INFO]: Loading 10 mods:",
+            "[16:18:47] [Client thread/INFO]: LWJGL Version: 2.9.4+legacyfabric.17",
+        ]);
+        assert_eq!(read(&output), BootStage::Ready);
     }
 
     #[test]
@@ -107,28 +92,12 @@ mod tests {
             r#"<log4j:Event logger="FabricLoader" level="INFO" thread="main">"#,
             "  <log4j:Message><![CDATA[Loading 10 mods:",
         ]);
-        assert_eq!(read(&output, true).mods, Some(10));
-    }
-
-    #[test]
-    fn a_vanilla_game_is_ready_when_its_sound_starts() {
-        let output = lines(&[
-            "[16:18:48] [Client thread/INFO]: Reloading ResourceManager: Default",
-            "[16:18:48] [Sound Library Loader/INFO]: Sound engine started",
-        ]);
-        assert_eq!(read(&output, false), GameBoot { stage: BootStage::Ready, mods: None });
+        assert_eq!(read(&output), BootStage::LoadingMods);
     }
 
     #[test]
     fn nothing_printed_yet_is_starting_and_other_loading_lines_are_not_mods() {
-        assert_eq!(read(&[], true), GameBoot::STARTING);
-        let output = lines(&["Loading 3 textures", "Loading mods soon"]);
-        assert_eq!(read(&output, true), GameBoot::STARTING);
-    }
-
-    #[test]
-    fn a_step_once_seen_stays_seen() {
-        let earlier = GameBoot { stage: BootStage::LoadingResources, mods: Some(50) };
-        assert_eq!(GameBoot::STARTING.furthest(earlier), earlier);
+        assert_eq!(read(&[]), BootStage::Starting);
+        assert_eq!(read(&lines(&["Loading 3 textures", "Loading mods soon"])), BootStage::Starting);
     }
 }

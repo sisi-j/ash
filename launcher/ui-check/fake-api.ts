@@ -318,14 +318,15 @@ function status(): real.GameStatus | null {
 let bootAsked = 0;
 
 /**
- * A launched game's steps to its title screen, one per ask; "launch-loading"
- * stays loading its mods. A game found already running is already up.
+ * A launched game's steps to opening its window, one per ask;
+ * "launch-loading" stays loading its mods. A game found already running is
+ * already up.
  */
 function boot(): real.GameBoot {
-  if (state === "launch-loading") return { stage: "loading_mods", mods: 50 };
-  if (!starts) return { stage: "ready", mods: 50 };
-  const steps: real.BootStage[] = ["starting", "loading_mods", "loading_resources", "ready"];
-  return { stage: steps[Math.min(bootAsked++, steps.length - 1)] ?? "ready", mods: 50 };
+  if (state === "launch-loading") return { stage: "loading_mods", players_mods: 7 };
+  if (!starts) return { stage: "ready", players_mods: 7 };
+  const steps: real.BootStage[] = ["starting", "starting", "loading_mods", "loading_mods", "ready"];
+  return { stage: steps[Math.min(bootAsked++, steps.length - 1)] ?? "ready", players_mods: 7 };
 }
 
 /** Modrinth, as the Mods page sees it: icons as data URLs, since the check runs offline. */

@@ -41,8 +41,8 @@ export type Phase =
   | { at: "idle"; plan: Plan }
   | { at: "working"; progress: Progress; goal: Goal }
   /**
-   * The game's process is up. `boot` is how far it has got towards its
-   * title screen; "ready" is PLAYING.
+   * The game's process is up. `boot` is how far it has got towards opening
+   * its window; "ready", the window opening, is PLAYING.
    */
   | { at: "running"; boot: GameBoot }
   | {
@@ -73,16 +73,15 @@ const START: Progress = {
 const POLL_MS = 1500;
 
 /** How often a loading game's output is read for the step it is on. */
-const BOOT_POLL_MS = 300;
+const BOOT_POLL_MS = 100;
 
 /**
- * A game that never says its title screen is up (a log ash can't read, a
- * client too old to say) is still up: after this long, PLAYING rather than
- * loading for ever.
+ * A game that never says its window is opening (a log ash can't read) is
+ * still up: after this long, PLAYING rather than loading for ever.
  */
 const BOOT_GIVE_UP_MS = 180_000;
 
-const READY: GameBoot = { stage: "ready", mods: null };
+const READY: GameBoot = { stage: "ready", players_mods: 0 };
 
 /** The argument after `--flag`, for reading a value back off a command line. */
 function argumentAfter(args: string[], flag: string): string | null {
@@ -238,7 +237,7 @@ export function useLaunch(id: InstanceId | null): Launch {
       setPhase((current) => {
         if (current.at !== "running") return current;
         if (gaveUp) return { at: "running", boot: { ...current.boot, stage: "ready" } };
-        if (!boot || (boot.stage === current.boot.stage && boot.mods === current.boot.mods)) return current;
+        if (!boot || (boot.stage === current.boot.stage && boot.players_mods === current.boot.players_mods)) return current;
         return { at: "running", boot };
       });
     };
@@ -315,7 +314,7 @@ export function useLaunch(id: InstanceId | null): Launch {
     const launched = onLaunchFinished((outcome) => {
       if (outcome.ok) {
         setCommand(outcome.invocation);
-        setPhase({ at: "running", boot: { stage: "starting", mods: null } });
+        setPhase({ at: "running", boot: { stage: "starting", players_mods: 0 } });
       } else if (outcome.error) {
         if (outcome.error.kind === "cancelled") settle();
         else setPhase({ at: "failed", error: outcome.error, goal: "play" });

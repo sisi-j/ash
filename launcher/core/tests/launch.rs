@@ -1292,30 +1292,29 @@ async fn the_log_is_readable_even_though_log4j_writes_xml() {
 
 #[tokio::test]
 async fn how_far_a_starting_game_has_got_is_read_off_its_output() {
-    let f = fixture_with(FakeProcessPort::new().set_log(&[
-        "[main/INFO]: Loading 3 mods:",
-        "[Render thread/INFO]: Reloading ResourceManager: vanilla",
-    ]));
+    let f = fixture_with(FakeProcessPort::new().set_log(&["[main/INFO]: Loading 61 mods:"]));
     let id = f.ready().await;
     assert_eq!(f.ash.game_boot(&id), None, "nothing launched, nothing to say");
 
     f.launch(&id).await;
 
+    // A vanilla instance loads none of the player's mods, whatever Fabric
+    // Loader would have counted.
     assert_eq!(
         f.ash.game_boot(&id),
-        Some(GameBoot { stage: BootStage::LoadingResources, mods: Some(3) })
+        Some(GameBoot { stage: BootStage::LoadingMods, players_mods: 0 })
     );
 }
 
 #[tokio::test]
-async fn a_vanilla_game_is_up_once_its_sound_engine_starts() {
+async fn a_game_is_launched_once_its_window_is_about_to_open() {
     let f = fixture_with(FakeProcessPort::new().set_log(&[
-        "[Render thread/INFO]: Reloading ResourceManager: vanilla",
-        "[Render thread/INFO]: Sound engine started",
+        "[main/INFO]: Loading 61 mods:",
+        "[Render thread/INFO]: Backend library: LWJGL version 3.3.3",
     ]));
     let id = f.ready().await;
     f.launch(&id).await;
 
-    // No ash client in a vanilla instance to say its title screen is up.
+    // The rest of the loading shows in the game's own window.
     assert_eq!(f.ash.game_boot(&id).map(|b| b.stage), Some(BootStage::Ready));
 }

@@ -199,9 +199,12 @@ export type GameStatus =
   | { state: "running" }
   | { state: "exited"; code: number | null; clean: boolean };
 
-/** Mirrors `ash_core::GameBoot`: how far a launched game has got towards its title screen. */
-export type BootStage = "starting" | "loading_mods" | "loading_resources" | "ready";
-export type GameBoot = { stage: BootStage; mods: number | null };
+/**
+ * Mirrors `ash_core::GameBoot`: how far a launched game has got towards
+ * opening its window, and how many of the player's own mods it loads.
+ */
+export type BootStage = "starting" | "loading_mods" | "ready";
+export type GameBoot = { stage: BootStage; players_mods: number };
 
 /**
  * What ash would run. The access token is already `<redacted>` on the Rust

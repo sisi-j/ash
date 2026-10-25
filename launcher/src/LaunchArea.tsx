@@ -28,8 +28,8 @@ type Ripple = { id: number; x: number; y: number };
  * button presses in and a ripple spreads from the click, the scene behind
  * brightens and zooms with a light sweeping across, the button fills
  * through the steps the launch is really on (launchBar.ts), up to the
- * game's title screen, and - unless launch sounds are off - a short sound
- * plays, with a quieter one when the title screen is up.
+ * game's window opening, and - unless launch sounds are off - a short sound
+ * plays, with a quieter one just as the game's window opens.
  */
 export function LaunchArea(props: { instance: Instance; launch: Launch; sounds: boolean }) {
   const { instance, launch, sounds } = props;
@@ -83,16 +83,14 @@ export function LaunchArea(props: { instance: Instance; launch: Launch; sounds: 
     detail =
       boot.stage === "starting"
         ? "Starting Java"
-        : boot.stage === "loading_mods"
-          ? boot.mods !== null
-            ? `Loading ${boot.mods} mods`
-            : "Loading mods"
-          : "Loading resources";
+        : boot.players_mods > 0
+          ? `Loading your ${boot.players_mods} ${boot.players_mods === 1 ? "mod" : "mods"}`
+          : "Loading Fabric";
   } else if (phase.at === "running") {
     detail = launch.runningAs ? `${instance.name} is running as ${launch.runningAs}` : `${instance.name} is running`;
   }
 
-  // Loading counts as working until the title screen: Stop, not PLAYING.
+  // Loading counts as working until the game's window opens: Stop, not PLAYING.
   const loading = phase.at === "running" && phase.boot.stage !== "ready";
   const working = phase.at === "working";
   const running = phase.at === "running" && !loading;

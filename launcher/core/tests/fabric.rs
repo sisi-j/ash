@@ -1295,6 +1295,35 @@ async fn with_them_on_the_loader_reads_the_mods_folder_and_the_launch_leaves_it_
 }
 
 #[tokio::test]
+async fn a_launch_counts_the_players_own_mods_not_everything_fabric_loads() {
+    let f = fixture();
+    let id = f.modded().await;
+    let mods = f.ash.game_directory(&id).join("mods");
+    std::fs::write(mods.join("sodium.jar"), fabric_mod("Sodium")).unwrap();
+    std::fs::write(mods.join("iris.jar"), fabric_mod("Iris")).unwrap();
+    std::fs::write(mods.join("old.jar.disabled"), fabric_mod("Old")).unwrap();
+    f.set_third_party_mods(&id, true);
+
+    f.ash.launch(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    // Fabric Loader would say 61, counting each module of Fabric API too.
+    assert_eq!(f.ash.game_boot(&id).unwrap().players_mods, 2, "a switched-off jar doesn't load");
+}
+
+#[tokio::test]
+async fn a_launch_without_them_counts_none() {
+    let f = fixture();
+    let id = f.modded().await;
+    std::fs::write(f.ash.game_directory(&id).join("mods").join("sodium.jar"), fabric_mod("Sodium"))
+        .unwrap();
+    f.set_third_party_mods(&id, true);
+
+    f.ash.launch_without_third_party_mods(&id, &NullSink, &Cancel::new()).await.expect("launched");
+
+    assert_eq!(f.ash.game_boot(&id).unwrap().players_mods, 0);
+}
+
+#[tokio::test]
 async fn playing_without_them_leaves_them_out_this_once_and_keeps_the_setting() {
     let f = fixture();
     let id = f.modded().await;
