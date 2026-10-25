@@ -2,6 +2,7 @@ package com.ashlauncher.client.perf;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ashlauncher.client.report.Feature;
@@ -26,10 +27,23 @@ class FpsMeasurementsTest {
                 continue;
             }
             for (Target target : Target.values()) {
-                if (feature.existsOn(target)) {
+                if (feature.existsOn(target) && !FpsMeasurements.NOT_YET_BENCHMARKED.contains(target)) {
                     assertNotNull(FpsMeasurements.of(feature, target), feature.displayName() + " has no FPS"
                             + " measurement on " + target.version() + " - measure it before declaring it (#70)");
                 }
+            }
+        }
+    }
+
+    @Test
+    void a_target_not_yet_benchmarked_has_no_marks_at_all_rather_than_some() {
+        // Half-measured would show some tiles' marks and not others', with
+        // nothing saying why: a target is on the list or fully measured.
+        for (Target target : FpsMeasurements.NOT_YET_BENCHMARKED) {
+            for (Feature feature : Feature.values()) {
+                assertNull(FpsMeasurements.of(feature, target),
+                        feature.displayName() + " is measured on " + target.version()
+                                + ", so take " + target.version() + " off NOT_YET_BENCHMARKED and measure the rest");
             }
         }
     }

@@ -13,6 +13,8 @@ ADR-0005 started with two targets and set readiness as the trigger for more: ver
 - **Tested in a real game, like the others, and measured:** FPS marks by the README's method. *Amended 2026-10-24:* Fabric's client game tests begin with 1.21.4, so 1.20.4 can't run 1.21.11's. It gets ash's own smoke test, as 1.8.9 does. The test launches a real 1.20.4 client in CI, checks every feature loaded, reads the launcher's server list, walks into a flat world, opens ash's settings with their key and waits for the test CDN's cape. Whether each mixin lands is checked on every build too, by `AshMixinsLandTest` against the real game classes.
 - **The client targets Java 17,** the Java Mojang names for 1.20.4.
 
+**Shipped unmeasured, 2026-10-25.** By the product owner's decision, 1.20.4 merged for the alpha before its benchmark sitting (#149). Its tiles show no FPS mark, and `FpsMeasurements.NOT_YET_BENCHMARKED` records it until the sitting is run.
+
 ## Consequences
 
 - Every feature is now written, tested and maintained three times. The shared module carries everything that doesn't touch the game's code, so the cost stays in the mixins.
