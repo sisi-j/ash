@@ -92,11 +92,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1",
+ "sha2 0.11.0",
  "tempfile",
  "thiserror 2.0.20",
  "time",
  "tokio",
  "uuid",
+ "windows-sys 0.59.0",
  "zip 8.6.0",
 ]
 

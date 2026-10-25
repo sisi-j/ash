@@ -1678,6 +1678,47 @@ button {
   cursor: pointer;
 }
 
+.error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.error > span {
+  flex: 1;
+}
+
+.error-report {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.report-scrim {
+  z-index: 30;
+}
+
+.report {
+  max-width: 640px;
+}
+
+.report-note {
+  margin: 8px 0 12px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.report-text {
+  max-height: 260px;
+  overflow: auto;
+  text-align: left;
+  font-size: 11px;
+}
+
 /* A feature of ash's did not load. A quiet grey line, not a box and not red:
    the game still played, there is nothing to click, and nothing the player
    did wrong. */
@@ -1719,6 +1760,128 @@ button {
   display: flex;
   flex-shrink: 0;
   gap: 8px;
+}
+
+/* ---- the Mods page (ADR-0026) ---- */
+
+.mods-instances {
+  margin: 0 0 14px;
+}
+
+.chip-detail {
+  margin-left: 6px;
+  color: var(--text-3);
+}
+
+.chip.is-selected .chip-detail {
+  color: inherit;
+  opacity: 0.6;
+}
+
+.mods-search {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+}
+
+.mods-vanilla {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mods-vanilla p {
+  flex: 1;
+  margin: 0;
+}
+
+.mods-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mod-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--fill);
+}
+
+.mod-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--fill-2);
+  object-fit: cover;
+}
+
+.mod-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.mod-text span {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-text small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.mod-text .mod-failed {
+  color: var(--red-text);
+  white-space: normal;
+}
+
+.mods-views {
+  margin: 0 0 14px;
+}
+
+.mod-row.is-off .mod-icon,
+.mod-row.is-off .mod-text {
+  opacity: 0.5;
+}
+
+.mod-text .mod-overlap {
+  color: var(--text-2);
+  white-space: normal;
+}
+
+.mod-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.mods-done {
+  margin: 0 0 14px;
+}
+
+.mods-more {
+  align-self: flex-start;
+  margin: 14px 0 0;
 }
 
 /* ---- the update bar (ADR-0025) ---- */

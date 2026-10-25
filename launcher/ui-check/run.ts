@@ -36,6 +36,12 @@ type State = {
  * LAUNCH GAME, once it can be clicked: before the instance's files have
  * been checked it is shown but ignores clicks.
  */
+/** The Mods page's Browse Modrinth view. */
+const browseMods = async (page: Page) => {
+  await openPage("Mods")(page);
+  await page.getByRole("tab", { name: "Browse Modrinth" }).click();
+};
+
 const launchGame = (page: Page) => page.locator('.launch-button[aria-disabled="false"]').click();
 const openInstance = (page: Page) => page.getByRole("button", { name: "1.21.11 settings" }).click();
 const openPage = (label: string) => (page: Page) => page.getByRole("navigation").getByRole("button", { name: label }).click();
@@ -317,7 +323,6 @@ const STATES: State[] = [
     verify: async (page) => ((await page.locator(".instance-page").count()) === 0 ? null : "still on the instance page after deleting"),
   },
   { name: "new-instance", shows: "Built for", reach: (page) => page.getByRole("button", { name: "New", exact: true }).click() },
-  { name: "mods", shows: "Mods are coming soon", reach: openPage("Mods") },
   {
     name: "news",
     shows: "ash 0.2: your ash account",
@@ -372,6 +377,74 @@ const STATES: State[] = [
     shows: "ash couldn't sign you in to ash just now",
     reach: openPage("Wardrobe"),
     verify: async (page) => ((await page.getByRole("radio", { name: "Ember" }).isDisabled()) ? null : "a cape could be chosen without ash"),
+  },
+  // Mods from Modrinth (ADR-0026).
+  {
+    name: "mods",
+    shows: "Mod Menu",
+    reach: browseMods,
+    verify: async (page) => {
+      await page.getByLabel("Search mods").fill("iri");
+      await page.waitForTimeout(600);
+      return (await page.getByText("Sodium", { exact: true }).count()) === 0 ? null : "the search didn't narrow the list";
+    },
+  },
+  {
+    name: "mods-installed",
+    shows: "Your mods are now on for",
+    reach: async (page) => {
+      await browseMods(page);
+      await page.getByRole("button", { name: "Install Iris Shaders" }).click();
+    },
+    verify: async (page) => {
+      if ((await page.getByText("Installed Iris Shaders and Sodium.").count()) !== 1) return "didn't say what it installed";
+      if (!(await page.getByRole("button", { name: "Sodium installed" }).isDisabled())) return "the dependency still offers Install";
+      return (await page.getByRole("button", { name: "Iris Shaders installed" }).isDisabled()) ? null : "Install still offered";
+    },
+  },
+  {
+    name: "mods-incompatible",
+    shows: "Remove OptiFabric first",
+    reach: async (page) => {
+      await browseMods(page);
+      await page.getByRole("button", { name: "Install Iris Shaders" }).click();
+    },
+  },
+  { name: "mods-empty", shows: "No mods in 1.21.11 yet.", reach: openPage("Mods") },
+  {
+    name: "mods-list",
+    shows: "Does what ash’s Freelook does.",
+    reach: openPage("Mods"),
+    verify: async (page) => {
+      if ((await page.getByText("added by hand").count()) !== 1) return "a hand-added jar isn't marked";
+      const handMod = page.getByRole("switch", { name: "Hand Mod on" });
+      if ((await handMod.getAttribute("aria-checked")) !== "false") return "a mod that's off shows on";
+      await handMod.click();
+      if ((await handMod.getAttribute("aria-checked")) !== "true") return "the switch didn't turn it on";
+      await page.getByRole("button", { name: "Remove Sodium" }).click();
+      await page.getByRole("button", { name: "Remove", exact: true }).click();
+      return (await page.getByText("Sodium", { exact: true }).count()) === 0 ? null : "Remove left it listed";
+    },
+  },
+  {
+    name: "mods-vanilla",
+    shows: "Mods need a Fabric instance.",
+    reach: async (page) => {
+      await openPage("Mods")(page);
+      await page.getByRole("radio", { name: /Vanilla/ }).click();
+    },
+  },
+  // "Copy report" (spec 0005): shown in full before it's copied.
+  {
+    name: "crashed-report",
+    shows: "Windows 11 Pro 24H2",
+    reach: (page) => page.getByRole("button", { name: "Copy report" }).click(),
+    verify: async (page) => {
+      if ((await page.getByText("OutOfMemoryError").count()) < 1) return "the game's output isn't in the report";
+      if ((await page.getByText("can include server addresses").count()) !== 1) return "no word on what the game's output can hold";
+      await page.keyboard.press("Escape");
+      return (await page.getByText("The game crashed").count()) === 1 ? null : "Escape closed the crash panel too";
+    },
   },
   // The alpha (spec 0005): the tag, the note, "Send feedback", the version.
   {

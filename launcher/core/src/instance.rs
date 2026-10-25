@@ -109,7 +109,7 @@ fn vanilla() -> Loader {
 
 // ---- paths ----------------------------------------------------------------
 
-fn instance_dir(instances_root: &Path, id: &InstanceId) -> PathBuf {
+pub(crate) fn instance_dir(instances_root: &Path, id: &InstanceId) -> PathBuf {
     instances_root.join(id.as_str())
 }
 

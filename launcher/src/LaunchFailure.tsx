@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { api, type InstanceId } from "./api";
 import type { Phase } from "./launch";
+import { ReportDialog } from "./ReportDialog";
 
 /** How much of a crashed game's output to show: the end is where the reason is. */
 const LAST_LINES = 40;
@@ -19,9 +20,12 @@ export function LaunchFailure(props: {
   /** Play again with the player's own mods left out, offered after a crash with them on. */
   onPlayWithoutMods: () => void;
   onClose: () => void;
+  /** The instance it happened to, for the report. */
+  instance: InstanceId | null;
 }) {
   const { phase } = props;
   const [copied, setCopied] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const output = phase.at === "crashed" ? phase.log.slice(-LAST_LINES).join("\n") : "";
   // A crash says nothing about whether playing again will work, so the
   // button says what it does rather than promising a fix.
@@ -91,6 +95,9 @@ export function LaunchFailure(props: {
               {retry}
             </button>
           )}
+          <button className="button" onClick={() => setReporting(true)}>
+            Copy report
+          </button>
           <button className="button" onClick={() => void api.revealLog()}>
             Show log
           </button>
@@ -99,6 +106,20 @@ export function LaunchFailure(props: {
           </button>
         </div>
       </div>
+      {reporting && (
+        <ReportDialog
+          request={{
+            instance: props.instance,
+            errorKind: phase.at === "crashed" ? "crashed" : phase.error.kind,
+            errorMessage:
+              phase.at === "crashed"
+                ? `Minecraft stopped unexpectedly${phase.code !== null ? ` (exit code ${phase.code})` : ""}.`
+                : phase.error.message,
+            crashed: phase.at === "crashed",
+          }}
+          onClose={() => setReporting(false)}
+        />
+      )}
     </div>
   );
 }

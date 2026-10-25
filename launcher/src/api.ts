@@ -362,6 +362,61 @@ export function isUiError(value: unknown): value is UiError {
 
 // ---- commands --------------------------------------------------------------
 
+/** Mirrors `ash_core::ModHit`: one Modrinth search result (spec 0005, ADR-0026). */
+export type ModHit = {
+  project_id: string;
+  slug: string;
+  title: string;
+  description: string;
+  icon_url: string | null;
+  downloads: number;
+  /** Already in this instance, from Modrinth. */
+  installed: boolean;
+};
+
+export type ModSearch = { hits: ModHit[]; total: number };
+
+/** Mirrors `ash_core::InstalledMod`: one mod ash installed, as `ash-mods.json` has it. */
+export type InstalledMod = {
+  project_id: string;
+  title: string;
+  version_id: string;
+  version_number: string;
+  version_type: string;
+  file_name: string;
+  sha512: string;
+  icon_url: string | null;
+};
+
+/** Mirrors `ash_core::ModEntry`: one jar in an instance's `mods` folder. */
+export type ModEntry = {
+  file_name: string;
+  enabled: boolean;
+  title: string;
+  version: string | null;
+  from_modrinth: boolean;
+  icon_url: string | null;
+  /** The ash feature it does the same job as, if any. */
+  overlaps: string | null;
+};
+
+export type InstallOutcome = {
+  installed: InstalledMod[];
+  /** Third-party mods were off for the instance, and installing turned them on. */
+  mods_turned_on: boolean;
+  /** Optional dependencies, by name, listed rather than installed. */
+  optional: string[];
+};
+
+/** What a "Copy report" is about (spec 0005). */
+export type ReportRequest = {
+  instance: InstanceId | null;
+  errorKind: string | null;
+  errorMessage: string | null;
+  /** A crash: the game's last output goes in too. */
+  crashed: boolean;
+};
+
 /** Links the launcher shows that can change without a release (spec 0005). */
 export type Links = { feedback_url: string | null };
 
@@ -401,6 +456,8 @@ export const api = {
   /** This launcher's version, as released: `0.1.0-alpha.1`. */
   appVersion: () => invoke<string>("app_version"),
   links: () => invoke<Links>("links"),
+  /** The text "Copy report" shows and copies. Never sent anywhere. */
+  report: (request: ReportRequest) => invoke<string>("report", request),
   /** Opens the Discord invite ash last saw; the window never names the address. */
   openFeedbackLink: () => invoke<void>("open_feedback_link"),
   firstRunNoteDismissed: () => invoke<boolean>("first_run_note_dismissed"),
@@ -478,6 +535,13 @@ export const api = {
   deleteInstance: (id: InstanceId) => invoke<void>("delete_instance", { id }),
   /** The instance's `mods` folder, the player's, opened in the file manager. */
   revealModsFolder: (id: InstanceId) => invoke<void>("reveal_mods_folder", { id }),
+  searchMods: (id: InstanceId, query: string, offset: number) => invoke<ModSearch>("search_mods", { id, query, offset }),
+  installMod: (id: InstanceId, projectId: string) => invoke<InstallOutcome>("install_mod", { id, projectId }),
+  installedMods: (id: InstanceId) => invoke<InstalledMod[]>("installed_mods", { id }),
+  listMods: (id: InstanceId) => invoke<ModEntry[]>("list_mods", { id }),
+  setModEnabled: (id: InstanceId, fileName: string, enabled: boolean) =>
+    invoke<ModEntry[]>("set_mod_enabled", { id, fileName, enabled }),
+  removeMod: (id: InstanceId, fileName: string) => invoke<ModEntry[]>("remove_mod", { id, fileName }),
   revealGameDirectory: (id: InstanceId) =>
     invoke<void>("reveal_game_directory", { id }),
   /** ash's own log: the first thing anyone asks for when a launch fails. */

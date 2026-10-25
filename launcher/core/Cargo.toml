@@ -16,6 +16,8 @@ keyring = "4"
 uuid = { version = "1", features = ["v4"] }
 # Mojang publishes a SHA-1 and a size for every artifact; both get checked.
 sha1 = "0.11"
+# Modrinth publishes a SHA-512 for every mod file (research 0014).
+sha2 = "0.11"
 # Signing in to ash with the player's chat key (ADR-0020, amended): RSA
 # signing from the library rustls already builds on, the certificate's base64
 # and its ISO 8601 expiry.
@@ -43,6 +45,11 @@ tokio = { version = "1", features = ["net", "time", "io-util", "rt"] }
 # `_minecraft._tcp` SRV records, read through the system's own DNS settings,
 # as the game resolves them.
 hickory-resolver = "0.26"
+
+# Which Windows, for a report, and how much memory the computer has: two
+# read-only calls (src/system.rs).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Registry", "Win32_System_SystemInformation"] }
 
 [dev-dependencies]
 tokio.workspace = true

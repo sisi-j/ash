@@ -203,6 +203,62 @@ async fn equip(
     state.ash.equip(&slot, cosmetic_id.as_deref()).await.map_err(UiError::from)
 }
 
+// ---- mods (spec 0005, ADR-0026) ----
+
+#[tauri::command]
+async fn search_mods(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    query: String,
+    offset: u32,
+) -> Result<ash_core::ModSearch, UiError> {
+    state.ash.search_mods(&id, &query, offset).await.map_err(UiError::from)
+}
+
+#[tauri::command]
+async fn install_mod(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    project_id: String,
+) -> Result<ash_core::InstallOutcome, UiError> {
+    state.ash.install_mod(&id, &project_id).await.map_err(UiError::from)
+}
+
+#[tauri::command]
+fn list_mods(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<ash_core::ModEntry>, UiError> {
+    state.ash.list_mods(&id).map_err(UiError::from)
+}
+
+#[tauri::command]
+fn set_mod_enabled(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    file_name: String,
+    enabled: bool,
+) -> Result<Vec<ash_core::ModEntry>, UiError> {
+    state.ash.set_mod_enabled(&id, &file_name, enabled).map_err(UiError::from)
+}
+
+#[tauri::command]
+fn remove_mod(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+    file_name: String,
+) -> Result<Vec<ash_core::ModEntry>, UiError> {
+    state.ash.remove_mod(&id, &file_name).map_err(UiError::from)
+}
+
+#[tauri::command]
+fn installed_mods(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Vec<ash_core::InstalledMod>, UiError> {
+    state.ash.installed_mods(&id).map_err(UiError::from)
+}
+
 /// The player's answer about an instance deleted on another computer.
 #[tauri::command]
 async fn resolve_deleted_elsewhere(
@@ -895,6 +951,24 @@ fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+/// The text "Copy report" shows and copies (spec 0005).
+#[tauri::command]
+fn report(
+    state: tauri::State<'_, AppState>,
+    instance: Option<InstanceId>,
+    error_kind: Option<String>,
+    error_message: Option<String>,
+    crashed: bool,
+) -> String {
+    state.ash.report(
+        env!("CARGO_PKG_VERSION"),
+        instance.as_ref(),
+        error_kind.as_deref(),
+        error_message.as_deref(),
+        crashed,
+    )
+}
+
 #[tauri::command]
 async fn links(state: tauri::State<'_, AppState>) -> Result<ash_core::Links, UiError> {
     Ok(state.ash.links().await)
@@ -1043,6 +1117,13 @@ pub fn run() {
             check_for_update,
             install_update,
             app_version,
+            search_mods,
+            install_mod,
+            installed_mods,
+            list_mods,
+            set_mod_enabled,
+            remove_mod,
+            report,
             links,
             open_feedback_link,
             first_run_note_dismissed,

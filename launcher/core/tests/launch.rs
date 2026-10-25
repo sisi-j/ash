@@ -699,6 +699,16 @@ async fn an_update_waits_while_a_game_runs_and_not_after() {
 }
 
 #[tokio::test]
+async fn a_running_game_s_mods_are_left_alone_until_it_closes() {
+    let f = fixture();
+    let id = f.ready().await;
+    f.launch(&id).await;
+
+    assert_eq!(f.ash.set_mod_enabled(&id, "a.jar", false).unwrap_err().kind(), "mods_in_use");
+    assert_eq!(f.ash.remove_mod(&id, "a.jar").unwrap_err().kind(), "mods_in_use");
+}
+
+#[tokio::test]
 async fn a_failed_spawn_leaves_nothing_recorded_as_running() {
     let f = fixture_with(FakeProcessPort::new().fail_to_spawn("the runtime is not executable"));
     let id = f.ready().await;
