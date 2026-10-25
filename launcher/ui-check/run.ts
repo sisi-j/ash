@@ -201,6 +201,22 @@ const STATES: State[] = [
     verify: async (page) => ((await windowDid(page)) === undefined ? null : `ash ${await windowDid(page)}d after a failed launch`),
   },
   {
+    // Between Java starting and the title screen, the button says which step
+    // the game is on, and the bar eases along within that step's stretch.
+    name: "launch-loading",
+    shows: "Loading 50 mods",
+    reach: launchGame,
+    verify: async (page) => {
+      const width = async () => parseFloat(await page.locator(".launch-fill").evaluate((el) => (el as HTMLElement).style.width));
+      const first = await width();
+      await page.waitForTimeout(800);
+      const later = await width();
+      if (!(first >= 50 && later > first && later < 70)) return `the bar didn't ease within loading mods: ${first}% then ${later}%`;
+      if ((await page.locator(".launch-button.is-playing").count()) !== 0) return "PLAYING before the title screen";
+      return (await page.getByRole("button", { name: "Stop" }).count()) === 1 ? null : "no Stop while the game loads";
+    },
+  },
+  {
     name: "minimise-on-start",
     shows: "PLAYING",
     reach: launchGame,

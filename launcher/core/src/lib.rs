@@ -14,6 +14,7 @@
 mod account;
 mod ash_account;
 mod auth;
+mod boot;
 mod catalogue;
 mod client_settings;
 mod config;
@@ -51,6 +52,7 @@ pub mod servers;
 
 pub use account::{Account, Accounts};
 pub use ash_account::AshAccountStatus;
+pub use boot::{BootStage, GameBoot};
 pub use catalogue::{
     Catalogue, CatalogueEntry, CatalogueSource, VersionKind, VERSION_MANIFEST_URL,
 };
@@ -144,6 +146,10 @@ struct Game {
     started_ms: u64,
     /// Whether that session has been ended, so it is ended once.
     end_recorded: bool,
+    /// Whether it runs the ash client, which says when its title screen is up.
+    ash_client: bool,
+    /// The furthest step its output has shown, kept as the output scrolls.
+    boot: GameBoot,
 }
 
 /// The whole of ash's public API.
@@ -1350,10 +1356,11 @@ impl Ash {
             }
         };
         let started_ms = now_ms();
-        self.games
-            .lock()
-            .unwrap()
-            .insert(id.as_str().to_owned(), Game { process, started_ms, end_recorded: false });
+        let ash_client = self.instance(id).map(|i| i.loader != Loader::Vanilla).unwrap_or(true);
+        self.games.lock().unwrap().insert(
+            id.as_str().to_owned(),
+            Game { process, started_ms, end_recorded: false, ash_client, boot: GameBoot::STARTING },
+        );
 
         // The session starts now rather than when it ends: a session that
         // ends in a crash still happened, and the player looking for "what
@@ -1437,6 +1444,16 @@ impl Ash {
                 overrides::load(&self.config.data_root, id).third_party_mods,
             ),
         })
+    }
+
+    /// How far a launched game has got towards its title screen, by its own
+    /// output (the LAUNCH bar's last steps). `None` if ash never started it.
+    pub fn game_boot(&self, id: &InstanceId) -> Option<GameBoot> {
+        let mut games = self.games.lock().unwrap();
+        let game = games.get_mut(id.as_str())?;
+        let now = boot::read(&game.process.log(), game.ash_client);
+        game.boot = game.boot.furthest(now);
+        Some(game.boot)
     }
 
     /// The tail of the game's own output.

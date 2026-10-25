@@ -199,6 +199,10 @@ export type GameStatus =
   | { state: "running" }
   | { state: "exited"; code: number | null; clean: boolean };
 
+/** Mirrors `ash_core::GameBoot`: how far a launched game has got towards its title screen. */
+export type BootStage = "starting" | "loading_mods" | "loading_resources" | "ready";
+export type GameBoot = { stage: BootStage; mods: number | null };
+
 /**
  * What ash would run. The access token is already `<redacted>` on the Rust
  * side - the unredacted shape has no serializer, so it cannot reach here.
@@ -507,6 +511,7 @@ export const api = {
     invoke<ServerStatus>("server_status", { id, address }),
   previewLaunch: (id: InstanceId) => invoke<InvocationView>("preview_launch", { id }),
   gameStatus: (id: InstanceId) => invoke<GameStatus | null>("game_status", { id }),
+  gameBoot: (id: InstanceId) => invoke<GameBoot | null>("game_boot", { id }),
   gameLog: (id: InstanceId) => invoke<string[]>("game_log", { id }),
   stopGame: (id: InstanceId) => invoke<void>("stop_game", { id }),
 

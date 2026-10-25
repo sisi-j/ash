@@ -5,6 +5,7 @@ import {
   onPrepareFinished,
   onPrepareProgress,
   type DegradationNotice,
+  type GameBoot,
   type InstanceId,
   type InvocationView,
   type Plan,
@@ -39,7 +40,11 @@ export type Phase =
   | { at: "unchecked"; error: UiError }
   | { at: "idle"; plan: Plan }
   | { at: "working"; progress: Progress; goal: Goal }
-  | { at: "running" }
+  /**
+   * The game's process is up. `boot` is how far it has got towards its
+   * title screen; "ready" is PLAYING.
+   */
+  | { at: "running"; boot: GameBoot }
   | {
       at: "crashed";
       code: number | null;
@@ -66,6 +71,18 @@ const START: Progress = {
 
 /** How often a running game is asked whether it is still running. */
 const POLL_MS = 1500;
+
+/** How often a loading game's output is read for the step it is on. */
+const BOOT_POLL_MS = 300;
+
+/**
+ * A game that never says its title screen is up (a log ash can't read, a
+ * client too old to say) is still up: after this long, PLAYING rather than
+ * loading for ever.
+ */
+const BOOT_GIVE_UP_MS = 180_000;
+
+const READY: GameBoot = { stage: "ready", mods: null };
 
 /** The argument after `--flag`, for reading a value back off a command line. */
 function argumentAfter(args: string[], flag: string): string | null {
@@ -131,7 +148,8 @@ export function useLaunch(id: InstanceId | null): Launch {
       // plan has to say: ash may have been reopened while it played.
       const status = await api.gameStatus(id);
       if (status?.state === "running") {
-        setPhase({ at: "running" });
+        const boot = (await api.gameBoot(id).catch(() => null)) ?? READY;
+        setPhase({ at: "running", boot });
         return;
       }
       const plan = await api.planInstance(id);
@@ -205,6 +223,33 @@ export function useLaunch(id: InstanceId | null): Launch {
     };
   }, [phase.at, id, settle]);
 
+  // While the game loads, its output says which step it is on, for the
+  // LAUNCH bar's last stretch.
+  const booting = phase.at === "running" && phase.boot.stage !== "ready";
+  useEffect(() => {
+    if (!booting || id === null) return;
+    let live = true;
+    const since = Date.now();
+
+    const tick = async () => {
+      const boot = await api.gameBoot(id).catch(() => null);
+      if (!live) return;
+      const gaveUp = Date.now() - since > BOOT_GIVE_UP_MS;
+      setPhase((current) => {
+        if (current.at !== "running") return current;
+        if (gaveUp) return { at: "running", boot: { ...current.boot, stage: "ready" } };
+        if (!boot || (boot.stage === current.boot.stage && boot.mods === current.boot.mods)) return current;
+        return { at: "running", boot };
+      });
+    };
+
+    const timer = setInterval(() => void tick(), BOOT_POLL_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [booting, id]);
+
   useEffect(() => {
     const progress = onPrepareProgress((event) => {
       setPhase((current) => {
@@ -270,7 +315,7 @@ export function useLaunch(id: InstanceId | null): Launch {
     const launched = onLaunchFinished((outcome) => {
       if (outcome.ok) {
         setCommand(outcome.invocation);
-        setPhase({ at: "running" });
+        setPhase({ at: "running", boot: { stage: "starting", mods: null } });
       } else if (outcome.error) {
         if (outcome.error.kind === "cancelled") settle();
         else setPhase({ at: "failed", error: outcome.error, goal: "play" });
