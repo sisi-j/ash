@@ -333,10 +333,14 @@ fn open_news_link(url: String) -> Result<(), UiError> {
 fn open_sign_in_page(code: String) -> Result<(), UiError> {
     let refused = || UiError {
         kind: "open_failed",
-        message: "Your browser couldn't be opened. Go to microsoft.com/link and enter the code.".into(),
+        message: "Your browser couldn't be opened. Go to microsoft.com/link and enter the code."
+            .into(),
         retryable: true,
     };
-    if code.is_empty() || code.len() > 16 || !code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+    if code.is_empty()
+        || code.len() > 16
+        || !code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         return Err(refused());
     }
     let url = format!("https://www.microsoft.com/link?otc={code}");
