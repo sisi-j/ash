@@ -14,5 +14,5 @@ The first alpha. Thank you for trying ash: things may break, and your feedback o
 - **Your settings follow you** between computers when you're signed in.
 - **ash updates itself:** when there's a new version, it tells you what's new and asks.
 - **LAUNCH GAME shows every step** up to the title screen: checking, downloading, starting Java, loading mods, loading resources.
-- **Signing in is one click:** Microsoft's page opens with your code already filled in.
+- **Signing in is quicker:** Microsoft's page opens with your code already copied, ready to paste.
 - **A quick tour** the first time you open ash, and again from Settings whenever you like.

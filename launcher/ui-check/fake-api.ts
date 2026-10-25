@@ -493,8 +493,8 @@ export const api: typeof real.api = {
   },
   setSyncEnabled: (enabled) => resolve({ ...syncStatus, enabled, state: enabled ? { state: "waiting" } : { state: "off" } }),
   resolveDeletedElsewhere: () => resolve({ ...syncStatus, deleted_elsewhere: [] }),
-  openSignInPage: async (code) => {
-    (window as unknown as { openedSignIn?: string }).openedSignIn = code;
+  openSignInPage: async () => {
+    (window as unknown as { openedSignIn?: boolean }).openedSignIn = true;
   },
   openNewsLink: async (url) => {
     (window as unknown as { openedLink?: string }).openedLink = url;
