@@ -220,16 +220,23 @@ async fn get_json<T: serde::de::DeserializeOwned>(
         .map_err(|e| AshError::Malformed { url: url.to_owned(), detail: e.to_string() })
 }
 
+/// What the player asked the Mods page for: the typed text, the sort, and
+/// how far down the list.
+pub(crate) struct Wanted<'a> {
+    pub query: &'a str,
+    pub sort: ModSort,
+    pub offset: u32,
+}
+
 pub(crate) async fn search(
     http: &dyn HttpPort,
     base: &str,
     tag: &str,
     game_version: &str,
-    query: &str,
-    sort: ModSort,
-    offset: u32,
+    wanted: Wanted<'_>,
     installed: &[InstalledMod],
 ) -> Result<ModSearch, AshError> {
+    let Wanted { query, sort, offset } = wanted;
     let mut facets =
         format!(r#"[["project_type:mod"],["versions:{game_version}"],["categories:{tag}"]"#);
     if sort == ModSort::Suggested {

@@ -1217,9 +1217,7 @@ impl Ash {
             &self.config.modrinth_url,
             tag,
             &instance.version_id,
-            query,
-            sort,
-            offset,
+            mods::Wanted { query, sort, offset },
             &have,
         )
         .await
