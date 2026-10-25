@@ -7,6 +7,7 @@ import {
   type InstanceId,
   type ModEntry,
   type ModHit,
+  type ModSort,
 } from "./api";
 import { PAGES } from "./Sidebar";
 
@@ -14,6 +15,16 @@ import { PAGES } from "./Sidebar";
 const DEBOUNCE_MS = 300;
 
 type Done = { names: string[]; turnedOn: boolean; optional: string[] };
+
+/** The sort menu, in order. Best match shows only once something is typed. */
+const SORTS: { sort: ModSort; label: string }[] = [
+  { sort: "suggested", label: "Suggested by ash" },
+  { sort: "relevance", label: "Best match" },
+  { sort: "downloads", label: "Most downloaded" },
+  { sort: "follows", label: "Most followed" },
+  { sort: "newest", label: "Newest" },
+  { sort: "updated", label: "Recently updated" },
+];
 
 /**
  * Mods from Modrinth (spec 0005, ADR-0026): searched for one instance's
@@ -28,6 +39,7 @@ export function ModsPage(props: {
 }) {
   const instance = props.instances.find((i) => i.id === props.selected) ?? null;
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<ModSort>("suggested");
   const [hits, setHits] = useState<ModHit[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -53,7 +65,7 @@ export function ModsPage(props: {
     setLoading(true);
     const timer = window.setTimeout(() => {
       api
-        .searchMods(instance.id, query, 0)
+        .searchMods(instance.id, query, sort, 0)
         .then((found) => {
           if (ask !== asked.current) return;
           setHits(found.hits);
@@ -70,7 +82,7 @@ export function ModsPage(props: {
         .finally(() => ask === asked.current && setLoading(false));
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [instance?.id, modded, query]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [instance?.id, modded, query, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setDone(null);
@@ -80,11 +92,20 @@ export function ModsPage(props: {
   const more = async () => {
     if (!instance) return;
     try {
-      const found = await api.searchMods(instance.id, query, hits.length);
+      const found = await api.searchMods(instance.id, query, sort, hits.length);
       setHits((current) => [...current, ...found.hits]);
     } catch (e) {
       setProblem(isUiError(e) ? e.message : "Modrinth couldn't be searched.");
     }
+  };
+
+  // Typing looks across every mod, best match first; clearing the search
+  // goes back to ash's suggestions.
+  const search = (text: string) => {
+    setQuery(text);
+    const typed = text.trim() !== "";
+    if (typed && sort === "suggested") setSort("relevance");
+    if (!typed && sort === "relevance") setSort("suggested");
   };
 
   const install = async (hit: ModHit) => {
@@ -193,8 +214,26 @@ export function ModsPage(props: {
                 placeholder={`Search Modrinth for ${LOADER_LABELS[instance.loader]} ${instance.version_id} mods`}
                 aria-label="Search mods"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => search(e.target.value)}
               />
+              <div className="chips mods-sorts" role="radiogroup" aria-label="Sort">
+                {SORTS.filter((s) => s.sort !== "relevance" || query.trim() !== "").map((s) => (
+                  <button
+                    key={s.sort}
+                    className={`chip${s.sort === sort ? " is-selected" : ""}`}
+                    role="radio"
+                    aria-checked={s.sort === sort}
+                    onClick={() => setSort(s.sort)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {sort === "suggested" && (
+                <p className="muted mods-sort-note">
+                  Picked by ash: quick, well kept, and nothing that clashes with ash&rsquo;s own features.
+                </p>
+              )}
 
               {done && (
                 <p className="notice mods-done" role="status">
@@ -259,7 +298,9 @@ export function ModsPage(props: {
               </ul>
               {!loading && hits.length === 0 && !problem && (
                 <p className="notice">
-                  Nothing on Modrinth matches that for {instance.version_id}.
+                  {sort === "suggested"
+                    ? `None of ash's suggestions are out for ${instance.version_id} yet. Try Most downloaded.`
+                    : `Nothing on Modrinth matches that for ${instance.version_id}.`}
                 </p>
               )}
               {hits.length < total && (

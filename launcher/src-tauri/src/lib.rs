@@ -217,9 +217,10 @@ async fn search_mods(
     state: tauri::State<'_, AppState>,
     id: InstanceId,
     query: String,
+    sort: ash_core::ModSort,
     offset: u32,
 ) -> Result<ash_core::ModSearch, UiError> {
-    state.ash.search_mods(&id, &query, offset).await.map_err(UiError::from)
+    state.ash.search_mods(&id, &query, sort, offset).await.map_err(UiError::from)
 }
 
 #[tauri::command]

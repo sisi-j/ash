@@ -2390,3 +2390,12 @@ button {
   display: flex;
   gap: 6px;
 }
+
+.mods-sorts {
+  margin-bottom: 14px;
+}
+
+.mods-sort-note {
+  margin: -4px 0 14px;
+  font-size: 13px;
+}

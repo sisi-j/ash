@@ -487,15 +487,21 @@ export const api: typeof real.api = {
     (window as unknown as { openedLink?: string }).openedLink = url;
   },
   appVersion: () => resolve("0.1.0-alpha.1"),
-  searchMods: (_id, query) =>
-    resolve({
-      total: MODS.length,
-      hits: MODS.filter((m) => m.title.toLowerCase().includes(query.toLowerCase())).map((m) => ({
+  searchMods: (_id, query, sort) => {
+    // ash's picks leave out Fabric API; every other sort is by downloads here.
+    const found = MODS.filter(
+      (m) => m.title.toLowerCase().includes(query.toLowerCase()) && (sort !== "suggested" || m.project_id !== "fabric-api"),
+    );
+    if (sort === "downloads") found.sort((a, b) => b.downloads - a.downloads);
+    return resolve({
+      total: found.length,
+      hits: found.map((m) => ({
         ...m,
         installed: installedProjects.has(m.project_id),
         included: m.project_id === "fabric-api",
       })),
-    }),
+    });
+  },
   installMod: (_id, projectId) => {
     if (state === "mods-incompatible") {
       return Promise.reject({

@@ -71,7 +71,7 @@ const FIRST_RUN_INSTANCES: &[(&str, Loader)] =
 const FIRST_RUN_FILE: &str = "first-run-instances";
 pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
-pub use mods::{InstallOutcome, InstalledMod, ModEntry, ModHit, ModSearch};
+pub use mods::{InstallOutcome, InstalledMod, ModEntry, ModHit, ModSearch, ModSort};
 pub use news::{News, NewsKind, NewsPost};
 pub use overrides::{
     ash_default_memory_mb, sized_for, MachineDefaults, MachineOverrides, Resolution,
@@ -1200,12 +1200,13 @@ impl Ash {
 
     // ---- mods (spec 0005, ADR-0026) ---------------------------------------
 
-    /// Mods on Modrinth for this instance's version and loader, the most
-    /// downloaded first when nothing is typed.
+    /// Mods on Modrinth for this instance's version and loader, in the
+    /// order asked for.
     pub async fn search_mods(
         &self,
         id: &InstanceId,
         query: &str,
+        sort: ModSort,
         offset: u32,
     ) -> Result<ModSearch, AshError> {
         let instance = self.instance(id)?;
@@ -1216,8 +1217,7 @@ impl Ash {
             &self.config.modrinth_url,
             tag,
             &instance.version_id,
-            query,
-            offset,
+            mods::Wanted { query, sort, offset },
             &have,
         )
         .await
