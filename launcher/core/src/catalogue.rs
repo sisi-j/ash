@@ -150,7 +150,8 @@ fn mark_first_class(versions: &mut [CatalogueEntry]) {
         if entry.kind != VersionKind::Release {
             continue;
         }
-        if entry.id == "1.8.9" {
+        // 1.20.4 is a version target of its own (ADR-0027).
+        if entry.id == "1.8.9" || entry.id == "1.20.4" {
             entry.first_class = true;
         } else if !seen_modern && (entry.id == "1.21" || entry.id.starts_with("1.21.")) {
             entry.first_class = true;

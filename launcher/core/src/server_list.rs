@@ -64,7 +64,8 @@ pub enum ServerStatus {
 pub(crate) fn protocol_for(version_id: &str) -> i32 {
     match version_id {
         "1.8.9" => 47,
-        // From the game's own version.json.
+        // From the games' own version.json.
+        "1.20.4" => 765,
         "1.21.11" => 774,
         _ => -1,
     }

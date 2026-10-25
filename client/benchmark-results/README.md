@@ -154,6 +154,10 @@ Every feature is level.
 
 None depended on a feature, and nothing recorded explains them. In the second sitting, every run drew 246 to 255 sections, logged at its end, and none came out fast. So the fast runs left out remain unexplained; if they come back, the section count is the first thing to compare.
 
+## 1.20.4: not yet benchmarked
+
+1.20.4 shipped in the alpha without FPS marks, by the product owner's decision on 25 October 2026 (#149). Its tiles show no mark, rather than a guessed one, and `FpsMeasurements.NOT_YET_BENCHMARKED` records why. The sitting is ready to run: about 75 minutes, a warm-up then each feature off between two runs with everything on, logging the GPU's clocks every second. When its marks are in, 1.20.4 comes off that list, and `FpsMeasurementsTest` holds it to every mark again.
+
 ## FPS marks for cosmetics, 23 October 2026
 
 The same laptop and scene as the FPS marks above, plugged in. Each target's runs were in one sitting: everything on, cosmetics off, everything on. The change and its uncertainty are worked out as above. The player is a spectator in first person, so no cape is drawn: what this measures is the cape hooks and the background lookup.

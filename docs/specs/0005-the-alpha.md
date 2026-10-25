@@ -157,7 +157,7 @@ Everything Phase 4 has built ships in it: ash accounts, news, synced settings an
   - It runs on the Java Mojang names for 1.20.4 (17), so the client builds for Java 17.
 - **Every feature 1.21.11 has**, at the same hooks where 1.20.4 has them, found by a research ticket before any code: the readouts, crosshair, hit indicator, hit colour, freelook, snaplook, toggle sprint, faster clouds, faster view scan, the settings screen, the load report and capes.
   - A hook that 1.20.4 lacks is a degraded feature with its reason (ADR-0017), not a gap papered over.
-- **Tested like the others:** the client game test runs on 1.20.4 in CI, and its FPS marks are measured in a benchmark sitting on the product owner's machine.
+- **Tested in a real game:** Fabric's client game tests begin with 1.21.4, so 1.20.4 gets ash's own smoke test in CI, as 1.8.9 does (ADR-0027, amended). Its FPS marks are measured in a benchmark sitting on the product owner's machine.
 
 ### First run
 

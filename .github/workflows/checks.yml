@@ -79,7 +79,7 @@ jobs:
       # on one version target. Also compiles each target's frame-time
       # measurement, which only a human runs, so it cannot quietly stop
       # building; `build` itself checks none of it is in a player's jar.
-      - run: ./gradlew build :target-1.21.11:compileBenchmarkJava :target-1.8.9:compileBenchmarkJava
+      - run: ./gradlew build :target-1.21.11:compileBenchmarkJava :target-1.20.4:compileBenchmarkJava :target-1.8.9:compileBenchmarkJava
         working-directory: client
 
       # The jar the installer ships. Kept so that a build from any commit can
@@ -137,6 +137,14 @@ jobs:
         run: ./gradlew :target-1.21.11:runClientGameTestSodium
         working-directory: client
 
+      # 1.20.4 predates Fabric's client game tests (they begin with 1.21.4),
+      # so it has ash's own smoke test, as 1.8.9 does: a real client that
+      # loads ash, reads the launcher's server list, walks into a flat world,
+      # opens ash's settings and wears the test CDN's cape (ADR-0027).
+      - if: ${{ !cancelled() }}
+        run: ./gradlew :target-1.20.4:runSmokeTest
+        working-directory: client
+
       # LWJGL 2 looks for an `xrandr` executable on PATH and gives up on
       # display modes when it finds none, so without this the 1.8.9 client
       # crashes on a runner that has Xvfb but not `x11-xserver-utils`. Why
@@ -174,6 +182,8 @@ jobs:
             client/target-1.21.11/build/run/clientGameTest/logs/
             client/target-1.21.11/build/run/clientGameTestSodium/screenshots/
             client/target-1.21.11/build/run/clientGameTestSodium/logs/
+            client/target-1.20.4/build/run/smoketest/logs/
+            client/target-1.20.4/build/run/smoketest/screenshots/
             client/target-1.8.9/build/run/smoketest/logs/
             client/target-1.8.9/build/run/smoketest/screenshots/
           if-no-files-found: ignore

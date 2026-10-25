@@ -362,6 +362,47 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
     }],
 };
 
+/// Fabric Loader 0.19.5 on 1.20.4 (ADR-0027): the same loader and document as
+/// 1.21.11, with 1.20.4's intermediary and Fabric API.
+///
+/// The two that differ were read from their `.sha1` sidecars on 2026-10-24
+/// and checked against a local hash of the downloaded bytes; they agreed.
+const FABRIC_1_20_4: LoaderPin = LoaderPin {
+    loader: Loader::Fabric,
+    version_id: "1.20.4",
+    loader_version: "0.19.5",
+    document: FABRIC_1_21_11.document,
+    libraries: &[
+        PinnedLibrary {
+            name: "net.fabricmc:intermediary:1.20.4",
+            repository: FABRIC_MAVEN,
+            mirror: None,
+            sha1: "fa2b25eb8a067e91159ab3b38c7f1a161126d346",
+            size: 608_319,
+            natives: &[],
+        },
+        PinnedLibrary {
+            name: "net.fabricmc:fabric-loader:0.19.5",
+            repository: FABRIC_MAVEN,
+            mirror: None,
+            sha1: "ff9e65cffca4a67f31523e1807fe0855940fcbfa",
+            size: 1_984_980,
+            natives: &[],
+        },
+    ],
+    jvm_arguments: FABRIC_1_21_11.jvm_arguments,
+    client_jar: Some("ash-client-1.20.4.jar"),
+    // Fabric API, Apache-2.0, shipped unmodified; not mirrored, as on 1.21.11.
+    bundled_mods: &[PinnedLibrary {
+        name: "net.fabricmc.fabric-api:fabric-api:0.97.3+1.20.4",
+        repository: FABRIC_MAVEN,
+        mirror: None,
+        sha1: "a21f3c7e700b9fc3a28e896979a07ec489507143",
+        size: 2_187_523,
+        natives: &[],
+    }],
+};
+
 const LEGACY_MAVEN: &str = "https://maven.legacyfabric.net/";
 
 /// Fabric Loader 0.19.3 on 1.8.9, the Legacy Fabric way.
@@ -548,7 +589,7 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
 /// same reason the depot and instance roots are: they are ash's own values,
 /// and a test that could not point them somewhere else would have to serve
 /// several megabytes of real third-party jars to exercise a modded prepare.
-pub const PINS: &[LoaderPin] = &[FABRIC_1_21_11, LEGACY_FABRIC_1_8_9];
+pub const PINS: &[LoaderPin] = &[FABRIC_1_21_11, FABRIC_1_20_4, LEGACY_FABRIC_1_8_9];
 
 /// The loader ash installs for a version target, if it has one pinned.
 ///

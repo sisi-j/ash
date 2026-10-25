@@ -52,7 +52,7 @@ async fn marks_exactly_the_first_class_targets() {
     let first_class: Vec<&str> = catalogue.first_class().map(|v| v.id.as_str()).collect();
 
     // ADR-0005: 1.8.9 and the newest 1.21.x. Not 1.21.3, not 1.21, not 1.8.
-    assert_eq!(first_class, vec!["1.21.4", "1.8.9"]);
+    assert_eq!(first_class, vec!["1.21.4", "1.20.4", "1.8.9"]);
 }
 
 #[tokio::test]
@@ -100,7 +100,7 @@ async fn first_class_marking_survives_the_cache_round_trip() {
     let cached = ash_with(offline(), &tmp).catalogue().await.unwrap();
     let first_class: Vec<&str> = cached.first_class().map(|v| v.id.as_str()).collect();
 
-    assert_eq!(first_class, vec!["1.21.4", "1.8.9"]);
+    assert_eq!(first_class, vec!["1.21.4", "1.20.4", "1.8.9"]);
 }
 
 #[tokio::test]

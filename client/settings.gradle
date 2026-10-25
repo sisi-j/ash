@@ -28,4 +28,5 @@ include 'bench'
 // word that rots: 1.21.11 is the last obfuscated release and 26.x is already
 // out. The directory says which build it is and always will.
 include 'target-1.21.11'
+include 'target-1.20.4'
 include 'target-1.8.9'
