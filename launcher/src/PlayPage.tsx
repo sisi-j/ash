@@ -551,7 +551,7 @@ function InstancesCard(props: {
   }, [props.instances]);
 
   return (
-    <div className="card card-primary">
+    <div className="card card-primary" data-tour="instances">
       <h3>
         Instances
         <button className="mini" onClick={props.onNew}>

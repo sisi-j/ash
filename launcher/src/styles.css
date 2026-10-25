@@ -2399,3 +2399,84 @@ button {
   margin: -4px 0 14px;
   font-size: 13px;
 }
+
+/* The first-run tour (Tour.tsx): the window dimmed around one part of it. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.tour-spot {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.5),
+    0 0 0 200vmax rgba(0, 0, 0, 0.7);
+  transition:
+    left 320ms var(--ease-out),
+    top 320ms var(--ease-out),
+    width 320ms var(--ease-out),
+    height 320ms var(--ease-out);
+  pointer-events: none;
+}
+
+.tour-card {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 300px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(21, 21, 24, 0.97);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  transition:
+    left 320ms var(--ease-out),
+    top 320ms var(--ease-out);
+}
+
+.tour-card b {
+  font-size: 16px;
+}
+
+.tour-card p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.tour-count {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tour-skip {
+  margin-right: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.tour-skip:hover {
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot,
+  .tour-card {
+    transition: none;
+  }
+}

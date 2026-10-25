@@ -315,6 +315,19 @@ function status(): real.GameStatus | null {
   return null;
 }
 
+let bootAsked = 0;
+
+/**
+ * A launched game's steps to its title screen, one per ask; "launch-loading"
+ * stays loading its mods. A game found already running is already up.
+ */
+function boot(): real.GameBoot {
+  if (state === "launch-loading") return { stage: "loading_mods", mods: 50 };
+  if (!starts) return { stage: "ready", mods: 50 };
+  const steps: real.BootStage[] = ["starting", "loading_mods", "loading_resources", "ready"];
+  return { stage: steps[Math.min(bootAsked++, steps.length - 1)] ?? "ready", mods: 50 };
+}
+
 /** Modrinth, as the Mods page sees it: icons as data URLs, since the check runs offline. */
 const MODS = [
   { project_id: "sodium", slug: "sodium", title: "Sodium", description: "The fastest rendering optimization mod for Minecraft.", downloads: 112_400_000 },
@@ -361,7 +374,7 @@ function emit<T>(handlers: Set<(value: T) => void>, value: T) {
 }
 
 /** States whose launch gets the game up, for what the launcher does then. */
-const starts = state === "minimise-on-start" || state === "close-on-start";
+const starts = state === "minimise-on-start" || state === "close-on-start" || state === "launch-loading";
 
 /** What the launcher was set to do once the game starts, in each state. */
 const onGameStart: real.OnGameStart =
@@ -555,6 +568,10 @@ export const api: typeof real.api = {
   // Shown only where a state is about it, so every other screenshot stays as it was.
   firstRunNoteDismissed: () => resolve(state !== "alpha-note"),
   dismissFirstRunNote: nothing,
+  tourSeen: () => resolve(state !== "tour" && state !== "tour-start" && state !== "tour-mods"),
+  markTourSeen: async () => {
+    (window as unknown as { tourMarked?: boolean }).tourMarked = true;
+  },
   openPrivacyStatement: async () => {
     (window as unknown as { openedPrivacy?: boolean }).openedPrivacy = true;
   },
@@ -610,6 +627,7 @@ export const api: typeof real.api = {
   serverStatus: (_id, address) => resolve(STATUSES[address] ?? { state: "offline" }),
   previewLaunch: () => resolve({ program: "java", args: [], working_directory: "" }),
   gameStatus: () => resolve(status()),
+  gameBoot: () => resolve(boot()),
   gameLog: () => resolve(crashes ? CRASH_LOG : []),
   stopGame: nothing,
 

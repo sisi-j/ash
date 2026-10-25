@@ -36,6 +36,7 @@ import { SettingsPage } from "./SettingsPage";
 import { Sidebar, type Page } from "./Sidebar";
 import { SignIn } from "./SignIn";
 import { TitleBar } from "./TitleBar";
+import { Tour } from "./Tour";
 
 /**
  * What the Play page is showing: home, with LAUNCH GAME; the selected
@@ -130,7 +131,25 @@ export default function App() {
     api.appVersion().then(setVersion).catch(() => setVersion(null));
     api.links().then(setLinks).catch(() => setLinks(null));
     api.firstRunNoteDismissed().then(setNoteDismissed).catch(() => setNoteDismissed(true));
+    api.tourSeen().then((seen) => setTour(seen ? "seen" : "due")).catch(() => setTour("seen"));
   }, []);
+  // The first-run tour: due until it's been seen or skipped, shown once there
+  // is a launcher to show - signed in, on Play, with an instance - and again
+  // from Settings.
+  const [tour, setTour] = useState<"due" | "showing" | "seen">("seen");
+  const endTour = useCallback(() => {
+    setTour("seen");
+    void api.markTourSeen().catch(() => undefined);
+  }, []);
+  const tourReady = signedIn && !signingIn && page === "play" && playView === "home" && instances.length > 0;
+  useEffect(() => {
+    if (tour === "due" && tourReady) setTour("showing");
+  }, [tour, tourReady]);
+  const showTour = () => {
+    setPage("play");
+    setPlayView("home");
+    setTour("showing");
+  };
   const sendFeedback = links?.feedback_url ? () => void api.openFeedbackLink().catch(fail) : undefined;
   useEffect(() => {
     if (page !== "news") return;
@@ -310,6 +329,7 @@ export default function App() {
           </div>
         )}
         {reporting && <ReportDialog request={reporting} onClose={() => setReporting(null)} />}
+        {tour === "showing" && <Tour onDone={endTour} />}
 
         <UpdateBar gameRunning={launch.phase.at === "running"} />
 
@@ -390,6 +410,7 @@ export default function App() {
             sync={sync}
             onSyncToggle={(enabled) => void toggleSync(enabled)}
             version={version}
+            onTour={showTour}
           />
         ) : playView === "new" ? (
           <section className="page">

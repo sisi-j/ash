@@ -9,7 +9,10 @@ A version is released when its heading carries a date (`## 0.1.0-alpha.2 - 2026-
 The first alpha. Thank you for trying ash: things may break, and your feedback on Discord shapes what comes next.
 
 - **Play 1.21.11, 1.20.4 and 1.8.9** with ash's client: the FPS and ping readouts, a custom crosshair, hit indicator and hit colour, freelook, snaplook, toggle sprint, and faster clouds and view scanning.
-- **Mods from Modrinth,** found and installed from the Mods page, with everything they need.
+- **Mods from Modrinth,** found and installed from the Mods page, with everything they need. Browse starts with ash's suggestions for your version, or sort by most downloaded, newest and more.
 - **Capes,** chosen in the Wardrobe and seen by other ash players.
 - **Your settings follow you** between computers when you're signed in.
 - **ash updates itself:** when there's a new version, it tells you what's new and asks.
+- **LAUNCH GAME shows every step** up to the title screen: checking, downloading, starting Java, loading mods, loading resources.
+- **Signing in is one click:** Microsoft's page opens with your code already filled in.
+- **A quick tour** the first time you open ash, and again from Settings whenever you like.

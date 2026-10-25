@@ -763,6 +763,16 @@ async fn game_status(
     Ok(state.ash.game_status(&id))
 }
 
+/// Polled by the window while a launched game loads, for the LAUNCH bar's
+/// last steps. `None` means ash never started this instance.
+#[tauri::command]
+async fn game_boot(
+    state: tauri::State<'_, AppState>,
+    id: InstanceId,
+) -> Result<Option<ash_core::GameBoot>, UiError> {
+    Ok(state.ash.game_boot(&id))
+}
+
 #[tauri::command]
 async fn game_log(
     state: tauri::State<'_, AppState>,
@@ -1028,6 +1038,16 @@ fn dismiss_first_run_note(state: tauri::State<'_, AppState>) -> Result<(), UiErr
     state.ash.dismiss_first_run_note().map_err(UiError::from)
 }
 
+#[tauri::command]
+fn tour_seen(state: tauri::State<'_, AppState>) -> bool {
+    state.ash.tour_seen()
+}
+
+#[tauri::command]
+fn mark_tour_seen(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
+    state.ash.mark_tour_seen().map_err(UiError::from)
+}
+
 // ---- updates (spec 0005, ADR-0025) ----
 
 /// A newer release than this one: its version and its "what's new", the
@@ -1159,6 +1179,8 @@ pub fn run() {
             open_feedback_link,
             first_run_note_dismissed,
             dismiss_first_run_note,
+            tour_seen,
+            mark_tour_seen,
             create_instance,
             loaders_for,
             instances,
@@ -1183,6 +1205,7 @@ pub fn run() {
             server_status,
             preview_launch,
             game_status,
+            game_boot,
             game_log,
             stop_game,
             overrides,

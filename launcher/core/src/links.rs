@@ -18,6 +18,8 @@ const LINKS_FILE: &str = "links.json";
 
 /// Whether the first-run note has been dismissed on this machine.
 const NOTE_FILE: &str = "first-run-note-dismissed";
+/// The first-run tour, seen or skipped: it shows once, then only on request.
+const TOUR_FILE: &str = "tour-seen";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Links {
@@ -86,6 +88,15 @@ pub(crate) fn dismiss_note(data_root: &Path) -> Result<(), AshError> {
     fs::create_dir_all(data_root).map_err(AshError::writing("creating the data directory"))?;
     fs::write(data_root.join(NOTE_FILE), b"")
         .map_err(AshError::writing("remembering the first-run note"))
+}
+
+pub(crate) fn tour_seen(data_root: &Path) -> bool {
+    data_root.join(TOUR_FILE).exists()
+}
+
+pub(crate) fn mark_tour_seen(data_root: &Path) -> Result<(), AshError> {
+    fs::create_dir_all(data_root).map_err(AshError::writing("creating the data directory"))?;
+    fs::write(data_root.join(TOUR_FILE), b"").map_err(AshError::writing("remembering the tour"))
 }
 
 #[cfg(test)]

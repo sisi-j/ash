@@ -19,7 +19,9 @@ use ash_core::credentials::{CredentialStore, InMemoryCredentialStore};
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, GameStatus, ProcessPort};
 use ash_core::servers::{FakeServerPort, ServerPort};
-use ash_core::{Ash, Cancel, Config, InstanceId, Loader, NullSink, VERSION_MANIFEST_URL};
+use ash_core::{
+    Ash, BootStage, Cancel, Config, GameBoot, InstanceId, Loader, NullSink, VERSION_MANIFEST_URL,
+};
 
 mod common;
 
@@ -1286,4 +1288,34 @@ async fn the_log_is_readable_even_though_log4j_writes_xml() {
     // Applying Mojang's configuration is what turns the console into XML.
     // Showing a player that raw would be showing them nothing.
     assert_eq!(f.ash.game_log(&id), ["[Render thread/INFO]: Setting user: oogz"]);
+}
+
+#[tokio::test]
+async fn how_far_a_starting_game_has_got_is_read_off_its_output() {
+    let f = fixture_with(FakeProcessPort::new().set_log(&[
+        "[main/INFO]: Loading 3 mods:",
+        "[Render thread/INFO]: Reloading ResourceManager: vanilla",
+    ]));
+    let id = f.ready().await;
+    assert_eq!(f.ash.game_boot(&id), None, "nothing launched, nothing to say");
+
+    f.launch(&id).await;
+
+    assert_eq!(
+        f.ash.game_boot(&id),
+        Some(GameBoot { stage: BootStage::LoadingResources, mods: Some(3) })
+    );
+}
+
+#[tokio::test]
+async fn a_vanilla_game_is_up_once_its_sound_engine_starts() {
+    let f = fixture_with(FakeProcessPort::new().set_log(&[
+        "[Render thread/INFO]: Reloading ResourceManager: vanilla",
+        "[Render thread/INFO]: Sound engine started",
+    ]));
+    let id = f.ready().await;
+    f.launch(&id).await;
+
+    // No ash client in a vanilla instance to say its title screen is up.
+    assert_eq!(f.ash.game_boot(&id).map(|b| b.stage), Some(BootStage::Ready));
 }

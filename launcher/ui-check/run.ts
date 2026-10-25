@@ -66,6 +66,25 @@ const STATES: State[] = [
   },
   { name: "no-instances", shows: "No instances yet" },
   {
+    // The first time, a spotlight tour: one part of the window at a time,
+    // starting with LAUNCH GAME, until Done; and it isn't shown again.
+    name: "tour",
+    shows: "1 of 7",
+    verify: async (page) => {
+      const spot = await page.locator(".tour-spot").boundingBox();
+      const launch = await page.locator(".launch-button").boundingBox();
+      if (!spot || !launch) return "nothing lit up";
+      if (!(spot.x < launch.x && spot.x + spot.width > launch.x + launch.width && spot.y < launch.y))
+        return "the first stop doesn't light up LAUNCH GAME";
+      for (let i = 1; i < 7; i++) await page.getByRole("button", { name: "Next" }).click();
+      if ((await page.getByText("7 of 7").count()) !== 1) return "the tour didn't reach its last stop";
+      await page.getByRole("button", { name: "Done" }).click();
+      if ((await page.locator(".tour").count()) !== 0) return "Done didn't end the tour";
+      const marked = await page.evaluate(() => (window as unknown as { tourMarked?: boolean }).tourMarked);
+      return marked ? null : "the tour would show again next time";
+    },
+  },
+  {
     name: "idle",
     shows: "LAUNCH GAME",
     // With reduced motion the scene is one still frame: the same picture
@@ -199,6 +218,22 @@ const STATES: State[] = [
     reach: launchGame,
     // Set to minimise once the game starts: a launch that failed must leave ash where the player can read why.
     verify: async (page) => ((await windowDid(page)) === undefined ? null : `ash ${await windowDid(page)}d after a failed launch`),
+  },
+  {
+    // Between Java starting and the title screen, the button says which step
+    // the game is on, and the bar eases along within that step's stretch.
+    name: "launch-loading",
+    shows: "Loading 50 mods",
+    reach: launchGame,
+    verify: async (page) => {
+      const width = async () => parseFloat(await page.locator(".launch-fill").evaluate((el) => (el as HTMLElement).style.width));
+      const first = await width();
+      await page.waitForTimeout(800);
+      const later = await width();
+      if (!(first >= 50 && later > first && later < 70)) return `the bar didn't ease within loading mods: ${first}% then ${later}%`;
+      if ((await page.locator(".launch-button.is-playing").count()) !== 0) return "PLAYING before the title screen";
+      return (await page.getByRole("button", { name: "Stop" }).count()) === 1 ? null : "no Stop while the game loads";
+    },
   },
   {
     name: "minimise-on-start",
@@ -628,6 +663,30 @@ const STATES: State[] = [
     },
     verify: async (page) =>
       (await page.getByText("You deleted your ash account.").count()) === 0 ? null : "showed a failed deletion as done",
+  },
+  // Where the tour's card sits: below LAUNCH GAME, and beside the sidebar.
+  { name: "tour-start", shows: "1 of 7" },
+  {
+    name: "tour-mods",
+    shows: "3 of 7",
+    reach: async (page) => {
+      await page.getByText("1 of 7").waitFor();
+      await page.getByRole("button", { name: "Next" }).click();
+      await page.getByRole("button", { name: "Next" }).click();
+    },
+  },
+  {
+    // The tour again, whenever it's wanted: from Settings, back on Play.
+    name: "tour-replay",
+    shows: "1 of 7",
+    reach: async (page) => {
+      await openPage("Settings")(page);
+      await page.getByRole("button", { name: "Show the tour" }).click();
+    },
+    verify: async (page) => {
+      await page.keyboard.press("Escape");
+      return (await page.locator(".tour").count()) === 0 ? null : "Escape didn't end the tour";
+    },
   },
   {
     name: "settings-memory",
