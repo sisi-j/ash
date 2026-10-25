@@ -21,6 +21,33 @@ use crate::loader::Loader;
 /// a dependency on it is already met there (research 0014 §5).
 const FABRIC_API: &str = "P7dR8mSH";
 
+/// Mods ash suggests, the Mods page's first view: well kept, for the client,
+/// and none doing what ash already does. Modrinth decides which of them fit
+/// the instance's version.
+const SUGGESTED_FABRIC: &[&str] = &[
+    "AANobbMI", // Sodium
+    "gvQqBUqZ", // Lithium
+    "uXXizFIs", // FerriteCore
+    "NNAgCjsB", // Entity Culling
+    "5ZwdcRci", // ImmediatelyFast
+    "nmDcB62a", // ModernFix
+    "LQ3K71Q1", // Dynamic FPS
+    "mOgUt4GM", // Mod Menu
+    "YL57xq9U", // Iris Shaders
+    "1IjD5062", // Continuity
+    "w7ThoJFB", // Zoomify
+    "EsAfCjCV", // AppleSkin
+    "aC3cM3Vq", // Mouse Tweaks
+    "zV5r3pPn", // 3D Skin Layers
+];
+
+const SUGGESTED_LEGACY_FABRIC: &[&str] = &[
+    "fLCmgUPa", // Phosphor-Legacy
+    "eACKl8af", // MenuFPSUnlocker
+    "7ZoK90Xo", // Windows Priority Boost
+    "7vrSE44N", // Perspective Nametag
+];
+
 const MANIFEST: &str = "ash-mods.json";
 
 /// Modrinth asks every client to name itself uniquely. The repository, not a
@@ -52,6 +79,21 @@ pub struct ModHit {
     /// Comes with ash on this instance - Fabric API, on modern targets - so
     /// there is nothing to install.
     pub included: bool,
+}
+
+/// How a search orders what it finds: the Mods page's sort menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModSort {
+    /// ash's picks for the loader, most downloaded first.
+    #[default]
+    Suggested,
+    /// Best match for what's typed; with nothing typed, most downloaded.
+    Relevance,
+    Downloads,
+    Follows,
+    Newest,
+    Updated,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -184,13 +226,26 @@ pub(crate) async fn search(
     tag: &str,
     game_version: &str,
     query: &str,
+    sort: ModSort,
     offset: u32,
     installed: &[InstalledMod],
 ) -> Result<ModSearch, AshError> {
-    let facets =
-        format!(r#"[["project_type:mod"],["versions:{game_version}"],["categories:{tag}"]]"#);
-    // With nothing typed, the most downloaded is a sensible first page.
-    let index = if query.trim().is_empty() { "downloads" } else { "relevance" };
+    let mut facets =
+        format!(r#"[["project_type:mod"],["versions:{game_version}"],["categories:{tag}"]"#);
+    if sort == ModSort::Suggested {
+        let picks = if tag == "fabric" { SUGGESTED_FABRIC } else { SUGGESTED_LEGACY_FABRIC };
+        let any_of: Vec<String> = picks.iter().map(|id| format!(r#""project_id:{id}""#)).collect();
+        facets.push_str(&format!(",[{}]", any_of.join(",")));
+    }
+    facets.push(']');
+    let index = match sort {
+        ModSort::Relevance if !query.trim().is_empty() => "relevance",
+        // Relevance to nothing typed means nothing: most downloaded instead.
+        ModSort::Suggested | ModSort::Relevance | ModSort::Downloads => "downloads",
+        ModSort::Follows => "follows",
+        ModSort::Newest => "newest",
+        ModSort::Updated => "updated",
+    };
     let url = format!(
         "{base}/search?query={}&facets={}&index={index}&limit=20&offset={offset}",
         encode(query.trim()),

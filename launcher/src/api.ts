@@ -377,6 +377,8 @@ export type ModHit = {
 };
 
 export type ModSearch = { hits: ModHit[]; total: number };
+/** How a mod search is ordered: ash's picks, or one of Modrinth's sorts across every mod. */
+export type ModSort = "suggested" | "relevance" | "downloads" | "follows" | "newest" | "updated";
 
 /** Mirrors `ash_core::InstalledMod`: one mod ash installed, as `ash-mods.json` has it. */
 export type InstalledMod = {
@@ -539,7 +541,8 @@ export const api = {
   deleteInstance: (id: InstanceId) => invoke<void>("delete_instance", { id }),
   /** The instance's `mods` folder, the player's, opened in the file manager. */
   revealModsFolder: (id: InstanceId) => invoke<void>("reveal_mods_folder", { id }),
-  searchMods: (id: InstanceId, query: string, offset: number) => invoke<ModSearch>("search_mods", { id, query, offset }),
+  searchMods: (id: InstanceId, query: string, sort: ModSort, offset: number) =>
+    invoke<ModSearch>("search_mods", { id, query, sort, offset }),
   installMod: (id: InstanceId, projectId: string) => invoke<InstallOutcome>("install_mod", { id, projectId }),
   installedMods: (id: InstanceId) => invoke<InstalledMod[]>("installed_mods", { id }),
   listMods: (id: InstanceId) => invoke<ModEntry[]>("list_mods", { id }),

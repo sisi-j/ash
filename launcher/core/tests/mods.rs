@@ -9,7 +9,7 @@ use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::FakeProcessPort;
 use ash_core::servers::FakeServerPort;
-use ash_core::{Ash, Config, InstanceId, Loader};
+use ash_core::{Ash, Config, InstanceId, Loader, ModSort};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha512};
 
@@ -143,7 +143,7 @@ async fn a_search_asks_only_for_mods_that_fit_the_instance() {
     let f = fixture(modrinth());
     let id = f.instance("1.21.11", Loader::Fabric);
 
-    let found = f.ash.search_mods(&id, "sodium", 0).await.expect("search");
+    let found = f.ash.search_mods(&id, "sodium", ModSort::Relevance, 0).await.expect("search");
 
     assert_eq!(found.total, 45);
     assert_eq!(found.hits[0].title, "Sodium");
@@ -164,11 +164,63 @@ async fn a_1_8_9_instance_searches_legacy_fabric_mods() {
     let f = fixture(modrinth());
     let id = f.instance("1.8.9", Loader::LegacyFabric);
 
-    f.ash.search_mods(&id, "", 0).await.expect("search");
+    f.ash.search_mods(&id, "", ModSort::Relevance, 0).await.expect("search");
 
     let asked = f.http.everything_sent_to(&format!("{MODRINTH}/search"))[0].clone();
     assert!(asked.contains("categories%3Alegacy-fabric"), "{asked}");
     assert!(asked.contains("index=downloads"), "nothing typed: the most downloaded first");
+}
+
+/// The search as Modrinth would read it, its facets unescaped.
+fn decoded(asked: &str) -> String {
+    asked
+        .replace("%5B", "[")
+        .replace("%5D", "]")
+        .replace("%22", "\"")
+        .replace("%3A", ":")
+        .replace("%2C", ",")
+}
+
+#[tokio::test]
+async fn suggested_narrows_to_ash_s_picks_for_the_loader() {
+    let f = fixture(modrinth());
+    let modern = f.instance("1.21.11", Loader::Fabric);
+    let legacy = f.instance("1.8.9", Loader::LegacyFabric);
+
+    f.ash.search_mods(&modern, "", ModSort::Suggested, 0).await.expect("search");
+    f.ash.search_mods(&legacy, "", ModSort::Suggested, 0).await.expect("search");
+
+    let asked = f.http.everything_sent_to(&format!("{MODRINTH}/search"));
+    let modern = decoded(&asked[0]);
+    assert!(modern.contains(r#""project_id:AANobbMI""#), "Sodium is a pick: {modern}");
+    assert!(modern.contains(r#"["versions:1.21.11"]"#), "and still only what fits: {modern}");
+    assert!(modern.contains("index=downloads"), "{modern}");
+    let legacy = decoded(&asked[1]);
+    assert!(legacy.contains(r#""project_id:fLCmgUPa""#), "Phosphor-Legacy is a pick: {legacy}");
+    assert!(!legacy.contains("AANobbMI"), "no modern picks on 1.8.9: {legacy}");
+}
+
+#[tokio::test]
+async fn each_sort_asks_modrinth_for_its_order_across_every_mod() {
+    let f = fixture(modrinth());
+    let id = f.instance("1.21.11", Loader::Fabric);
+    let sorts = [
+        (ModSort::Relevance, "relevance"),
+        (ModSort::Downloads, "downloads"),
+        (ModSort::Follows, "follows"),
+        (ModSort::Newest, "newest"),
+        (ModSort::Updated, "updated"),
+    ];
+
+    for (sort, _) in sorts {
+        f.ash.search_mods(&id, "map", sort, 0).await.expect("search");
+    }
+
+    let asked = f.http.everything_sent_to(&format!("{MODRINTH}/search"));
+    for (i, (_, index)) in sorts.iter().enumerate() {
+        assert!(asked[i].contains(&format!("index={index}&")), "{index}: {}", asked[i]);
+        assert!(!decoded(&asked[i]).contains("project_id:"), "not only the picks: {}", asked[i]);
+    }
 }
 
 #[tokio::test]
@@ -176,7 +228,10 @@ async fn a_vanilla_instance_is_told_mods_need_fabric() {
     let f = fixture(modrinth());
     let id = f.instance("1.21.11", Loader::Vanilla);
 
-    assert_eq!(f.ash.search_mods(&id, "x", 0).await.unwrap_err().kind(), "mods_need_fabric");
+    assert_eq!(
+        f.ash.search_mods(&id, "x", ModSort::Relevance, 0).await.unwrap_err().kind(),
+        "mods_need_fabric"
+    );
     assert_eq!(f.ash.install_mod(&id, IRIS).await.unwrap_err().kind(), "mods_need_fabric");
 }
 
@@ -338,7 +393,7 @@ async fn installed_mods_are_marked_in_a_search() {
     let id = f.instance("1.21.11", Loader::Fabric);
     f.ash.install_mod(&id, SODIUM).await.unwrap();
 
-    let found = f.ash.search_mods(&id, "sodium", 0).await.unwrap();
+    let found = f.ash.search_mods(&id, "sodium", ModSort::Relevance, 0).await.unwrap();
 
     let sodium = found.hits.iter().find(|h| h.project_id == SODIUM).unwrap();
     assert!(sodium.installed);
@@ -453,10 +508,10 @@ async fn fabric_api_shows_as_included_on_fabric_and_installable_nowhere_it_isn_t
     let f = fixture(http);
 
     let modern = f.instance("1.21.11", Loader::Fabric);
-    let found = f.ash.search_mods(&modern, "fabric api", 0).await.unwrap();
+    let found = f.ash.search_mods(&modern, "fabric api", ModSort::Relevance, 0).await.unwrap();
     assert!(found.hits[0].included, "ash bundles it on modern targets");
 
     let legacy = f.instance("1.8.9", Loader::LegacyFabric);
-    let found = f.ash.search_mods(&legacy, "fabric api", 0).await.unwrap();
+    let found = f.ash.search_mods(&legacy, "fabric api", ModSort::Relevance, 0).await.unwrap();
     assert!(!found.hits[0].included);
 }

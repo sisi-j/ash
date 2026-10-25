@@ -402,9 +402,28 @@ const STATES: State[] = [
   {
     name: "mods-fabric-api",
     shows: "Included with ash",
-    reach: browseMods,
+    reach: async (page) => {
+      await browseMods(page);
+      await page.getByRole("radio", { name: "Most downloaded" }).click();
+    },
     verify: async (page) =>
       (await page.getByRole("button", { name: "Fabric API comes with ash" }).isDisabled()) ? null : "Fabric API offered an Install",
+  },
+  {
+    // ash's picks first; typing switches to Best match, clearing switches back.
+    name: "mods-sorts",
+    shows: "Picked by ash",
+    reach: browseMods,
+    verify: async (page) => {
+      const checked = (name: string) => page.getByRole("radio", { name }).getAttribute("aria-checked");
+      if ((await checked("Suggested by ash")) !== "true") return "Suggested isn't the first view";
+      if ((await page.getByText("Fabric API", { exact: true }).count()) !== 0) return "Suggested shows more than ash's picks";
+      await page.getByLabel("Search mods").fill("so");
+      if ((await checked("Best match")) !== "true") return "typing didn't switch to Best match";
+      await page.getByLabel("Search mods").fill("");
+      if ((await checked("Suggested by ash")) !== "true") return "clearing didn't go back to Suggested";
+      return (await page.getByRole("radio", { name: "Best match" }).count()) === 0 ? null : "Best match shows with nothing typed";
+    },
   },
   {
     name: "mods-installed",
