@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "ash-smoke-test",
+  "version": "1.0.0",
+  "name": "ash smoke test (1.20.4)",
+  "description": "Launches a real 1.20.4 vanilla client and says whether ash runs in it. Never shipped.",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.ashlauncher.client.v1_20_4.AshSmokeTest"
+    ]
+  }
+}

@@ -1,0 +1,129 @@
+// The 1.20.4 half of ash's client (ADR-0027): everything that has to name a
+// Minecraft type or a Fabric API one, as target-1.21.11 is for 1.21.11. Where
+// the two differ is research 0015. The logic belongs in `:shared`.
+
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+}
+
+version = mod_version
+group = maven_group
+
+base {
+    // A fixed name, as on the other targets: the launcher looks it up by name.
+    archivesName = "ash-client-${minecraft_version_1_20_4}"
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version_1_20_4}"
+    // Mojang's own names, as on 1.21.11. Fetched at build time, never committed.
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version_1_20_4}"
+
+    // Compiled against, and folded into the jar below.
+    implementation project(':shared')
+
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation "net.fabricmc:fabric-loader-junit:${loader_version}"
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    systemProperty 'ash.test.version', version
+}
+
+// 1.20.4 runs on Java 17, and the launcher provisions that runtime for it.
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+}
+
+
+// ash's own test in a real game (AshSmokeTest), since Fabric's client game
+// tests begin with 1.21.4 (ADR-0027). Its own source set, so nothing of it
+// reaches the jar a player gets. Loom wraps the run in xvfb-run on Linux.
+sourceSets {
+    smoketest {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+loom {
+    runs {
+        smokeTest {
+            client()
+            configName = 'ash smoke test (1.20.4)'
+            source 'smoketest'
+            runDir 'build/run/smoketest'
+            // The launcher's server-list fixture: servers.dat is the same NBT
+            // on 1.20.4 as on 1.21.11.
+            property 'ash.test.serversChangedByAsh',
+                    rootProject.file('../launcher/core/tests/fixtures/servers-1.21.11-changed-by-ash.dat').absolutePath
+            // The cape test's own CDN, started by AshSmokeTest (TestCdn).
+            property 'ash.cosmetics.cdn', 'http://127.0.0.1:25613'
+        }
+    }
+}
+
+// The frame-time measurement, as on 1.21.11: FPS marks for 1.20.4 come from it.
+sourceSets {
+    benchmark {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+dependencies {
+    benchmarkImplementation project(':bench')
+}
+
+loom {
+    runs {
+        // `./gradlew :target-1.20.4:runBenchmark -Pbench.label=...`; results
+        // go to `client/benchmark-results`. See `client/README.md`.
+        benchmark {
+            client()
+            configName = 'ash frame-time measurement (1.20.4)'
+            source 'benchmark'
+            runDir 'build/run/benchmark'
+            programArgs '--width', '1280', '--height', '720', '--username', 'AshBench'
+            property 'ash.bench.label', (project.findProperty('bench.label') ?: '').toString()
+            property 'ash.bench.out', rootProject.file('benchmark-results').absolutePath
+            property 'ash.bench.server', (project.findProperty('bench.server') ?: '').toString()
+            property 'ash.bench.lithium', 'false'
+        }
+
+        // `./gradlew :target-1.20.4:runBootBench`, as on 1.21.11 (BootClock).
+        bootBench {
+            client()
+            configName = 'ash boot measurement (1.20.4)'
+            runDir 'build/run/boot'
+            property 'ash.boot.exitAtTitle', 'true'
+        }
+    }
+}
+
+processResources {
+    // Written into `fabric.mod.json`, so what the client declares it needs
+    // cannot drift from what it was built against.
+    inputs.property 'version', version
+    inputs.property 'minecraft_version', minecraft_version_1_20_4
+    inputs.property 'loader_version', loader_version
+
+    filesMatching('fabric.mod.json') {
+        expand version: version,
+                minecraft_version: minecraft_version_1_20_4,
+                loader_version: loader_version
+    }
+}
+
+tasks.named('jar') {
+    // Fabric Loader loads one jar: the shared module's classes go inside it.
+    from project(':shared').sourceSets.main.output
+}
+
+// The version lives in `fabric.mod.json`, not in the file name.
+tasks.withType(AbstractArchiveTask).configureEach {
+    archiveVersion = ''
+}

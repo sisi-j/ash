@@ -3,6 +3,7 @@ package com.ashlauncher.client.report;
 /** A version of the game ash's client is built for. */
 public enum Target {
     V1_8_9("1.8.9"),
+    V1_20_4("1.20.4"),
     V1_21_11("1.21.11");
 
     private final String version;
