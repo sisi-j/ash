@@ -55,13 +55,13 @@ const soundsMade = (page: Page) => page.evaluate(() => (window as unknown as { a
 const STATES: State[] = [
   { name: "signed-out", shows: "Sign in with Microsoft" },
   {
-    // One click: the browser opens Microsoft's sign-in with the code filled in.
+    // One click: the browser opens Microsoft's code page, the code copied to paste.
     name: "signed-out-signing-in",
     shows: "Your browser has opened",
     reach: (page) => page.getByRole("button", { name: "Sign in with Microsoft" }).click(),
     verify: async (page) => {
-      const opened = await page.evaluate(() => (window as unknown as { openedSignIn?: string }).openedSignIn);
-      return opened === "ABCD-EFGH" ? null : `the sign-in page opened with ${opened}`;
+      const opened = await page.evaluate(() => (window as unknown as { openedSignIn?: boolean }).openedSignIn);
+      return opened ? null : "the sign-in page didn't open";
     },
   },
   { name: "no-instances", shows: "No instances yet" },

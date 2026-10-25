@@ -8,13 +8,13 @@ type Phase =
   | { at: "failed"; error: UiError };
 
 /**
- * Device-code sign-in, in one click.
+ * Device-code sign-in: one click opens Microsoft's code page in the browser
+ * and copies the code, so the player pastes it, picks their account and
+ * approves.
  *
- * Microsoft's device response has no `verification_uri_complete`, but its link
- * page takes the code as `otc` and fills it in. So "Sign in with Microsoft"
- * opens the browser there, code filled in, and copies the code too; the
- * player only picks their account and approves. The code stays on screen,
- * with a way to open the page again, for when the browser didn't come up.
+ * Not with the code filled in by the link (`?otc=`): Microsoft refuses ash's
+ * code that way (see `open_sign_in_page`). The code stays on screen, with a
+ * way to open the page again, for when the browser didn't come up.
  */
 export function SignIn(props: {
   onSignedIn: (account: Account) => void;
@@ -78,9 +78,9 @@ export function SignIn(props: {
       const pending = await api.beginSignIn();
       setPhase({ at: "waiting", pending });
       void poll(pending.interval_secs);
-      // Straight to Microsoft, with the code filled in and on the clipboard.
+      // Straight to Microsoft's code page, with the code on the clipboard.
       void copy(pending.user_code);
-      void api.openSignInPage(pending.user_code).catch(() => undefined);
+      void api.openSignInPage().catch(() => undefined);
     } catch (e) {
       setPhase({
         at: "failed",
@@ -153,12 +153,12 @@ export function SignIn(props: {
       <h2 className="heading">Sign in</h2>
 
       <p className="muted">
-        Your browser has opened Microsoft&rsquo;s sign-in with this code filled in. Choose your account and approve
-        it there.
+        Your browser has opened Microsoft&rsquo;s sign-in. Paste this code there with Ctrl+V &ndash; it&rsquo;s
+        already copied &ndash; then choose your account and approve it.
       </p>
 
       <div className="actions">
-        <button className="button" onClick={() => void api.openSignInPage(pending.user_code).catch(() => undefined)}>
+        <button className="button" onClick={() => void api.openSignInPage().catch(() => undefined)}>
           Open the sign-in page again
         </button>
       </div>
@@ -171,7 +171,7 @@ export function SignIn(props: {
         {pending.user_code}
       </button>
       <p className="muted copy-hint">
-        {copied ? "Copied. " : ""}If it isn&rsquo;t filled in, enter it at{" "}
+        {copied ? "Copied. " : "Click the code to copy it. "}The page is{" "}
         <span className="numeric">{pending.verification_uri}</span>.
       </p>
 

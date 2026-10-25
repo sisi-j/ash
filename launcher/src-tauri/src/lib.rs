@@ -326,26 +326,24 @@ fn open_news_link(url: String) -> Result<(), UiError> {
     tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|_| refused())
 }
 
-/// Microsoft's sign-in page with the device code already filled in: its link
-/// page takes the code as `otc` and carries it through to the sign-in. The
-/// address is fixed here, and the code checked to be a code, so the window
-/// can't open anything else this way.
+/// Microsoft's page for entering a sign-in code. The address is fixed here,
+/// so the window can't open anything else this way.
+///
+/// Not with the code filled in (`?otc=`): Microsoft then refuses ash's code
+/// as one for a Microsoft app of its own ("first party application ... users
+/// are not permitted to consent"), seen on the alpha's first sign-in. The
+/// player pastes the code instead; the window has already copied it.
 #[tauri::command]
-fn open_sign_in_page(code: String) -> Result<(), UiError> {
-    let refused = || UiError {
-        kind: "open_failed",
-        message: "Your browser couldn't be opened. Go to microsoft.com/link and enter the code."
-            .into(),
-        retryable: true,
-    };
-    if code.is_empty()
-        || code.len() > 16
-        || !code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-    {
-        return Err(refused());
-    }
-    let url = format!("https://www.microsoft.com/link?otc={code}");
-    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(|_| refused())
+fn open_sign_in_page() -> Result<(), UiError> {
+    tauri_plugin_opener::open_url("https://www.microsoft.com/link", None::<&str>).map_err(|_| {
+        UiError {
+            kind: "open_failed",
+            message:
+                "Your browser couldn't be opened. Go to microsoft.com/link and enter the code."
+                    .into(),
+            retryable: true,
+        }
+    })
 }
 
 /// The one web page the launcher opens: what an ash account holds. A fixed
