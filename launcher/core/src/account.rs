@@ -60,10 +60,25 @@ fn now_ms() -> u64 {
 }
 
 pub(crate) fn load(data_root: &Path) -> Accounts {
-    fs::read(accounts_path(data_root))
+    let mut accounts: Accounts = fs::read(accounts_path(data_root))
         .ok()
         .and_then(|raw| serde_json::from_slice(&raw).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Skins recorded before ash asked for them over https.
+    for account in &mut accounts.accounts {
+        account.skin_url = account.skin_url.take().map(secure_skin_url);
+    }
+    accounts
+}
+
+/// Mojang names skins with `http://textures.minecraft.net/...`, and the
+/// launcher's window loads images over https only, so a face drawn from that
+/// address never appears. The same server answers over https.
+pub(crate) fn secure_skin_url(url: String) -> String {
+    match url.strip_prefix("http://textures.minecraft.net/") {
+        Some(rest) => format!("https://textures.minecraft.net/{rest}"),
+        None => url,
+    }
 }
 
 fn save(data_root: &Path, accounts: &Accounts) -> Result<(), AshError> {
@@ -189,4 +204,25 @@ pub(crate) fn refresh_token(
     profile_id: &str,
 ) -> Result<String, AshError> {
     credentials.get(&refresh_key(profile_id))?.ok_or(AshError::SessionExpired)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_skin_recorded_over_http_is_read_back_over_https() {
+        let tmp = tempfile::tempdir().unwrap();
+        let stored = r#"{"accounts":[{"profile_id":"p","username":"steve","skin_url":"http://textures.minecraft.net/texture/abc","added_at_ms":1}],"active":"p"}"#;
+        fs::create_dir_all(tmp.path()).unwrap();
+        fs::write(accounts_path(tmp.path()), stored).unwrap();
+
+        let accounts = load(tmp.path());
+
+        assert_eq!(
+            accounts.accounts[0].skin_url.as_deref(),
+            Some("https://textures.minecraft.net/texture/abc")
+        );
+        assert_eq!(secure_skin_url("https://elsewhere/x".into()), "https://elsewhere/x");
+    }
 }

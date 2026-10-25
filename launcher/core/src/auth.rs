@@ -325,7 +325,7 @@ async fn complete_chain(
     Ok(Session {
         profile_id: profile.0,
         username: profile.1,
-        skin_url: profile.2,
+        skin_url: profile.2.map(crate::account::secure_skin_url),
         refresh_token,
         minecraft_token,
         xuid,

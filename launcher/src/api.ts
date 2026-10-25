@@ -372,6 +372,8 @@ export type ModHit = {
   downloads: number;
   /** Already in this instance, from Modrinth. */
   installed: boolean;
+  /** Comes with ash on this instance (Fabric API), so there's nothing to install. */
+  included: boolean;
 };
 
 export type ModSearch = { hits: ModHit[]; total: number };
@@ -453,6 +455,8 @@ export const api = {
     invoke<SyncStatus>("resolve_deleted_elsewhere", { id, deleteHere }),
   markNewsSeen: () => invoke<void>("mark_news_seen"),
   openNewsLink: (url: string) => invoke<void>("open_news_link", { url }),
+  /** Microsoft's sign-in page in the browser, with the device code filled in. */
+  openSignInPage: (code: string) => invoke<void>("open_sign_in_page", { code }),
   /** This launcher's version, as released: `0.1.0-alpha.1`. */
   appVersion: () => invoke<string>("app_version"),
   links: () => invoke<Links>("links"),

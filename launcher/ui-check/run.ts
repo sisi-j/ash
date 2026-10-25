@@ -54,6 +54,16 @@ const soundsMade = (page: Page) => page.evaluate(() => (window as unknown as { a
 
 const STATES: State[] = [
   { name: "signed-out", shows: "Sign in with Microsoft" },
+  {
+    // One click: the browser opens Microsoft's sign-in with the code filled in.
+    name: "signed-out-signing-in",
+    shows: "Your browser has opened",
+    reach: (page) => page.getByRole("button", { name: "Sign in with Microsoft" }).click(),
+    verify: async (page) => {
+      const opened = await page.evaluate(() => (window as unknown as { openedSignIn?: string }).openedSignIn);
+      return opened === "ABCD-EFGH" ? null : `the sign-in page opened with ${opened}`;
+    },
+  },
   { name: "no-instances", shows: "No instances yet" },
   {
     name: "idle",
@@ -388,6 +398,13 @@ const STATES: State[] = [
       await page.waitForTimeout(600);
       return (await page.getByText("Sodium", { exact: true }).count()) === 0 ? null : "the search didn't narrow the list";
     },
+  },
+  {
+    name: "mods-fabric-api",
+    shows: "Included with ash",
+    reach: browseMods,
+    verify: async (page) =>
+      (await page.getByRole("button", { name: "Fabric API comes with ash" }).isDisabled()) ? null : "Fabric API offered an Install",
   },
   {
     name: "mods-installed",
