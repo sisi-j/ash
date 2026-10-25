@@ -110,7 +110,7 @@ export function whyNotSignedIn(status: AshAccountStatus): string {
 }
 
 /**
- * The cape's front face, cut from its 64 by 32 texture at the place the game
+ * The cape's outside face, the one seen on the player's back, cut from its 64 by 32 texture at the place the game
  * reads it from (10 by 16 pixels at 1,1), and scaled up without smoothing.
  */
 function CapeChoice(props: {
@@ -137,7 +137,7 @@ function CapeChoice(props: {
             ? {
                 backgroundImage: `url("${props.texture}")`,
                 backgroundSize: `${64 * scale}px ${32 * scale}px`,
-                backgroundPosition: `${-12 * scale}px ${-1 * scale}px`,
+                backgroundPosition: `${-1 * scale}px ${-1 * scale}px`,
                 width: 10 * scale,
                 height: 16 * scale,
               }

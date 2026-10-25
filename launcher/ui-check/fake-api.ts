@@ -203,7 +203,7 @@ const INSTANCES: Instance[] = [
   },
 ];
 
-const signedIn = state !== "signed-out";
+const signedIn = !state.startsWith("signed-out");
 const syncStatus: real.SyncStatus = {
   enabled: state !== "sync-off",
   state:
@@ -319,8 +319,9 @@ function status(): real.GameStatus | null {
 const MODS = [
   { project_id: "sodium", slug: "sodium", title: "Sodium", description: "The fastest rendering optimization mod for Minecraft.", downloads: 112_400_000 },
   { project_id: "iris", slug: "iris", title: "Iris Shaders", description: "A modern shader pack loader for Minecraft, compatible with Sodium.", downloads: 75_100_000 },
+  { project_id: "fabric-api", slug: "fabric-api", title: "Fabric API", description: "Lightweight and modular API providing common hooks and intercompatibility measures.", downloads: 140_000_000 },
   { project_id: "modmenu", slug: "modmenu", title: "Mod Menu", description: "Adds a mod menu to view the list of mods you have installed.", downloads: 61_900_000 },
-].map((m, i) => ({ ...m, icon_url: capeTexture(["#2f7d4f", "#6d3fbf", "#3f6dbf"][i]!) }));
+].map((m, i) => ({ ...m, icon_url: capeTexture(["#2f7d4f", "#6d3fbf", "#8a6d3b", "#3f6dbf"][i]!) }));
 const installedProjects = new Set<string>();
 
 /** The instance's mods folder, in the mods-list state; empty elsewhere. */
@@ -479,16 +480,20 @@ export const api: typeof real.api = {
   },
   setSyncEnabled: (enabled) => resolve({ ...syncStatus, enabled, state: enabled ? { state: "waiting" } : { state: "off" } }),
   resolveDeletedElsewhere: () => resolve({ ...syncStatus, deleted_elsewhere: [] }),
+  openSignInPage: async (code) => {
+    (window as unknown as { openedSignIn?: string }).openedSignIn = code;
+  },
   openNewsLink: async (url) => {
     (window as unknown as { openedLink?: string }).openedLink = url;
   },
   appVersion: () => resolve("0.1.0-alpha.1"),
   searchMods: (_id, query) =>
     resolve({
-      total: 3,
+      total: MODS.length,
       hits: MODS.filter((m) => m.title.toLowerCase().includes(query.toLowerCase())).map((m) => ({
         ...m,
         installed: installedProjects.has(m.project_id),
+        included: m.project_id === "fabric-api",
       })),
     }),
   installMod: (_id, projectId) => {

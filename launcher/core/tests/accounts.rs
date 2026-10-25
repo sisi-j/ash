@@ -83,7 +83,10 @@ fn serving() -> Arc<FakeHttp> {
     ))
     .route_sequence(
         common::MC_PROFILE_URL,
-        vec![profile(ALICE, Some("https://textures/alice")), profile(BOB, None)],
+        vec![
+            profile(ALICE, Some("http://textures.minecraft.net/texture/alice")),
+            profile(BOB, None),
+        ],
     )
     .route_sequence(common::TOKEN_URL, vec![token(ALICE_REFRESH), token(BOB_REFRESH)])
 }
@@ -198,7 +201,11 @@ async fn every_account_carries_what_the_ui_needs_to_tell_them_apart() {
     // A player should never have to read a UUID to know which account is
     // which.
     assert_eq!(accounts.accounts[0].username, "alice");
-    assert_eq!(accounts.accounts[0].skin_url.as_deref(), Some("https://textures/alice"));
+    // Over https, however Mojang wrote it: the window loads no plain-http images.
+    assert_eq!(
+        accounts.accounts[0].skin_url.as_deref(),
+        Some("https://textures.minecraft.net/texture/alice")
+    );
 
     // A player with no skin set still has a name, and the UI has to cope
     // with the face being absent rather than assuming one.

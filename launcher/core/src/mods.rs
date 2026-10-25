@@ -49,6 +49,9 @@ pub struct ModHit {
     pub downloads: u64,
     /// Already in this instance, from Modrinth.
     pub installed: bool,
+    /// Comes with ash on this instance - Fabric API, on modern targets - so
+    /// there is nothing to install.
+    pub included: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -201,6 +204,7 @@ pub(crate) async fn search(
             .into_iter()
             .map(|h| ModHit {
                 installed: installed.iter().any(|m| m.project_id == h.project_id),
+                included: tag == "fabric" && h.project_id == FABRIC_API,
                 project_id: h.project_id,
                 slug: h.slug,
                 title: h.title,

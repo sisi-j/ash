@@ -441,3 +441,22 @@ async fn a_name_that_reaches_outside_the_folder_is_refused() {
     }
     assert!(outside.exists());
 }
+
+#[tokio::test]
+async fn fabric_api_shows_as_included_on_fabric_and_installable_nowhere_it_isn_t_bundled() {
+    let http = modrinth();
+    let hits = json!({ "total_hits": 1, "hits": [{
+        "project_id": FABRIC_API, "slug": "fabric-api", "title": "Fabric API",
+        "description": "", "icon_url": null, "downloads": 1
+    }]});
+    http.route(format!("{MODRINTH}/search"), HttpResponse::ok(hits.to_string()));
+    let f = fixture(http);
+
+    let modern = f.instance("1.21.11", Loader::Fabric);
+    let found = f.ash.search_mods(&modern, "fabric api", 0).await.unwrap();
+    assert!(found.hits[0].included, "ash bundles it on modern targets");
+
+    let legacy = f.instance("1.8.9", Loader::LegacyFabric);
+    let found = f.ash.search_mods(&legacy, "fabric api", 0).await.unwrap();
+    assert!(!found.hits[0].included);
+}

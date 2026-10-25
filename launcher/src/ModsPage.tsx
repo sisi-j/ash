@@ -235,17 +235,22 @@ export function ModsPage(props: {
                     </div>
                     <button
                       className="button"
-                      disabled={hit.installed || installing !== null}
+                      disabled={hit.installed || hit.included || installing !== null}
                       onClick={() => void install(hit)}
+                      title={hit.included ? "ash already includes this in every Fabric instance." : undefined}
                       aria-label={
-                        hit.installed
-                          ? `${hit.title} installed`
-                          : `Install ${hit.title}`
+                        hit.included
+                          ? `${hit.title} comes with ash`
+                          : hit.installed
+                            ? `${hit.title} installed`
+                            : `Install ${hit.title}`
                       }
                     >
-                      {hit.installed
-                        ? "Installed"
-                        : installing === hit.project_id
+                      {hit.included
+                        ? "Included with ash"
+                        : hit.installed
+                          ? "Installed"
+                          : installing === hit.project_id
                           ? "Installing…"
                           : "Install"}
                     </button>

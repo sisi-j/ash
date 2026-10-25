@@ -8,12 +8,13 @@ type Phase =
   | { at: "failed"; error: UiError };
 
 /**
- * Device-code sign-in.
+ * Device-code sign-in, in one click.
  *
- * Microsoft does not support `verification_uri_complete`, so there is no
- * one-click link with the code pre-filled - the player genuinely has to read
- * the code and type it. That is why the code is the largest thing on screen
- * and why copying it is one click.
+ * Microsoft's device response has no `verification_uri_complete`, but its link
+ * page takes the code as `otc` and fills it in. So "Sign in with Microsoft"
+ * opens the browser there, code filled in, and copies the code too; the
+ * player only picks their account and approves. The code stays on screen,
+ * with a way to open the page again, for when the browser didn't come up.
  */
 export function SignIn(props: {
   onSignedIn: (account: Account) => void;
@@ -59,30 +60,6 @@ export function SignIn(props: {
     [props, stopPolling],
   );
 
-  const start = useCallback(async () => {
-    setPhase({ at: "starting" });
-    setCopied(false);
-    try {
-      const pending = await api.beginSignIn();
-      setPhase({ at: "waiting", pending });
-      void poll(pending.interval_secs);
-    } catch (e) {
-      setPhase({
-        at: "failed",
-        error: isUiError(e)
-          ? e
-          : { kind: "unknown", message: "Could not start sign-in.", retryable: true },
-      });
-    }
-  }, [poll]);
-
-  const cancel = useCallback(() => {
-    stopPolling();
-    void api.cancelSignIn();
-    setPhase({ at: "idle" });
-    props.onCancel?.();
-  }, [props, stopPolling]);
-
   const copy = useCallback(async (code: string) => {
     try {
       await navigator.clipboard.writeText(code);
@@ -93,6 +70,34 @@ export function SignIn(props: {
       setCopied(false);
     }
   }, []);
+
+  const start = useCallback(async () => {
+    setPhase({ at: "starting" });
+    setCopied(false);
+    try {
+      const pending = await api.beginSignIn();
+      setPhase({ at: "waiting", pending });
+      void poll(pending.interval_secs);
+      // Straight to Microsoft, with the code filled in and on the clipboard.
+      void copy(pending.user_code);
+      void api.openSignInPage(pending.user_code).catch(() => undefined);
+    } catch (e) {
+      setPhase({
+        at: "failed",
+        error: isUiError(e)
+          ? e
+          : { kind: "unknown", message: "Could not start sign-in.", retryable: true },
+      });
+    }
+  }, [poll, copy]);
+
+  const cancel = useCallback(() => {
+    stopPolling();
+    void api.cancelSignIn();
+    setPhase({ at: "idle" });
+    props.onCancel?.();
+  }, [props, stopPolling]);
+
 
   if (phase.at === "idle" || phase.at === "starting") {
     return (
@@ -148,9 +153,15 @@ export function SignIn(props: {
       <h2 className="heading">Sign in</h2>
 
       <p className="muted">
-        Go to <span className="numeric">{pending.verification_uri}</span> in
-        your browser and enter this code.
+        Your browser has opened Microsoft&rsquo;s sign-in with this code filled in. Choose your account and approve
+        it there.
       </p>
+
+      <div className="actions">
+        <button className="button" onClick={() => void api.openSignInPage(pending.user_code).catch(() => undefined)}>
+          Open the sign-in page again
+        </button>
+      </div>
 
       <button
         className="code"
@@ -159,7 +170,10 @@ export function SignIn(props: {
       >
         {pending.user_code}
       </button>
-      <p className="muted copy-hint">{copied ? "Copied" : "Click the code to copy it"}</p>
+      <p className="muted copy-hint">
+        {copied ? "Copied. " : ""}If it isn&rsquo;t filled in, enter it at{" "}
+        <span className="numeric">{pending.verification_uri}</span>.
+      </p>
 
       <p className="muted waiting">
         <span className="pulse" aria-hidden="true" />
