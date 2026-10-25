@@ -393,3 +393,102 @@ async fn warming_the_session_up_front_leaves_the_launch_nothing_to_ask() {
 
     assert_eq!(f.http.hits(common::TOKEN_URL), asked, "the launch reused what warming got");
 }
+
+// ---- signing in through the browser (ADR-0007, amended) ----------------------
+
+/// What a browser does with the sign-in ash opened: some stray request first
+/// (a favicon), then a redirect that isn't this sign-in's, then Microsoft's
+/// redirect back with a code. Returns what the browser was shown.
+fn browser(url: &str, answer: &'static str) -> std::thread::JoinHandle<Vec<String>> {
+    let query = url.split_once('?').expect("a query").1.to_owned();
+    let field = |name: &str| {
+        query
+            .split('&')
+            .find_map(|p| p.strip_prefix(&format!("{name}=")))
+            .expect("field")
+            .to_owned()
+    };
+    let redirect = field("redirect_uri").replace("%3A", ":").replace("%2F", "/");
+    let state = field("state");
+    let port: u16 = redirect.rsplit(':').next().unwrap().parse().unwrap();
+    std::thread::spawn(move || {
+        let get = |target: String| {
+            use std::io::{Read, Write};
+            let mut stream =
+                std::net::TcpStream::connect(("127.0.0.1", port)).expect("ash listening");
+            write!(stream, "GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n").unwrap();
+            let mut page = String::new();
+            stream.read_to_string(&mut page).unwrap();
+            page
+        };
+        vec![
+            get("/favicon.ico".into()),
+            get("/?code=WRONG&state=not-this-one".into()),
+            get(format!("/?{}&state={state}", answer)),
+        ]
+    })
+}
+
+#[tokio::test]
+async fn signing_in_through_the_browser_redeems_the_code_with_the_pkce_verifier() {
+    let f = fixture();
+    let opened = std::sync::Mutex::new(None);
+
+    let account = f
+        .ash
+        .sign_in_with_browser(
+            &|url| {
+                *opened.lock().unwrap() = Some(browser(url, "code=M.C1%2Fabc"));
+                Ok(())
+            },
+            &Cancel::new(),
+        )
+        .await
+        .expect("signed in");
+
+    assert_eq!(account.username, "alice");
+    let pages = opened.lock().unwrap().take().unwrap().join().unwrap();
+    assert!(pages[0].starts_with("HTTP/1.1 404"), "a stray request is turned away");
+    assert!(pages[1].starts_with("HTTP/1.1 404"), "another sign-in's redirect is turned away");
+    assert!(pages[2].contains("You're signed in"), "{}", pages[2]);
+
+    let redeemed = &f.http.everything_sent_to(common::TOKEN_URL)[0];
+    assert!(redeemed.contains("grant_type=authorization_code"), "{redeemed}");
+    assert!(redeemed.contains("code=M.C1%2Fabc"), "the code, as Microsoft sent it: {redeemed}");
+    assert!(redeemed.contains("code_verifier="), "{redeemed}");
+    assert!(redeemed.contains("redirect_uri=http%3A%2F%2Flocalhost%3A"), "{redeemed}");
+    assert_eq!(
+        f.store.get(&format!("refresh-token:{}", ALICE.0)).unwrap().as_deref(),
+        Some(ALICE_REFRESH)
+    );
+}
+
+#[tokio::test]
+async fn declining_in_the_browser_says_so() {
+    let f = fixture();
+    let err = f
+        .ash
+        .sign_in_with_browser(
+            &|url| {
+                browser(url, "error=access_denied&error_description=the+user+said+no");
+                Ok(())
+            },
+            &Cancel::new(),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.kind(), "sign_in_declined");
+    assert!(f.ash.accounts().accounts.is_empty());
+}
+
+#[tokio::test]
+async fn a_browser_sign_in_can_be_cancelled() {
+    let f = fixture();
+    let cancel = Cancel::new();
+    cancel.cancel();
+
+    let err = f.ash.sign_in_with_browser(&|_| Ok(()), &cancel).await.unwrap_err();
+
+    assert_eq!(err.kind(), "cancelled");
+}

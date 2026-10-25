@@ -2480,3 +2480,18 @@ button {
     transition: none;
   }
 }
+
+/* "Use a code instead": a choice beside the main one, not a second button. */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sign-in-other {
+  margin-top: 16px;
+  font-size: 13px;
+}

@@ -15,6 +15,7 @@ mod account;
 mod ash_account;
 mod auth;
 mod boot;
+mod browser_sign_in;
 mod catalogue;
 mod client_settings;
 mod config;
@@ -285,32 +286,7 @@ impl Ash {
             }
             Ok(auth::Poll::Complete(session)) => {
                 *self.pending.lock().unwrap() = None;
-                let account = account::upsert(
-                    &self.config.data_root,
-                    self.credentials.as_ref(),
-                    &session.profile_id,
-                    &session.username,
-                    session.skin_url.clone(),
-                    session.refresh_token.as_deref(),
-                )?;
-                // Signing in on purpose is the one thing that undoes deleting
-                // an ash account here: the player chose to come back.
-                let account = if account.ash_account_deleted {
-                    account::set_ash_account_deleted(
-                        &self.config.data_root,
-                        &account.profile_id,
-                        false,
-                    )?;
-                    Account { ash_account_deleted: false, ..account }
-                } else {
-                    account
-                };
-                self.ash_status.lock().expect("ash status").remove(&account.profile_id);
-                // Just got, so the first launch after signing in uses it.
-                self.sessions
-                    .lock()
-                    .expect("sessions")
-                    .insert(account.profile_id.clone(), ((*session).clone(), now_ms()));
+                let account = self.signed_in(*session)?;
                 Ok(SignInStatus::Complete { account })
             }
             Err(e) => {
@@ -321,6 +297,60 @@ impl Ash {
                 Err(e)
             }
         }
+    }
+
+    /// Sign in through the player's browser, in one click (ADR-0007,
+    /// amended): `open` opens Microsoft's sign-in, and Microsoft sends the
+    /// browser back to a listener here when the player approves. Ends when
+    /// they do, decline, take more than ten minutes, or `cancel` is set.
+    pub async fn sign_in_with_browser(
+        &self,
+        open: &(dyn Fn(&str) -> Result<(), AshError> + Send + Sync),
+        cancel: &Cancel,
+    ) -> Result<Account, AshError> {
+        let pkce = browser_sign_in::pkce();
+        let loopback = browser_sign_in::listen().await?;
+        let redirect_uri = loopback.redirect_uri.clone();
+        open(&browser_sign_in::authorize_url(
+            browser_sign_in::AUTHORIZE_URL,
+            &self.client_id,
+            auth::SCOPES,
+            &redirect_uri,
+            &pkce,
+        ))?;
+        let code = browser_sign_in::wait_for_code(loopback, &pkce.state, cancel).await?;
+        let session =
+            auth::redeem(self.http.as_ref(), &self.client_id, &code, &pkce.verifier, &redirect_uri)
+                .await?;
+        self.signed_in(session)
+    }
+
+    /// A sign-in that worked, however it was done: the account saved with
+    /// its refresh token, and its session kept for the first launch.
+    fn signed_in(&self, session: auth::Session) -> Result<Account, AshError> {
+        let account = account::upsert(
+            &self.config.data_root,
+            self.credentials.as_ref(),
+            &session.profile_id,
+            &session.username,
+            session.skin_url.clone(),
+            session.refresh_token.as_deref(),
+        )?;
+        // Signing in on purpose is the one thing that undoes deleting an ash
+        // account here: the player chose to come back.
+        let account = if account.ash_account_deleted {
+            account::set_ash_account_deleted(&self.config.data_root, &account.profile_id, false)?;
+            Account { ash_account_deleted: false, ..account }
+        } else {
+            account
+        };
+        self.ash_status.lock().expect("ash status").remove(&account.profile_id);
+        // Just got, so the first launch after signing in uses it.
+        self.sessions
+            .lock()
+            .expect("sessions")
+            .insert(account.profile_id.clone(), (session, now_ms()));
+        Ok(account)
     }
 
     /// Abandon a sign-in in progress.

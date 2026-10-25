@@ -38,7 +38,7 @@ pub const MC_LOGIN_URL: &str = "https://api.minecraftservices.com/launcher/login
 pub const MC_ENTITLEMENTS_URL: &str = "https://api.minecraftservices.com/entitlements/license";
 pub const MC_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
 
-const SCOPES: &str = "XboxLive.signin offline_access";
+pub(crate) const SCOPES: &str = "XboxLive.signin offline_access";
 const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 
 // ---- what the chain produces ----------------------------------------------
@@ -273,6 +273,38 @@ pub(crate) async fn poll(
     let token: TokenResponse = decode(TOKEN_URL, &response.body)?;
     let session = complete_chain(http, &token.access_token, token.refresh_token).await?;
     Ok(Poll::Complete(Box::new(session)))
+}
+
+// ---- the browser's code -----------------------------------------------------
+
+/// The code the browser brought back (ADR-0007, amended), redeemed with the
+/// PKCE verifier only this computer knows, then the same chain as a device
+/// code.
+pub(crate) async fn redeem(
+    http: &dyn HttpPort,
+    client_id: &str,
+    code: &str,
+    verifier: &str,
+    redirect_uri: &str,
+) -> Result<Session, AshError> {
+    let request = HttpRequest::post_form(
+        TOKEN_URL,
+        &[
+            ("grant_type", "authorization_code"),
+            ("client_id", client_id),
+            ("code", code),
+            ("redirect_uri", redirect_uri),
+            ("code_verifier", verifier),
+            ("scope", SCOPES),
+        ],
+    );
+    let response = http.send(request).await?;
+    if !response.is_success() {
+        let error: TokenError = decode(TOKEN_URL, &response.body)?;
+        return Err(AshError::SignInFailed { detail: error.error });
+    }
+    let token: TokenResponse = decode(TOKEN_URL, &response.body)?;
+    complete_chain(http, &token.access_token, token.refresh_token).await
 }
 
 // ---- refresh ---------------------------------------------------------------

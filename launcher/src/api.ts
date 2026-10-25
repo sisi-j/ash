@@ -466,6 +466,8 @@ export const api = {
   openNewsLink: (url: string) => invoke<void>("open_news_link", { url }),
   /** Microsoft's page for entering the sign-in code, in the browser. */
   openSignInPage: () => invoke<void>("open_sign_in_page"),
+  /** One-click sign-in through the browser: resolves once the player has approved it there. */
+  signInWithBrowser: () => invoke<Account>("sign_in_with_browser"),
   /** This launcher's version, as released: `0.1.0-alpha.1`. */
   appVersion: () => invoke<string>("app_version"),
   links: () => invoke<Links>("links"),
