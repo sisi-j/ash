@@ -11,7 +11,9 @@ use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort};
 use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::servers::FakeServerPort;
-use ash_core::{Ash, Config, LauncherPreferences, MachineDefaults, OnGameStart, DEFAULT_MEMORY_MB};
+use ash_core::{
+    ash_default_memory_mb, Ash, Config, LauncherPreferences, MachineDefaults, OnGameStart,
+};
 
 fn ash_at(base: &Path) -> Ash {
     Ash::new(
@@ -153,7 +155,7 @@ fn default_memory_is_ash_s_own_until_the_player_sets_one() {
     let ash = ash_at(tmp.path());
 
     assert_eq!(ash.machine_defaults(), MachineDefaults::default());
-    assert_eq!(ash.default_memory_mb(), DEFAULT_MEMORY_MB);
+    assert_eq!(ash.default_memory_mb(), ash_default_memory_mb());
 }
 
 #[test]
@@ -180,5 +182,5 @@ fn a_default_memory_the_jvm_would_refuse_is_refused_and_not_saved() {
         ash.set_machine_defaults(MachineDefaults { memory_mb: Some(64) }).expect_err("too small");
 
     assert_eq!(err.kind(), "invalid_setting");
-    assert_eq!(ash.default_memory_mb(), DEFAULT_MEMORY_MB);
+    assert_eq!(ash.default_memory_mb(), ash_default_memory_mb());
 }

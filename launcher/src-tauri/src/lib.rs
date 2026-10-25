@@ -131,6 +131,13 @@ fn spawn_ash_sign_in(app: tauri::AppHandle, ash: Arc<Ash>, profile_id: String) {
         if signed_in {
             sync_and_tell(&app, &ash).await;
         }
+        // The first run's instances, after any a sync brought (spec 0005).
+        // Told as a sync, which is what makes the window read its instances.
+        if let Ok(made) = ash.make_first_run_instances() {
+            if !made.is_empty() {
+                let _ = app.emit("sync", ash.sync_status());
+            }
+        }
     });
 }
 
@@ -498,7 +505,7 @@ async fn default_memory_mb(state: tauri::State<'_, AppState>) -> Result<u32, UiE
 /// ash's own default, which a machine with no default of its own follows.
 #[tauri::command]
 async fn ash_default_memory_mb() -> Result<u32, UiError> {
-    Ok(ash_core::DEFAULT_MEMORY_MB)
+    Ok(ash_core::ash_default_memory_mb())
 }
 
 #[tauri::command]
