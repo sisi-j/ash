@@ -440,6 +440,11 @@ export const api: typeof real.api = {
     }),
   pollSignIn: () => resolve({ status: "waiting", interval_secs: 3600 }),
   cancelSignIn: nothing,
+  // The browser never comes back here: the check is of what ash shows meanwhile.
+  signInWithBrowser: () => {
+    (window as unknown as { openedBrowserSignIn?: boolean }).openedBrowserSignIn = true;
+    return new Promise(() => undefined);
+  },
   accounts: () => resolve(accounts),
   ashAccountStatus: () => resolve(ashStatus),
   dismissAshAccountNotice: (profileId) =>

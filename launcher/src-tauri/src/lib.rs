@@ -89,6 +89,8 @@ struct AppState {
     /// once, and one shared handle would mean cancelling either one reached
     /// whichever started most recently.
     preparing: Mutex<HashMap<String, Cancel>>,
+    /// The browser sign-in waiting for Microsoft's redirect, if one is.
+    browser_sign_in: Mutex<Option<Cancel>>,
 }
 
 // ---- sign-in ----
@@ -108,6 +110,29 @@ async fn poll_sign_in(
         spawn_ash_sign_in(app, Arc::clone(&state.ash), account.profile_id.clone());
     }
     Ok(status)
+}
+
+/// One-click sign-in through the browser (ADR-0007, amended): Microsoft's
+/// sign-in opens, and this returns once the player has approved it there.
+#[tauri::command]
+async fn sign_in_with_browser(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<ash_core::Account, UiError> {
+    let cancel = Cancel::new();
+    if let Some(earlier) = state.browser_sign_in.lock().unwrap().replace(cancel.clone()) {
+        earlier.cancel();
+    }
+    let open = |url: &str| {
+        tauri_plugin_opener::open_url(url, None::<&str>).map_err(|_| {
+            ash_core::AshError::SignInFailed { detail: "the browser couldn't be opened".into() }
+        })
+    };
+    let signed_in = state.ash.sign_in_with_browser(&open, &cancel).await;
+    state.browser_sign_in.lock().unwrap().take_if(|current| current.is_same(&cancel));
+    let account = signed_in.map_err(UiError::from)?;
+    spawn_ash_sign_in(app, Arc::clone(&state.ash), account.profile_id.clone());
+    Ok(account)
 }
 
 // ---- the ash account (spec 0004) ----
@@ -363,6 +388,9 @@ fn open_privacy_statement() -> Result<(), UiError> {
 #[tauri::command]
 async fn cancel_sign_in(state: tauri::State<'_, AppState>) -> Result<(), UiError> {
     state.ash.cancel_sign_in();
+    if let Some(waiting) = state.browser_sign_in.lock().unwrap().take() {
+        waiting.cancel();
+    }
     Ok(())
 }
 
@@ -1137,7 +1165,11 @@ pub fn run() {
             // sessions that are missing or ending soon.
             spawn_warm_session(Arc::clone(&ash));
             spawn_sync_loop(app.handle().clone(), Arc::clone(&ash));
-            app.manage(AppState { ash, preparing: Mutex::new(HashMap::new()) });
+            app.manage(AppState {
+                ash,
+                preparing: Mutex::new(HashMap::new()),
+                browser_sign_in: Mutex::new(None),
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1146,6 +1178,7 @@ pub fn run() {
             begin_sign_in,
             poll_sign_in,
             cancel_sign_in,
+            sign_in_with_browser,
             accounts,
             select_account,
             remove_account,

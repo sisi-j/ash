@@ -163,6 +163,11 @@ impl Cancel {
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
+
+    /// Whether two handles cancel the same thing.
+    pub fn is_same(&self, other: &Cancel) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 // ---- paths -----------------------------------------------------------------

@@ -55,10 +55,23 @@ const soundsMade = (page: Page) => page.evaluate(() => (window as unknown as { a
 const STATES: State[] = [
   { name: "signed-out", shows: "Sign in with Microsoft" },
   {
-    // One click: the browser opens Microsoft's code page, the code copied to paste.
+    // One click: Microsoft's sign-in opens in the browser, and ash waits for it to come back.
     name: "signed-out-signing-in",
-    shows: "Your browser has opened",
+    shows: "Microsoft’s sign-in is open in your browser",
     reach: (page) => page.getByRole("button", { name: "Sign in with Microsoft" }).click(),
+    verify: async (page) => {
+      const opened = await page.evaluate(() => (window as unknown as { openedBrowserSignIn?: boolean }).openedBrowserSignIn);
+      return opened ? null : "the browser sign-in didn't start";
+    },
+  },
+  {
+    // The code instead: Microsoft's code page opens, the code copied to paste.
+    name: "signed-out-code",
+    shows: "Your browser has opened",
+    reach: async (page) => {
+      await page.getByRole("button", { name: "Sign in with Microsoft" }).click();
+      await page.getByRole("button", { name: "Use a code instead" }).click();
+    },
     verify: async (page) => {
       const opened = await page.evaluate(() => (window as unknown as { openedSignIn?: boolean }).openedSignIn);
       return opened ? null : "the sign-in page didn't open";
