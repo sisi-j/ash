@@ -3,7 +3,8 @@ import type { InstanceId } from "./api";
 import type { Phase, Progress } from "./launch";
 
 /**
- * The LAUNCH bar, from the click to the title screen.
+ * The LAUNCH bar, from the click to the game's window opening, where the
+ * launch is done: the rest of the loading shows in the game's own window.
  *
  * Each step owns a stretch of the bar. Downloading moves with the bytes; the
  * other steps can't be measured, so each eases along at the pace it took on
@@ -12,28 +13,26 @@ import type { Phase, Progress } from "./launch";
  * bar moves on to the next one: the steps are the real ones, read off the
  * preparation events and the game's own output, never timed.
  */
-export type Step = "checking" | "downloading" | "starting" | "loading_mods" | "loading_resources";
+export type Step = "checking" | "downloading" | "starting" | "loading_mods";
 
 type Timed = Exclude<Step, "downloading">;
 
-/** Each step's stretch of the bar, in percent. Loading resources ends at 95; the title screen is 100. */
+/** Each step's stretch of the bar, in percent. The window opening is 100. */
 const STRETCH: Record<Step, [number, number]> = {
   checking: [0, 5],
   downloading: [5, 40],
-  starting: [40, 50],
-  loading_mods: [50, 70],
-  loading_resources: [70, 95],
+  starting: [40, 55],
+  loading_mods: [55, 100],
 };
 
 /** A vanilla game loads no mods, so starting Java takes their stretch too. */
-const VANILLA_STARTING: [number, number] = [40, 70];
+const VANILLA_STARTING: [number, number] = [40, 100];
 
 /** How long each step takes before an instance has launched once, in ms. */
 const FIRST_GUESS: Record<Timed, number> = {
   checking: 1_500,
   starting: 5_000,
   loading_mods: 10_000,
-  loading_resources: 8_000,
 };
 
 /** How much of its stretch a step that runs long creeps towards. */
@@ -62,7 +61,7 @@ function savePace(id: InstanceId, pace: Pace) {
   }
 }
 
-/** The step a launch is on, "done" at the title screen, or null with no launch under way. */
+/** The step a launch is on, "done" once the game's window opens, or null with no launch under way. */
 export function stepOf(phase: Phase): Step | "done" | null {
   if (phase.at === "working") return phase.progress.stage;
   if (phase.at === "running") return phase.boot.stage === "ready" ? "done" : phase.boot.stage;

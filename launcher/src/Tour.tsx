@@ -7,7 +7,7 @@ const STOPS: Stop[] = [
   {
     target: "launch",
     title: "Launch",
-    text: "One click checks, downloads and starts the selected instance. The button names each step until the game's title screen.",
+    text: "One click checks, downloads and starts the selected instance. The button names each step until the game opens.",
   },
   {
     target: "instances",

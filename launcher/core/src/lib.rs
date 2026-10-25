@@ -146,10 +146,10 @@ struct Game {
     started_ms: u64,
     /// Whether that session has been ended, so it is ended once.
     end_recorded: bool,
-    /// Whether it runs the ash client, which says when its title screen is up.
-    ash_client: bool,
     /// The furthest step its output has shown, kept as the output scrolls.
-    boot: GameBoot,
+    boot: BootStage,
+    /// How many of the player's own mods it loads.
+    players_mods: u32,
 }
 
 /// The whole of ash's public API.
@@ -1334,6 +1334,7 @@ impl Ash {
             return Err(AshError::AlreadyRunning { id: id.as_str().to_owned() });
         }
 
+        let players_mods = self.players_mods(id, how.without_third_party_mods);
         let invocation = self.assemble(id, how, sink, cancel).await?;
         let view = invocation.view();
 
@@ -1366,10 +1367,15 @@ impl Ash {
             }
         };
         let started_ms = now_ms();
-        let ash_client = self.instance(id).map(|i| i.loader != Loader::Vanilla).unwrap_or(true);
         self.games.lock().unwrap().insert(
             id.as_str().to_owned(),
-            Game { process, started_ms, end_recorded: false, ash_client, boot: GameBoot::STARTING },
+            Game {
+                process,
+                started_ms,
+                end_recorded: false,
+                boot: BootStage::Starting,
+                players_mods,
+            },
         );
 
         // The session starts now rather than when it ends: a session that
@@ -1456,14 +1462,27 @@ impl Ash {
         })
     }
 
-    /// How far a launched game has got towards its title screen, by its own
-    /// output (the LAUNCH bar's last steps). `None` if ash never started it.
+    /// How far a launched game has got towards opening its window, by its
+    /// own output (the LAUNCH bar's last steps). `None` if ash never started
+    /// it.
     pub fn game_boot(&self, id: &InstanceId) -> Option<GameBoot> {
         let mut games = self.games.lock().unwrap();
         let game = games.get_mut(id.as_str())?;
-        let now = boot::read(&game.process.log(), game.ash_client);
-        game.boot = game.boot.furthest(now);
-        Some(game.boot)
+        // The output kept is only its tail: a step once seen stays seen
+        // after its line has scrolled out.
+        game.boot = game.boot.max(boot::read(&game.process.log()));
+        Some(GameBoot { stage: game.boot, players_mods: game.players_mods })
+    }
+
+    /// The player's own mods a launch loads: the jars switched on in the
+    /// instance's `mods` folder, when a modded instance has its mods on.
+    fn players_mods(&self, id: &InstanceId, left_out: bool) -> u32 {
+        let modded = self.instance(id).is_ok_and(|i| i.loader != Loader::Vanilla);
+        if !modded || left_out || !overrides::load(&self.config.data_root, id).third_party_mods {
+            return 0;
+        }
+        let on = self.list_mods(id).map(|mods| mods.iter().filter(|m| m.enabled).count());
+        u32::try_from(on.unwrap_or(0)).unwrap_or(u32::MAX)
     }
 
     /// The tail of the game's own output.
