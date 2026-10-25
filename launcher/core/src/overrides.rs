@@ -24,12 +24,29 @@ use crate::instance::InstanceId;
 /// Where machine-local state lives, relative to the data root.
 const MACHINE_DIR: &str = "machine";
 
-/// What ash gives the JVM when the player has not said.
-///
-/// Mojang's own launcher uses the same figure. Deliberately modest: guessing
-/// high costs a player with 8GB their whole machine, and guessing low costs
-/// a player with 32GB one trip to this screen.
+/// What ash gives the JVM when it can't tell how much memory the computer
+/// has. Mojang's own launcher uses the same figure.
 pub const DEFAULT_MEMORY_MB: u32 = 2048;
+
+/// What ash gives the JVM when the player has not said, sized from the
+/// computer's memory (spec 0005): 2 GB on an 8 GB machine, 3 GB on 16 GB,
+/// 4 GB above that. Still modest - guessing high costs a small machine
+/// everything else it runs - and an instance's own setting still wins.
+///
+/// Installed memory reads a little under its size (an "8 GB" laptop shows
+/// about 7.8), so the steps sit between the common sizes, at 12 and 24 GB.
+pub fn sized_for(total_mb: Option<u64>) -> u32 {
+    match total_mb {
+        Some(mb) if mb >= 24 * 1024 => 4096,
+        Some(mb) if mb >= 12 * 1024 => 3072,
+        _ => DEFAULT_MEMORY_MB,
+    }
+}
+
+/// [`sized_for`] this computer.
+pub fn ash_default_memory_mb() -> u32 {
+    sized_for(crate::system::total_memory_mb())
+}
 
 /// Below this the game will not start; above it, the player is almost
 /// certainly typing megabytes when they meant gigabytes.
@@ -77,7 +94,7 @@ pub struct MachineOverrides {
 /// beside the overrides and never among the launcher preferences, which sync.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MachineDefaults {
-    /// `None` means ash's own default, [`DEFAULT_MEMORY_MB`], and keeps
+    /// `None` means ash's own default, [`ash_default_memory_mb`], and keeps
     /// following it if that ever changes.
     #[serde(default)]
     pub memory_mb: Option<u32>,
@@ -86,7 +103,7 @@ pub struct MachineDefaults {
 impl MachineDefaults {
     /// The memory an instance with none of its own is given.
     pub fn memory_mb_or_default(&self) -> u32 {
-        self.memory_mb.unwrap_or(DEFAULT_MEMORY_MB)
+        self.memory_mb.unwrap_or_else(ash_default_memory_mb)
     }
 
     pub fn validate(&self) -> Result<(), AshError> {
@@ -218,9 +235,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_default_is_sized_from_the_computer_s_memory() {
+        // As installed memory reads: a little under each size.
+        assert_eq!(sized_for(Some(7_870)), 2048, "an 8 GB laptop");
+        assert_eq!(sized_for(Some(15_700)), 3072, "16 GB");
+        assert_eq!(sized_for(Some(31_400)), 4096, "32 GB");
+        assert_eq!(sized_for(Some(4_000)), 2048);
+        assert_eq!(sized_for(None), DEFAULT_MEMORY_MB, "unknown: what Mojang's launcher gives");
+    }
+
+    #[test]
     fn an_unset_memory_figure_falls_back_to_the_machines_default_then_ashs() {
         let none = MachineOverrides::default();
-        assert_eq!(none.memory_mb_or(&MachineDefaults::default()), DEFAULT_MEMORY_MB);
+        assert_eq!(none.memory_mb_or(&MachineDefaults::default()), ash_default_memory_mb());
         assert_eq!(none.memory_mb_or(&MachineDefaults { memory_mb: Some(6144) }), 6144);
         let chosen = MachineOverrides { memory_mb: Some(8192), ..Default::default() };
         assert_eq!(chosen.memory_mb_or(&MachineDefaults { memory_mb: Some(6144) }), 8192);

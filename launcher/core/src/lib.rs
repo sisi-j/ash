@@ -73,7 +73,10 @@ pub use load_report::DegradationNotice;
 pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
 pub use mods::{InstallOutcome, InstalledMod, ModEntry, ModHit, ModSearch};
 pub use news::{News, NewsKind, NewsPost};
-pub use overrides::{MachineDefaults, MachineOverrides, Resolution, DEFAULT_MEMORY_MB};
+pub use overrides::{
+    ash_default_memory_mb, sized_for, MachineDefaults, MachineOverrides, Resolution,
+    DEFAULT_MEMORY_MB,
+};
 pub use preferences::{LauncherPreferences, OnGameStart};
 pub use process::{GameProcess, GameStatus, Invocation, InvocationView, ProcessPort};
 pub use runtime::Runtime;

@@ -15,8 +15,8 @@ use ash_core::http::{FakeHttp, HttpPort, HttpResponse};
 use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::servers::FakeServerPort;
 use ash_core::{
-    Ash, Cancel, Config, InstanceId, Loader, MachineDefaults, MachineOverrides, NullSink,
-    Resolution, DEFAULT_MEMORY_MB, VERSION_MANIFEST_URL,
+    ash_default_memory_mb, Ash, Cancel, Config, InstanceId, Loader, MachineDefaults,
+    MachineOverrides, NullSink, Resolution, VERSION_MANIFEST_URL,
 };
 
 mod common;
@@ -142,7 +142,7 @@ async fn an_instance_nobody_has_tuned_still_gets_a_heap_size() {
 
     // Mojang's metadata never states one, so leaving it out would hand the
     // game whatever fraction of RAM the JVM felt like.
-    assert!(args.contains(&format!("-Xmx{DEFAULT_MEMORY_MB}M")));
+    assert!(args.contains(&format!("-Xmx{}M", ash_default_memory_mb())));
 }
 
 #[tokio::test]

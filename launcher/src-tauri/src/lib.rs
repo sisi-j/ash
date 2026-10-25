@@ -505,7 +505,7 @@ async fn default_memory_mb(state: tauri::State<'_, AppState>) -> Result<u32, UiE
 /// ash's own default, which a machine with no default of its own follows.
 #[tauri::command]
 async fn ash_default_memory_mb() -> Result<u32, UiError> {
-    Ok(ash_core::DEFAULT_MEMORY_MB)
+    Ok(ash_core::ash_default_memory_mb())
 }
 
 #[tauri::command]
