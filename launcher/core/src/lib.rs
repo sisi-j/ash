@@ -779,6 +779,16 @@ impl Ash {
         links::dismiss_note(&self.config.data_root)
     }
 
+    /// Whether the first-run tour of the launcher has been seen, or skipped,
+    /// on this machine. Settings can still show it again.
+    pub fn tour_seen(&self) -> bool {
+        links::tour_seen(&self.config.data_root)
+    }
+
+    pub fn mark_tour_seen(&self) -> Result<(), AshError> {
+        links::mark_tour_seen(&self.config.data_root)
+    }
+
     /// The player has seen "an ash account was made for you".
     pub fn dismiss_ash_account_notice(&self, profile_id: &str) -> Result<Accounts, AshError> {
         account::set_ash_account_notice(&self.config.data_root, profile_id, false)

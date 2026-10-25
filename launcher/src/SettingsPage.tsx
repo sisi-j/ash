@@ -34,6 +34,8 @@ export function SettingsPage(props: {
   onSyncToggle: (enabled: boolean) => void;
   /** This launcher's version, to quote in feedback. */
   version: string | null;
+  /** Show the first-run tour again. */
+  onTour: () => void;
 }) {
   const { preferences } = props;
 
@@ -56,6 +58,15 @@ export function SettingsPage(props: {
           />
         </div>
         <SyncSetting status={props.sync} onToggle={props.onSyncToggle} />
+        <div className="option">
+          <span className="option-text">
+            <b>Tour</b>
+            <small>A quick look round the launcher and what each part does.</small>
+          </span>
+          <button className="button" onClick={props.onTour}>
+            Show the tour
+          </button>
+        </div>
       </div>
 
       <div className="settings launcher-settings">

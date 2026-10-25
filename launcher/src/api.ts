@@ -472,6 +472,9 @@ export const api = {
   openFeedbackLink: () => invoke<void>("open_feedback_link"),
   firstRunNoteDismissed: () => invoke<boolean>("first_run_note_dismissed"),
   dismissFirstRunNote: () => invoke<void>("dismiss_first_run_note"),
+  /** Whether the first-run tour has been seen or skipped on this machine. */
+  tourSeen: () => invoke<boolean>("tour_seen"),
+  markTourSeen: () => invoke<void>("mark_tour_seen"),
   /** A newer release, or null - also when the check couldn't be made. */
   checkForUpdate: () => invoke<AvailableUpdate | null>("check_for_update"),
   /** Install it: ash closes and the new version opens. Refused while a game runs. */

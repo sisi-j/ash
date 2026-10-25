@@ -107,6 +107,7 @@ export function LaunchArea(props: { instance: Instance; launch: Launch; sounds: 
       <div className="launch-stack">
         <button
           className={`launch-button${running ? " is-playing" : ""}${phase.at === "unchecked" ? " is-unavailable" : ""}`}
+          data-tour="launch"
           onClick={press}
           aria-disabled={!canStart(phase)}
           aria-live="polite"

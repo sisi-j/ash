@@ -75,3 +75,15 @@ async fn the_first_run_note_stays_dismissed_on_this_machine() {
 
     assert!(ash(FakeHttp::new(), tmp.path()).first_run_note_dismissed(), "after a restart too");
 }
+
+#[tokio::test]
+async fn the_tour_shows_once_on_this_machine() {
+    let tmp = tempfile::tempdir().unwrap();
+    let f = ash(FakeHttp::new(), tmp.path());
+    assert!(!f.tour_seen());
+
+    f.mark_tour_seen().unwrap();
+
+    assert!(ash(FakeHttp::new(), tmp.path()).tour_seen(), "after a restart too");
+    assert!(!f.first_run_note_dismissed(), "the alpha note is its own");
+}

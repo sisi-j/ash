@@ -568,6 +568,10 @@ export const api: typeof real.api = {
   // Shown only where a state is about it, so every other screenshot stays as it was.
   firstRunNoteDismissed: () => resolve(state !== "alpha-note"),
   dismissFirstRunNote: nothing,
+  tourSeen: () => resolve(state !== "tour" && state !== "tour-start" && state !== "tour-mods"),
+  markTourSeen: async () => {
+    (window as unknown as { tourMarked?: boolean }).tourMarked = true;
+  },
   openPrivacyStatement: async () => {
     (window as unknown as { openedPrivacy?: boolean }).openedPrivacy = true;
   },

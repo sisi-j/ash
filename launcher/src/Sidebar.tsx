@@ -29,6 +29,7 @@ export function Sidebar(props: {
       key={page}
       className={`nav${bottom ? " nav-bottom" : ""}`}
       data-label={PAGES[page].label}
+      data-tour={page}
       aria-label={props.unread?.includes(page) ? `${PAGES[page].label}, something new` : PAGES[page].label}
       aria-current={props.page === page ? "page" : undefined}
       onClick={() => props.onOpen(page)}
@@ -42,7 +43,13 @@ export function Sidebar(props: {
     <nav className="sidebar">
       {(Object.keys(PAGES) as Page[]).filter((page) => page !== "settings").map((page) => button(page, false))}
       {props.onFeedback && (
-        <button className="nav nav-bottom" data-label="Send feedback" aria-label="Send feedback" onClick={props.onFeedback}>
+        <button
+          className="nav nav-bottom"
+          data-label="Send feedback"
+          data-tour="feedback"
+          aria-label="Send feedback"
+          onClick={props.onFeedback}
+        >
           <Icon name="feedback" />
         </button>
       )}
