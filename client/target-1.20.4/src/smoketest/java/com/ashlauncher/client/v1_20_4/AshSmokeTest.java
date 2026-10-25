@@ -19,6 +19,7 @@ import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.AccessibilityOnboardingScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.ServerList;
@@ -65,10 +66,21 @@ public final class AshSmokeTest implements ClientModInitializer {
     }
 
     private static void run() {
-        Minecraft client = await("put its title screen up", () -> {
+        // A first launch - every CI run's - opens the accessibility
+        // onboarding screen first. Continued as a player would, which also
+        // records it as seen, and then the title screen comes.
+        Minecraft client = await("put its first screen up", () -> {
             Minecraft c = Minecraft.getInstance();
-            return c != null && c.screen instanceof TitleScreen ? c : null;
+            return c != null && (c.screen instanceof TitleScreen || c.screen instanceof AccessibilityOnboardingScreen)
+                    ? c : null;
         });
+        if (client.screen instanceof AccessibilityOnboardingScreen) {
+            onClient(client, () -> {
+                client.screen.onClose();
+                return null;
+            });
+        }
+        await("put its title screen up", () -> client.screen instanceof TitleScreen ? Boolean.TRUE : null);
         checkAshLoaded();
         serverListAshWroteLoads(client);
 
