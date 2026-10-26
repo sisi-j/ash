@@ -4,7 +4,7 @@ What's new in each version of ash. Each version's section is what the launcher s
 
 A version is released when its heading carries a date (`## 0.1.0-alpha.2 - 2026-11-03`), and a merge to `main` with a dated version that has no release yet publishes it (ADR-0025). `(unreleased)` in the heading holds it back.
 
-## 0.1.0-alpha.1 (unreleased)
+## 0.1.0-alpha.1 - 2026-10-25
 
 The first alpha. Thank you for trying ash: things may break, and your feedback on Discord shapes what comes next.
 
