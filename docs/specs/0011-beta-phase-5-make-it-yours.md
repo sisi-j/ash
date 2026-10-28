@@ -203,4 +203,4 @@ By beta phase 4, ash has twenty-five features and every one of them is customiza
 
 ## Tracker
 
-A sub-issue of the beta's tracker issue, with its tickets as sub-issues, per `docs/agents/issue-tracker.md`. This file is the source of truth.
+Filed as [#173](https://github.com/sisi-j/ash/issues/173), a sub-issue of the beta's tracker, [#168](https://github.com/sisi-j/ash/issues/168), labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`. Its tickets, #217 to #227, are its sub-issues, with blocking links set. This file is the source of truth, and the issue is the tracker entry.

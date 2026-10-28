@@ -116,4 +116,4 @@ Kept for after the beta:
 
 ## Tracker
 
-Filed on GitHub: the beta is a tracker issue, and each beta phase is a sub-issue of it with its own tickets, per `docs/agents/issue-tracker.md`. This file is the source of truth.
+Filed as [#168](https://github.com/sisi-j/ash/issues/168), labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`. Its sub-issues are the five beta phases, [#169](https://github.com/sisi-j/ash/issues/169) to [#173](https://github.com/sisi-j/ash/issues/173), and the release, [#228](https://github.com/sisi-j/ash/issues/228), which is blocked by every phase's walk. This file is the source of truth, and the issue is the tracker entry.
