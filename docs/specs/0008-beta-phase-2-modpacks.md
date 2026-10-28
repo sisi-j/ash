@@ -220,4 +220,4 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
 
 ## Tracker
 
-A sub-issue of the beta's tracker issue, with its tickets as sub-issues, per `docs/agents/issue-tracker.md`. This file is the source of truth.
+Filed as [#170](https://github.com/sisi-j/ash/issues/170), a sub-issue of the beta's tracker, [#168](https://github.com/sisi-j/ash/issues/168), labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`. Its tickets, #187 to #197, are its sub-issues, with blocking links set. This file is the source of truth, and the issue is the tracker entry.

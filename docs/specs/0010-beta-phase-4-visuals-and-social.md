@@ -204,4 +204,4 @@ All of these change only what this player sees. Nothing is sent to the server, a
 
 ## Tracker
 
-A sub-issue of the beta's tracker issue, with its tickets as sub-issues, per `docs/agents/issue-tracker.md`. This file is the source of truth.
+Filed as [#172](https://github.com/sisi-j/ash/issues/172), a sub-issue of the beta's tracker, [#168](https://github.com/sisi-j/ash/issues/168), labelled `ready-for-agent`, per `docs/agents/issue-tracker.md`. Its tickets, #208 to #216, are its sub-issues, with blocking links set. This file is the source of truth, and the issue is the tracker entry.
