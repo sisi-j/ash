@@ -45,8 +45,16 @@ A named, isolated game directory paired with exactly one version target and exac
 _Avoid_: profile, installation, version, pack
 
 **Version target**:
-A specific Minecraft version ash supports as a first-class build: 1.21.11, 1.20.4 and 1.8.9. Not a range — each target is its own build and its own maintenance burden.
+A specific Minecraft version ash supports as a first-class build, with ash's client in it: 1.8.9, 1.20.4, 1.21.11 and the **newest target**, which is the newest Minecraft release (26.3 at the start of the beta). Not a range — each target is its own build and its own maintenance burden. When Minecraft releases a new version, ash's port to it becomes the newest target and the one before is **retired**: its last client build keeps shipping unchanged, so its instances keep working, but it gets no new features (ADR-0028).
 _Avoid_: version range, supported version, MC version
+
+**Fabric-only instance**:
+An instance with the Fabric loader on a version that isn't a version target. ash's client and bundled mods aren't in it; the player's mods always load in it. Any stable version Fabric supports can be one (beta phase 2).
+_Avoid_: plain instance, vanilla Fabric, unsupported instance
+
+**Modpack**:
+A Modrinth project that bundles a Minecraft version, a loader, mods and override files, imported from a `.mrpack` file or from Modrinth. An instance made from one remembers it in `ash-modpack.json`, so the pack can be updated; the instance is still an instance, not a pack.
+_Avoid_: pack (unqualified, for an instance), profile
 
 **Loader**:
 The mod-loading layer an instance runs under: vanilla, Fabric, or Legacy Fabric. Vanilla is a loader rather than the absence of one, so every instance has exactly one and nothing downstream needs a "no loader" case. Fabric and Legacy Fabric run the same Fabric Loader artifact; what differs is the intermediary mappings and the API around it.
@@ -106,6 +114,18 @@ _Avoid_: card, module (Lunar's word), mod
 The sign on a tile of what a feature does to the frame rate, measured on and off: green triangle up, red triangle down, or a grey line within ±3%.
 _Avoid_: performance badge, FPS impact (in UI text)
 
+**HUD item**:
+One thing a feature draws on the HUD - the FPS readout, keystrokes, armour status - declared once in a registry and placed, sized, styled, snapped and hidden the same way as every other (beta phase 1). A feature can have more than one.
+_Avoid_: HUD mod, widget, element, readout (only the FPS and ping items are readouts)
+
+**Game view**:
+The read-only interface through which the client's shared code reads the game - keys held, position, armour, effects, chat open, the current server. Each version target implements it from its own game; tests fill in a fake one, so every in-game feature is tested without a game.
+_Avoid_: game state, adapter, bridge
+
+**Fair-play list**:
+The one list, shipped in the client, of which features are off on which servers and why. Freelook's block list was its first entry. A feature off on a server does nothing there, says so, and comes back on leaving; the player's own switch is never changed.
+_Avoid_: block list (that was freelook's alone), blacklist, server rules
+
 **Feature option**:
 One setting that shapes how a feature looks or behaves rather than whether it is on - the crosshair's shape, size, gap, thickness, colour and outline. Declared in the client settings beside the feature's switch, and edited on the feature's own page of the settings screen, reached from its card; a feature that did not load offers no page, and an option that does nothing for what the others are set to (a dot's gap) is not shown. "Reset to defaults" there puts the switch and every option back.
 _Avoid_: option (unqualified, in docs - it is the game's own word), sub-setting, config value
@@ -142,6 +162,10 @@ _Avoid_: store (reserved for a paid storefront, which does not exist), shop, loc
 
 ### Settings
 
+**Settings profile**:
+A named, complete set of the client settings' feature values - every switch, option, HUD item's place and style, and favourites - that the player switches between, automatically per server if they choose, synced and shareable as a **share code** (`ash1:` text that no server stores). Never holds machine-local overrides. **Starter profiles** - Minimal, PvP and Everything - are the ones offered the first time a new player opens the panel.
+_Avoid_: profile (unqualified - it means an instance or an ash account), preset, loadout, config
+
 **Synced settings**:
 What follows an ash account between machines: feature settings (one set per account, not per instance), launcher preferences, instance definitions and each instance's server list. Each setting carries its own time and the latest change wins; a server list is one setting. Only the launcher syncs, and only while the game is closed (ADR-0022). On whenever the player is signed in, with a switch to turn it off.
 _Avoid_: config, preferences, sync blob
@@ -163,6 +187,14 @@ One entry in the launcher's news and changelog feed, written and published on th
 _Avoid_: announcement, article, update
 
 ### Releasing
+
+**Alpha phase / beta phase**:
+How the work is counted. Alpha phases 1-4 are specs 0001-0004, and the alpha release is 0005; beta phases 1-5 are specs 0007-0011, under the beta's overview, 0006. The beta is released once, as `0.2.0-beta.1`, when every beta phase is done; alpha patch releases carry fixes meanwhile.
+_Avoid_: phase (unqualified, once the beta starts), milestone, sprint
+
+**Crash report**:
+The redacted report Copy report makes after a crash, which the player can also send to ash with "Send report" (beta phase 5). Sent only when they click; kept 90 days, with no account or IP address.
+_Avoid_: telemetry, crash log, diagnostics
 
 **Release**:
 One version of ash, published to GitHub Releases on its own when a merge to `main` changes the version and its installer passes the installed-app test (ADR-0025). Alpha releases are numbered `0.1.0-alpha.N`, and are ordinary releases rather than GitHub pre-releases.
