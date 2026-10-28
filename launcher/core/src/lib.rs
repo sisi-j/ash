@@ -1615,6 +1615,7 @@ impl Ash {
             defaults: &overrides::load_defaults(&self.config.data_root),
             join: join.as_ref(),
             mods: mods.as_ref(),
+            beta: self.config.beta,
         })
     }
 

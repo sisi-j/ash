@@ -17,7 +17,8 @@ use crate::launch;
 /// What the check found: a line per thing checked, and whether all was well.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallationCheck {
-    /// Each finding as a line of the report, starting `ok:` or `problem:`.
+    /// Which build this is, then each finding as a line of the report,
+    /// starting `ok:` or `problem:`.
     pub lines: Vec<String>,
     pub ok: bool,
 }
@@ -40,7 +41,13 @@ impl InstallationCheck {
 /// would hand the loader for it names it by a path Java reads. Then that
 /// ash's data folder can be written to.
 pub(crate) fn check(config: &Config) -> InstallationCheck {
-    let mut lines = Vec::new();
+    // Not a finding, so neither `ok:` nor `problem:`. CI reads it to be sure
+    // the installer a release publishes has the beta switch off (ADR-0029).
+    let mut lines = vec![if config.beta {
+        "build: test, the beta switch on".to_owned()
+    } else {
+        "build: release, the beta switch off".to_owned()
+    }];
     let mut ok = true;
     let separator = if cfg!(windows) { ";" } else { ":" };
     for pin in config.loaders {
@@ -135,6 +142,16 @@ mod tests {
             "{}",
             check.report()
         );
+    }
+
+    #[test]
+    fn the_report_says_whether_the_beta_switch_is_on() {
+        let tmp = tempfile::tempdir().unwrap();
+        let release = installed(tmp.path(), tmp.path().join("client"));
+        let test = Config { beta: true, ..release.clone() };
+        assert!(check(&release).lines.contains(&"build: release, the beta switch off".to_owned()));
+        assert!(check(&test).lines.contains(&"build: test, the beta switch on".to_owned()));
+        assert!(check(&test).ok, "a test build is a whole installation too");
     }
 
     #[test]

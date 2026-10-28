@@ -506,6 +506,9 @@ export const api: typeof real.api = {
     (window as unknown as { openedLink?: string }).openedLink = url;
   },
   appVersion: () => resolve("0.1.0-alpha.1"),
+  // A test build in every state but one, so beta work is checked on every
+  // pull request (ADR-0029); `settings-version-release` is the release build.
+  betaBuild: () => resolve(state !== "settings-version-release"),
   searchMods: (_id, query, sort) => {
     // ash's picks leave out Fabric API; every other sort is by downloads here.
     const found = MODS.filter(
