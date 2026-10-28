@@ -33,6 +33,18 @@ cd ../launcher && npm run build:installer
 `npm run tauri build` on its own produces an installer with no client in it.
 `build:installer` is the one that carries it - see `client/README.md`.
 
+### Test builds
+
+```
+npm run build:test-installer
+```
+
+builds the client jars and then the installer with the beta switch on
+(`ASH_BETA=1`, ADR-0029): a test build, with the beta phases' work in it.
+Settings says "test build" beside the version. It's for a beta phase's test
+walk and is never published. Every other build, `build:installer` and
+`npm run tauri dev` included, is a release build unless `ASH_BETA=1` is set.
+
 ## Checking an installation
 
 `ash --self-check <report file>` checks an installed ash and exits. It looks

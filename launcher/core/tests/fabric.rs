@@ -219,8 +219,13 @@ fn install_ash_client(client_root: &std::path::Path) {
 }
 
 fn fixture_with(http: Arc<FakeHttp>) -> Fixture {
+    fixture_from(http, |config| config)
+}
+
+/// A fixture whose `Config` the test changes first: the beta switch, say.
+fn fixture_from(http: Arc<FakeHttp>, change: impl FnOnce(Config) -> Config) -> Fixture {
     let tmp = tempfile::tempdir().expect("temp dir");
-    let config = Config { loaders: pins(), ..Config::rooted_at(tmp.path()) };
+    let config = change(Config { loaders: pins(), ..Config::rooted_at(tmp.path()) });
     install_ash_client(&config.client_root);
     let process = FakeProcessPort::new();
     let ash = Ash::new(
@@ -376,6 +381,26 @@ async fn both_properties_sit_with_the_jvm_arguments_before_the_main_class() {
     for name in ["fabric.addMods", "fabric.modsFolder"] {
         let at = view.args.iter().position(|a| a.starts_with(&format!("-D{name}="))).expect(name);
         assert!(at < main, "{name} comes after the main class, so the game gets it, not the JVM");
+    }
+}
+
+/// The beta switch reaches ash's client as a JVM property, and only from a
+/// build with it on (spec 0006, ADR-0029): a released build's client must
+/// never run beta work.
+#[tokio::test]
+async fn the_client_hears_of_the_beta_switch_only_from_a_build_with_it_on() {
+    for (beta, told) in [(false, None), (true, Some("true"))] {
+        let f = fixture_from(serving(), |config| Config { beta, ..config });
+        let id = f.modded().await;
+
+        let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
+
+        assert_eq!(property(&view.args, "ash.beta"), told, "with the switch {beta}");
+        if told.is_some() {
+            let main = view.args.iter().position(|a| a == KNOT).expect("the loader's main class");
+            let at = view.args.iter().position(|a| a.starts_with("-Dash.beta=")).unwrap();
+            assert!(at < main, "the property comes after the main class, so the JVM never sees it");
+        }
     }
 }
 

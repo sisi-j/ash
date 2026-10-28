@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.hud.HudLayout;
@@ -90,6 +91,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         if (FabricLoader.getInstance().isModLoaded("sodium") != WITH_SODIUM) {
             throw new AssertionError(WITH_SODIUM ? "the run with Sodium started without Sodium in it"
                     : "Sodium is loaded in the run without it");
+        }
+        // Beta work is tested here (ADR-0029): this run is a test build, as
+        // every Gradle run of the game is.
+        if (!Beta.on()) {
+            throw new AssertionError("the game test ran as a release build, so no beta work was tested");
         }
 
         // The settings file is written while the client initialises, so by now

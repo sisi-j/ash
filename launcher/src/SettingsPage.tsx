@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, isUiError, type AshAccountStatus, type SyncStatus, type LauncherPreferences, type MachineDefaults, type OnGameStart } from "./api";
 import { DeleteAshAccount, describeAshAccount } from "./AshAccount";
 import { SyncSetting } from "./Sync";
+import { useBeta } from "./beta";
 import { Icon } from "./icons";
 import { filledPercent, formatGb, MEMORY_MAX_GB, MEMORY_MIN_GB, MEMORY_STEP_GB, onSlider, toGb } from "./memory";
 import { PAGES } from "./Sidebar";
@@ -38,6 +39,7 @@ export function SettingsPage(props: {
   onTour: () => void;
 }) {
   const { preferences } = props;
+  const beta = useBeta();
 
   return (
     <section className="page">
@@ -123,7 +125,12 @@ export function SettingsPage(props: {
           </div>
         </div>
       </div>
-      {props.version && <p className="settings-version numeric">ash {props.version}</p>}
+      {props.version && (
+        <p className="settings-version numeric">
+          ash {props.version}
+          {beta && " · test build, with beta features"}
+        </p>
+      )}
     </section>
   );
 }

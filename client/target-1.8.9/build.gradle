@@ -87,6 +87,16 @@ loom {
     }
 }
 
+// The beta switch (ADR-0029). Every run of the game from here - the game
+// tests, the benchmarks, a developer's own - is a test build, so beta work is
+// tested on every pull request. A player's jar is the same either way: the
+// launcher that starts the game says which build it was.
+loom {
+    runs.configureEach {
+        property 'ash.beta', 'true'
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version_1_8_9}"
     // Legacy Yarn, because Mojang publishes no mappings for 1.8.9 at all.

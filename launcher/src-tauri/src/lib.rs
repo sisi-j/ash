@@ -895,7 +895,7 @@ async fn reveal_game_directory(
 fn ash_state(client_root: std::path::PathBuf) -> Ash {
     let base = dirs_next_data_dir().join("ash");
     Ash::new(
-        Config { client_root, ..Config::rooted_at(base) },
+        Config { client_root, beta: cfg!(ash_beta), ..Config::rooted_at(base) },
         Arc::new(ReqwestHttp::new()),
         Arc::new(OsCredentialStore::new()),
         Arc::new(OsProcessPort::new()),
@@ -1015,6 +1015,13 @@ fn self_check(ash: &Ash, report: &std::path::Path) -> ! {
 #[tauri::command]
 fn app_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
+}
+
+/// Whether this is a test build, with the beta switch on (ADR-0029): the UI
+/// shows the beta phases' work only then.
+#[tauri::command]
+fn beta_build(state: tauri::State<'_, AppState>) -> bool {
+    state.ash.config().beta
 }
 
 /// The text "Copy report" shows and copies (spec 0005).
@@ -1199,6 +1206,7 @@ pub fn run() {
             check_for_update,
             install_update,
             app_version,
+            beta_build,
             search_mods,
             install_mod,
             installed_mods,

@@ -42,6 +42,8 @@ pub(crate) struct LaunchContext<'a> {
     /// What a modded instance's loader is told about mods. `None` for
     /// vanilla, which loads none.
     pub mods: Option<&'a Mods>,
+    /// Whether ash's client is told the beta switch is on (ADR-0029).
+    pub beta: bool,
 }
 
 /// Where a modded instance's loader finds its mods.
@@ -115,6 +117,12 @@ pub(crate) fn assemble(context: &LaunchContext) -> Result<Invocation, AshError> 
         jvm.insert(0, add_mods_argument(&mods.add, separator));
         if let Some(folder) = &mods.folder {
             jvm.insert(0, format!("-Dfabric.modsFolder={}", java_path(folder)));
+        }
+        // ash's client has no switch of its own: the jar is the same in a
+        // test build and a release, and runs beta work only when the
+        // launcher that started it was built with the switch on.
+        if context.beta {
+            jvm.insert(0, "-Dash.beta=true".to_owned());
         }
     }
 

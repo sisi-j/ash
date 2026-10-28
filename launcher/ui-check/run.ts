@@ -557,7 +557,14 @@ const STATES: State[] = [
     verify: async (page) =>
       (await page.getByRole("button", { name: "Send feedback" }).count()) === 0 ? null : "a feedback link with nowhere to go",
   },
-  { name: "settings-version", shows: "ash 0.1.0-alpha.1", reach: openPage("Settings") },
+  // The beta switch (ADR-0029): a test build says so, and a release build doesn't.
+  { name: "settings-version", shows: "ash 0.1.0-alpha.1 · test build, with beta features", reach: openPage("Settings") },
+  {
+    name: "settings-version-release",
+    shows: "ash 0.1.0-alpha.1",
+    reach: openPage("Settings"),
+    verify: async (page) => ((await page.getByText("test build").count()) === 0 ? null : "a release build said it was a test build"),
+  },
   // Updates (ADR-0025): offered with what's new, never while a game runs.
   {
     name: "update-available",

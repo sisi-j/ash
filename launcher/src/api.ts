@@ -470,6 +470,8 @@ export const api = {
   signInWithBrowser: () => invoke<Account>("sign_in_with_browser"),
   /** This launcher's version, as released: `0.1.0-alpha.1`. */
   appVersion: () => invoke<string>("app_version"),
+  /** Whether this is a test build, with the beta switch on (ADR-0029). */
+  betaBuild: () => invoke<boolean>("beta_build"),
   links: () => invoke<Links>("links"),
   /** The text "Copy report" shows and copies. Never sent anywhere. */
   report: (request: ReportRequest) => invoke<string>("report", request),

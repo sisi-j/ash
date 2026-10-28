@@ -192,6 +192,10 @@ _Avoid_: announcement, article, update
 How the work is counted. Alpha phases 1-4 are specs 0001-0004, and the alpha release is 0005; beta phases 1-5 are specs 0007-0011, under the beta's overview, 0006. The beta is released once, as `0.2.0-beta.1`, when every beta phase is done; alpha patch releases carry fixes meanwhile.
 _Avoid_: phase (unqualified, once the beta starts), milestone, sprint
 
+**Test build**:
+A build of ash with the beta switch on (ADR-0029): the beta phases' work is in it, and Settings says "test build" beside the version. Made with `npm run build:test-installer` for each beta phase's test walk, and never published. A **release build** has the switch off, and is the only kind a release publishes.
+_Avoid_: beta build, dev build, nightly
+
 **Crash report**:
 The redacted report Copy report makes after a crash, which the player can also send to ash with "Send report" (beta phase 5). Sent only when they click; kept 90 days, with no account or IP address.
 _Avoid_: telemetry, crash log, diagnostics

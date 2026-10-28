@@ -59,6 +59,14 @@ pub struct Config {
     /// for a game started near the end. A value so a test can make every
     /// launch refresh.
     pub session_reuse: Duration,
+    /// Whether this is a test build, with the beta switch on (spec 0006,
+    /// ADR-0029). Off, the beta phases' work stays out of what a player
+    /// gets, so an alpha patch release can still be cut from `main`.
+    ///
+    /// The switch is read once, when the launcher is built, and handed in
+    /// here. A value so a test can try either build. Off unless the adapter
+    /// says otherwise.
+    pub beta: bool,
 }
 
 impl Config {
@@ -87,6 +95,7 @@ impl Config {
             backend_url: "https://api.ashlauncher.com".into(),
             modrinth_url: "https://api.modrinth.com/v2".into(),
             session_reuse: Duration::from_secs(20 * 60 * 60),
+            beta: false,
         }
     }
 }

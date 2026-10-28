@@ -20,6 +20,11 @@ jobs:
     # handling, credential store and process spawning actually run against.
     # macOS joins this matrix when Phase 5 does.
     runs-on: windows-latest
+    # A test build, with the beta switch on (ADR-0029), so beta work is
+    # checked on every pull request. Never set on `installed`, whose
+    # installer is the one a release publishes.
+    env:
+      ASH_BETA: "1"
     steps:
       - uses: actions/checkout@v7
 
@@ -310,6 +315,11 @@ jobs:
           $check = Start-Process -FilePath $exe.FullName -ArgumentList '--self-check', "`"$report`"" -Wait -PassThru
           if (Test-Path $report) { Get-Content $report } else { Write-Output 'no report was written' }
           if ($check.ExitCode -ne 0) { throw "the installed ash's self-check exited with $($check.ExitCode)" }
+          # This installer is the one the release job publishes, so it must
+          # be a release build, with the beta switch off (ADR-0029).
+          if (-not (Select-String -Path $report -Pattern '^build: release' -Quiet)) {
+            throw "this installer was built with the beta switch on, and a release would publish it"
+          }
 
       # Kept for the release job: what was installed and checked here is
       # what it publishes.
