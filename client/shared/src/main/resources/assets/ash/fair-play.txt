@@ -1,0 +1,32 @@
+# ash's fair-play list (spec 0007, Fair play): each feature ash switches off
+# on a server whose published rules ban it, and why. Off there, the feature
+# does nothing; the player's own switch is left as it is, and the feature is
+# back the moment they leave.
+#
+# One rule a line:
+#
+#     <feature id> | <server> | <addresses> | <why> | <where its rules say so>
+#
+# An address is a host, matched exactly - play.example.net - or *. and a host,
+# matching the host and every address under it: *.hypixel.net is hypixel.net
+# and mc.hypixel.net alike. Several go with commas between. They match
+# however the player wrote the address: in any case, with a port or a
+# trailing dot. Each network keeps every address a player is likely to type,
+# and every SRV target, inside one domain (docs/research/0009, section 3).
+#
+# Short and sourced on purpose: each rule cites the page that bans it, so that
+# it can be kept true. Missing a server is the accepted risk, and a server's
+# ban is a reason to add it here, not to argue. Changed only with a client
+# release.
+
+# "must not ... change the player's perspective (e.g. allowing them to see
+# around or over objects they normally wouldn't be able to)"
+freelook | Hypixel | *.hypixel.net | its rules ban it | https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications
+
+# Disallowed: "Better F5 (Allowing you to manipulate your camera whilst your
+# movement remains static)"
+freelook | MCC Island | *.mccisland.net | its rules ban it | https://mcchampionship.com/help/mods/
+
+# "Camera perspective mods that exceed the capabilities of the F5 camera
+# function are prohibited. Freelook / Freecam"
+freelook | Hoplite | *.hoplite.gg | its rules ban it | https://www.hoplite.gg/rules

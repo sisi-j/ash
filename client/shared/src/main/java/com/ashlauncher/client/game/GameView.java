@@ -14,6 +14,9 @@ package com.ashlauncher.client.game;
  */
 public interface GameView {
 
+    /** Whether the player is in a world, rather than joining one, or out at the menus. */
+    boolean inWorld();
+
     /**
      * Whether the game's debug text is on screen: the F3 overlay itself, and
      * nothing wider. On 1.21.11 the game's own "debug screen showing" is also

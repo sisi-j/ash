@@ -18,6 +18,11 @@ public final class MinecraftGameView implements GameView {
     }
 
     @Override
+    public boolean inWorld() {
+        return Minecraft.getInstance().player != null;
+    }
+
+    @Override
     public boolean debugScreenShown() {
         // The F3 screen itself. On 1.20.4 this is only F3: debug entries
         // that stay on, like 1.21.11's, came later.

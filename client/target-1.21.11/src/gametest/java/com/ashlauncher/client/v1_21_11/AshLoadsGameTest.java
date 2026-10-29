@@ -2,6 +2,7 @@ package com.ashlauncher.client.v1_21_11;
 
 import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.CrosshairHook;
+import com.ashlauncher.client.fairplay.FairPlay;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.game.GameView;
 import com.ashlauncher.client.hud.HudItem;
@@ -67,6 +68,13 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext context) {
+        // No server on the test's own fair-play list until fairPlayWorks
+        // puts this one there, whatever a run before left behind.
+        try {
+            Files.deleteIfExists(Path.of(System.getProperty(FairPlay.TEST_LIST_PROPERTY)));
+        } catch (IOException stuck) {
+            throw new AssertionError("could not clear the test's fair-play list", stuck);
+        }
         // ash's CDN, for the cape test, from before the game first asks who
         // wears what: the player's own skin is asked for as soon as a hand is
         // drawn, and a profile that wasn't there is not asked again for a while.
@@ -189,6 +197,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             moveReadoutsWorks(context);
             panelIsCrispAtEveryGuiScale(context);
             ashSettingsWork(context);
+            fairPlayWorks(context);
         }
     }
 
@@ -276,6 +285,58 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.waitTicks(5);
         if (context.computeOnClient(client -> client.screen != null)) {
             throw new AssertionError("Escape did not close ash's settings");
+        }
+    }
+
+    /**
+     * The fair-play list, with this test's server on it (spec 0007): freelook
+     * is off here - its key does nothing, and its tile says why - with the
+     * player's own switch left on, and back the moment the server is off the
+     * list again. The shipped list can't name a test server, so the test
+     * lists it in its own, which the client reads beside the shipped one.
+     */
+    private static void fairPlayWorks(ClientGameTestContext context) {
+        Path list = Path.of(System.getProperty(FairPlay.TEST_LIST_PROPERTY));
+        String address = context.computeOnClient(client -> client.getCurrentServer().ip);
+        String host = address.contains(":") ? address.substring(0, address.lastIndexOf(':')) : address;
+        try {
+            Files.writeString(list, "freelook | the test server | " + host + " | its list bans it | https://example.invalid");
+        } catch (IOException unwritable) {
+            throw new AssertionError("could not write the test's fair-play list", unwritable);
+        }
+        KeyMapping key = binding(context, Freelook.BINDING_NAME);
+
+        context.getInput().holdKey(key);
+        context.waitTicks(3);
+        boolean ranHere = context.computeOnClient(client -> AshClient.freelook.active());
+        context.getInput().releaseKey(key);
+        context.waitTicks(2);
+        String tile = context.computeOnClient(client -> {
+            for (SettingsScreen.Row row : AshClient.settingsScreen.rows()) {
+                if (row.feature() == Feature.FREELOOK) {
+                    return row.offHere();
+                }
+            }
+            return "no row";
+        });
+        boolean switchLeftOn = context.computeOnClient(client -> AshClient.settingsScreen.value(Settings.FREELOOK));
+        if (ranHere || !tile.equals("Freelook is off on the test server: its list bans it.") || !switchLeftOn) {
+            throw new AssertionError("on a listed server freelook ran " + ranHere + ", its tile said \"" + tile
+                    + "\", and its switch was left on " + switchLeftOn);
+        }
+
+        try {
+            Files.delete(list);
+        } catch (IOException stuck) {
+            throw new AssertionError("could not take the test server off its fair-play list", stuck);
+        }
+        context.getInput().holdKey(key);
+        context.waitTicks(3);
+        boolean back = context.computeOnClient(client -> AshClient.freelook.active());
+        context.getInput().releaseKey(key);
+        context.waitTicks(2);
+        if (!back) {
+            throw new AssertionError("freelook did not come back once the server was off the list");
         }
     }
 

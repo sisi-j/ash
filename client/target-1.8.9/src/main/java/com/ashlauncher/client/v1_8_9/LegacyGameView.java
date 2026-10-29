@@ -19,6 +19,11 @@ public final class LegacyGameView implements GameView {
     }
 
     @Override
+    public boolean inWorld() {
+        return MinecraftClient.getInstance().player != null;
+    }
+
+    @Override
     public boolean debugScreenShown() {
         return MinecraftClient.getInstance().options.debugEnabled;
     }
