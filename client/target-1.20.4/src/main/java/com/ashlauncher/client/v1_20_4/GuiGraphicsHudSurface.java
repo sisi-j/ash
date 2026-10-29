@@ -68,10 +68,6 @@ public final class GuiGraphicsHudSurface implements HudSurface {
         graphics.fill(x, y, x + width, y + height, colour);
     }
 
-    @Override
-    public boolean debugScreenShown() {
-        return MinecraftGameView.INSTANCE.debugScreenShown();
-    }
 
     @Override
     public boolean hudHidden() {

@@ -72,18 +72,6 @@ public interface HudSurface {
     void fill(int x, int y, int width, int height, int colour);
 
     /**
-     * Whether the game's debug text is on screen - the F3 overlay itself.
-     *
-     * <p>It fills the top-left with text of its own, so anything ash draws
-     * there has to know. Deliberately the text overlay and nothing wider: on
-     * 1.21.11 the game's own "is the debug screen showing" is also true while
-     * F3+B hitboxes or F3+G chunk borders are on, and a PvP player leaves
-     * hitboxes on - so asking that question would hide ash's readout from the
-     * very players it is for, with no debug text anywhere to replace it.
-     */
-    boolean debugScreenShown();
-
-    /**
      * Whether the player has hidden the HUD - F1 on both targets.
      *
      * <p>A question the surface has to answer rather than one the game answers

@@ -195,11 +195,14 @@ public final class Settings {
     // Each HUD item's style, one group each (spec 0007, HUD items). Beta
     // phase 1's: a release build reads none of them (ADR-0029).
 
+    // The readouts hide under F3 unless told otherwise, as they always have:
+    // its debug text, frame rate and all, is in their corner.
+
     public static final HudItemSettings FPS_READOUT_ITEM = new HudItemSettings(Feature.FPS_READOUT, "the frame rate",
-            "120 FPS", "FPS: 120", "120");
+            "120 FPS", "FPS: 120", "120", true, false);
 
     public static final HudItemSettings PING_READOUT_ITEM = new HudItemSettings(Feature.PING_READOUT, "your ping",
-            "42 ms", "Ping: 42 ms", "42");
+            "42 ms", "Ping: 42 ms", "42", true, true);
 
     /**
      * Every setting, in the order a first run writes them. One list, and

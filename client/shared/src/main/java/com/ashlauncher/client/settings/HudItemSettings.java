@@ -1,6 +1,7 @@
 package com.ashlauncher.client.settings;
 
 import com.ashlauncher.client.report.Feature;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -13,7 +14,9 @@ import java.util.List;
  * {@code fps-readout.size}.
  *
  * <p>Their defaults are how the readouts have always looked: full size,
- * white, shadowed, no box, no brackets, the label after the number.
+ * white, shadowed, no box, no brackets, the label after the number. Hiding
+ * while chat is open is off, and only when relevant is on, for an item that
+ * has times with nothing to show (spec 0007, The HUD editor).
  */
 public final class HudItemSettings {
 
@@ -31,6 +34,15 @@ public final class HudItemSettings {
     public final OnOff brackets;
     /** Where its label goes: {@code after}, {@code before} or {@code none}. */
     public final Choice label;
+    /** Hidden while F3's debug text is on screen. */
+    public final OnOff hideWithDebug;
+    /** Hidden while chat is open. */
+    public final OnOff hideWithChat;
+    /**
+     * Shown only while it has something to show; {@code null} for an item
+     * that always has, which is offered no such thing.
+     */
+    public final OnOff onlyWhenRelevant;
 
     private final List<Setting<?>> all;
 
@@ -39,8 +51,14 @@ public final class HudItemSettings {
      *     frame rate"
      * @param after how it reads with its label after, before, and with none,
      *     for the label's comment: "120 FPS", "FPS: 120" and "120"
+     * @param hideWithDebug whether it hides while F3 is open unless the player
+     *     says otherwise: the spec has it off, and an item in F3's corner has
+     *     it on, as the readouts always have
+     * @param relevance whether it has times with nothing to show, and so can
+     *     be shown only when relevant
      */
-    HudItemSettings(Feature feature, String what, String after, String before, String none) {
+    HudItemSettings(Feature feature, String what, String after, String before, String none, boolean hideWithDebug,
+            boolean relevance) {
         String prefix = feature.id() + ".";
         size = new Whole(feature, prefix + "size", "Size", 100, 50, 200, 10, "%",
                 "How large " + what + " draws, in per cent: a whole number from 50 to 200, in steps of 10.");
@@ -59,8 +77,18 @@ public final class HudItemSettings {
         label = new Choice(feature, prefix + "label", "Label", "after",
                 "Where the label goes: after (" + after + "), before (" + before + ") or none (" + none + ").",
                 "after", "After", "before", "Before", "none", "None");
-        all = Collections.unmodifiableList(Arrays.<Setting<?>>asList(size, textColour, chroma, background,
-                backgroundColour, shadow, brackets, label));
+        this.hideWithDebug = new OnOff(feature, prefix + "hide-with-f3", "Hide while F3 is open", hideWithDebug,
+                "Hide " + what + " while the F3 debug screen is open. true or false.");
+        hideWithChat = new OnOff(feature, prefix + "hide-with-chat", "Hide while chat is open", false,
+                "Hide " + what + " while chat is open. true or false.");
+        onlyWhenRelevant = relevance ? new OnOff(feature, prefix + "only-when-relevant", "Only when relevant", true,
+                "Show " + what + " only when there is one to show; otherwise a placeholder. true or false.") : null;
+        List<Setting<?>> all = new ArrayList<>(Arrays.<Setting<?>>asList(size, textColour, chroma, background,
+                backgroundColour, shadow, brackets, label, this.hideWithDebug, hideWithChat));
+        if (onlyWhenRelevant != null) {
+            all.add(onlyWhenRelevant);
+        }
+        this.all = Collections.unmodifiableList(all);
     }
 
     /** Every one, in the order the file lists them and the options page shows them. */

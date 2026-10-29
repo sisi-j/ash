@@ -27,7 +27,7 @@ public final class HudItem {
 
     /** The frame rate, as the game counts it, top-left: where it has always been. */
     public static final HudItem FPS = new HudItem(Feature.FPS_READOUT, Settings.FPS_READOUT_POSITION,
-            Settings.FPS_READOUT_ITEM, "FPS", "FPS", game -> String.valueOf(game.framesPerSecond()), "120", false,
+            Settings.FPS_READOUT_ITEM, "FPS", "FPS", game -> String.valueOf(game.framesPerSecond()), "120",
             EnumSet.allOf(HudStyle.class));
 
     /**
@@ -42,7 +42,7 @@ public final class HudItem {
             Settings.PING_READOUT_ITEM, "ms", "Ping", game -> {
                 Integer ms = game.latency();
                 return ms == null || ms < 0 ? null : String.valueOf(ms);
-            }, "--", true, EnumSet.allOf(HudStyle.class));
+            }, "--", EnumSet.allOf(HudStyle.class));
 
     /**
      * Every HUD item, in the order they are drawn and stacked down a column.
@@ -57,7 +57,6 @@ public final class HudItem {
     private final String name;
     private final Function<GameView, String> value;
     private final String sample;
-    private final boolean onlyWhenRelevant;
     private final Set<HudStyle> styles;
 
     /**
@@ -71,11 +70,10 @@ public final class HudItem {
      *     nothing to show just now
      * @param sample a value to show in Edit HUD when there is nothing to show,
      *     so that it can still be found and placed
-     * @param onlyWhenRelevant whether it has times with nothing to show
      * @param styles the style options it takes
      */
     private HudItem(Feature feature, Position position, HudItemSettings settings, String label, String name,
-            Function<GameView, String> value, String sample, boolean onlyWhenRelevant, Set<HudStyle> styles) {
+            Function<GameView, String> value, String sample, Set<HudStyle> styles) {
         this.feature = feature;
         this.position = position;
         this.settings = settings;
@@ -83,7 +81,6 @@ public final class HudItem {
         this.name = name;
         this.value = value;
         this.sample = sample;
-        this.onlyWhenRelevant = onlyWhenRelevant;
         this.styles = Collections.unmodifiableSet(styles);
     }
 
@@ -141,9 +138,12 @@ public final class HudItem {
         return value + " " + label;
     }
 
-    /** Whether it has times with nothing to show, when it draws nothing - the ping in singleplayer. */
+    /**
+     * Whether it has times with nothing to show - the ping in singleplayer -
+     * and so can be shown only when relevant, as its group declares.
+     */
     public boolean onlyWhenRelevant() {
-        return onlyWhenRelevant;
+        return settings.onlyWhenRelevant != null;
     }
 
     /** The style options it takes. */

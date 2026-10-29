@@ -1556,10 +1556,6 @@ public final class AshSmokeTest implements ClientModInitializer {
             fills++;
         }
 
-        @Override
-        public boolean debugScreenShown() {
-            return false;
-        }
 
         @Override
         public boolean hudHidden() {

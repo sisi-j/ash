@@ -139,9 +139,10 @@ class FpsReadoutTest {
     void it_steps_aside_while_the_debug_screen_is_up() {
         // The debug screen draws its own frame rate from the same corner, and
         // two lines of text on top of each other read as neither.
-        FakeHudSurface surface = FakeHudSurface.ofTypicalSize().withDebugScreenShown();
+        FakeHudSurface surface = FakeHudSurface.ofTypicalSize();
 
-        fps(144, layout(), surface);
+        new HudItems(layout(), new FakeGameView().withFramesPerSecond(144).withDebugScreenShown())
+                .draw(HudItem.FPS, surface);
 
         assertEquals(0, surface.drawn().size(), "drew " + surface.drawn());
     }
