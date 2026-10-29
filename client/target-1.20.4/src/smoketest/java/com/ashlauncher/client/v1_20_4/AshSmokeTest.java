@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_20_4;
 
+import com.ashlauncher.client.game.GameView;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
 import java.io.IOException;
@@ -20,6 +21,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.AccessibilityOnboardingScreen;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.ServerList;
@@ -110,6 +112,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         pause(3_000L);
         screenshot(client, "ash-in-world.png");
 
+        gameViewSees(client);
         settingsScreenOpensWithItsKey(client);
         capeWorks(client);
         cdn.close();
@@ -173,6 +176,43 @@ public final class AshSmokeTest implements ClientModInitializer {
                 "hidden kept: true");
         if (!wanted.equals(seen)) {
             fail("the game read the server list ash wrote as " + seen + ", not " + wanted);
+        }
+    }
+
+    /**
+     * The game view (spec 0007) answers from the game itself: no server in a
+     * singleplayer world, chat open and shut, and F3 on and off.
+     */
+    private static void gameViewSees(Minecraft client) {
+        GameView game = MinecraftGameView.INSTANCE;
+        if (onClient(client, game::serverAddress) != null) {
+            fail("the game view says a singleplayer world is a server");
+        }
+
+        onClient(client, () -> {
+            client.setScreen(new ChatScreen(""));
+            return null;
+        });
+        boolean chatSeen = onClient(client, game::chatOpen);
+        onClient(client, () -> {
+            client.setScreen(null);
+            return null;
+        });
+        if (!chatSeen || onClient(client, game::chatOpen)) {
+            fail("the game view did not follow chat opening and closing");
+        }
+
+        onClient(client, () -> {
+            client.getDebugOverlay().toggleOverlay();
+            return null;
+        });
+        boolean debugSeen = onClient(client, game::debugScreenShown);
+        onClient(client, () -> {
+            client.getDebugOverlay().toggleOverlay();
+            return null;
+        });
+        if (!debugSeen || onClient(client, game::debugScreenShown)) {
+            fail("the game view did not follow F3 opening and closing");
         }
     }
 

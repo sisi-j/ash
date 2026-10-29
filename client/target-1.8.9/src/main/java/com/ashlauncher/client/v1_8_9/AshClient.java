@@ -227,7 +227,7 @@ public final class AshClient implements ClientModInitializer {
             KeyBinding freelookKey = KeyBindingHelper.registerKeyBinding(
                     new KeyBinding(Freelook.BINDING_NAME, Keyboard.KEY_LMENU, "key.categories.misc"));
             Freelook<Integer> freelook = new Freelook<>(new Perspective(),
-                    () -> settings.get(Settings.FREELOOK), CurrentServer::blockedHere,
+                    () -> settings.get(Settings.FREELOOK), () -> BlockList.here(LegacyGameView.INSTANCE),
                     why -> MinecraftClient.getInstance().inGameHud.setOverlayMessage(why, false));
             FreelookHook.install(freelook);
             FreelookKey.install(freelookKey, freelook);
@@ -305,7 +305,7 @@ public final class AshClient implements ClientModInitializer {
             // be switched there, as on 1.21.11.
             SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
                     feature -> {
-                        BlockList.Server here = feature == Feature.FREELOOK ? CurrentServer.blockedHere() : null;
+                        BlockList.Server here = feature == Feature.FREELOOK ? BlockList.here(LegacyGameView.INSTANCE) : null;
                         return here == null ? "" : here.whyOff();
                     },
                     writeReport, hudLayout);

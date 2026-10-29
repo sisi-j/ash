@@ -1,0 +1,49 @@
+package com.ashlauncher.client.game;
+
+/**
+ * A game that answers whatever the test filled in, the way
+ * {@link com.ashlauncher.client.hud.FakeHudSurface} stands in for the HUD.
+ *
+ * <p>Starts as a player in a world with nothing open, in singleplayer. A test
+ * that needs a fact this can't give widens the fake; it never reaches around
+ * it.
+ */
+public final class FakeGameView implements GameView {
+
+    private boolean debugScreenShown;
+    private boolean chatOpen;
+    private String serverAddress;
+
+    /** The same game with F3's debug text on screen. */
+    public FakeGameView withDebugScreenShown() {
+        debugScreenShown = true;
+        return this;
+    }
+
+    /** The same game with chat open. */
+    public FakeGameView withChatOpen() {
+        chatOpen = true;
+        return this;
+    }
+
+    /** The same game, on the server the player joined as {@code address}. */
+    public FakeGameView onServer(String address) {
+        serverAddress = address;
+        return this;
+    }
+
+    @Override
+    public boolean debugScreenShown() {
+        return debugScreenShown;
+    }
+
+    @Override
+    public boolean chatOpen() {
+        return chatOpen;
+    }
+
+    @Override
+    public String serverAddress() {
+        return serverAddress;
+    }
+}

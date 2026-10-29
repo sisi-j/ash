@@ -59,9 +59,7 @@ public final class GuiGraphicsHudSurface implements HudSurface {
 
     @Override
     public boolean debugScreenShown() {
-        // The F3 screen itself. On 1.20.4 this is only F3: debug entries
-        // that stay on, like 1.21.11's, came later.
-        return Minecraft.getInstance().getDebugOverlay().showDebugScreen();
+        return MinecraftGameView.INSTANCE.debugScreenShown();
     }
 
     @Override

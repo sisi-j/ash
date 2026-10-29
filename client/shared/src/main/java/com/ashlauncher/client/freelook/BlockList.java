@@ -1,5 +1,6 @@
 package com.ashlauncher.client.freelook;
 
+import com.ashlauncher.client.game.GameView;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -90,6 +91,11 @@ public final class BlockList {
             }
         }
         return null;
+    }
+
+    /** The listed server the player is on, as the game says, or null. */
+    public static Server here(GameView game) {
+        return match(game.serverAddress());
     }
 
     /** The host part of an address, lower-cased, with no port and no trailing dot. */

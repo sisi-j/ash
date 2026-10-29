@@ -1,20 +1,17 @@
 package com.ashlauncher.client.v1_8_9;
 
-import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.servers.RecentServers;
-import com.ashlauncher.client.v1_8_9.mixin.MinecraftClientAccess;
 import java.io.IOException;
 import java.util.Objects;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ServerInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * The server being played on, as 1.8.9 keeps it: the address the player
- * connected with, and the server's own name for itself. See
- * {@code docs/research/0009}, sections 1 and 2.
+ * The server being played on: each join recorded for the launcher, and what
+ * the server calls itself, as 1.8.9 keeps it. The address comes from the game
+ * view. See {@code docs/research/0009}, sections 1 and 2.
  */
 public final class CurrentServer {
 
@@ -28,32 +25,10 @@ public final class CurrentServer {
     private CurrentServer() {
     }
 
-    /**
-     * The address as the player wrote it, or null in singleplayer or out of a
-     * world. A list or direct join keeps it in the server entry; a join from
-     * launch arguments has none, and its host is the one launch named.
-     */
-    public static String address() {
-        MinecraftClient minecraft = MinecraftClient.getInstance();
-        if (minecraft.isInSingleplayer() || minecraft.getNetworkHandler() == null) {
-            return null;
-        }
-        ServerInfo entry = minecraft.getCurrentServerEntry();
-        if (entry != null) {
-            return entry.address;
-        }
-        return ((MinecraftClientAccess) minecraft).ash$serverAddress();
-    }
-
     /** The server's own name for itself, or null before it has said. */
     public static String brand() {
         MinecraftClient minecraft = MinecraftClient.getInstance();
         return minecraft.player == null ? null : minecraft.player.getServerBrand();
-    }
-
-    /** The listed server being played on, if any. */
-    public static BlockList.Server blockedHere() {
-        return BlockList.match(address());
     }
 
     /**
@@ -62,7 +37,7 @@ public final class CurrentServer {
      * (research 0009, section 2), read from the game's own log.
      */
     public static void tick() {
-        String address = address();
+        String address = LegacyGameView.INSTANCE.serverAddress();
         if (address == null) {
             logged = "";
             joined = null;

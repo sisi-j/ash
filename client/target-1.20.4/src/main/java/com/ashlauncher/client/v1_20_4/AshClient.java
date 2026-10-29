@@ -206,7 +206,7 @@ public final class AshClient implements ClientModInitializer {
                     Freelook.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_ALT,
                     "key.categories.misc"));
             Freelook<CameraType> freelook = new Freelook<>(new OptionsCameraModes(),
-                    () -> settings.get(Settings.FREELOOK), CurrentServer::blockedHere,
+                    () -> settings.get(Settings.FREELOOK), () -> BlockList.here(MinecraftGameView.INSTANCE),
                     why -> Minecraft.getInstance().gui.setOverlayMessage(Component.literal(why), false));
             FreelookHook.install(freelook);
             AshClient.freelook = freelook;
@@ -268,7 +268,7 @@ public final class AshClient implements ClientModInitializer {
         // switched there, as the spec's settings screen asks.
         SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
                 feature -> {
-                    BlockList.Server here = feature == Feature.FREELOOK ? CurrentServer.blockedHere() : null;
+                    BlockList.Server here = feature == Feature.FREELOOK ? BlockList.here(MinecraftGameView.INSTANCE) : null;
                     return here == null ? "" : here.whyOff();
                 },
                 writeReport, hudLayout);
