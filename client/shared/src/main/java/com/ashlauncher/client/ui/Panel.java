@@ -1,5 +1,6 @@
 package com.ashlauncher.client.ui;
 
+import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Placement;
 import com.ashlauncher.client.perf.FpsMark;
@@ -71,7 +72,7 @@ public final class Panel {
     /** Whether Edit HUD is open in place of the panel. */
     private boolean editingHud;
     /** The readout being dragged in Edit HUD, or {@code null}. */
-    private HudLayout.Readout dragging;
+    private HudItem dragging;
     /** Where in the dragged readout the mouse took hold of it, in GUI units, so it does not jump to the cursor. */
     private float grabX;
     private float grabY;
@@ -444,14 +445,14 @@ public final class Panel {
             return true;
         }
         HudLayout layout = model.hudLayout();
-        for (HudLayout.Readout readout : HudLayout.Readout.values()) {
-            Rect box = readoutBox(readout);
+        for (HudItem item : HudItem.ALL) {
+            Rect box = itemBox(item);
             if (box != null && box.contains(x, y)) {
-                Placement placement = layout.placement(readout);
-                grabX = x / (float) guiScale - placement.x(layout.width(readout), guiWidth());
-                grabY = y / (float) guiScale - placement.y(layout.height(readout), guiHeight());
-                dragging = readout;
-                layout.drag(readout, placement);
+                Placement placement = layout.placement(item);
+                grabX = x / (float) guiScale - placement.x(layout.width(item), guiWidth());
+                grabY = y / (float) guiScale - placement.y(layout.height(item), guiHeight());
+                dragging = item;
+                layout.drag(item, placement);
                 return true;
             }
         }
@@ -478,10 +479,10 @@ public final class Panel {
         if (dragging != null) {
             HudLayout layout = model.hudLayout();
             Placement dropped = layout.placement(dragging);
-            HudLayout.Readout readout = dragging;
+            HudItem item = dragging;
             dragging = null;
             layout.endDrag();
-            model.change(readout.position(), dropped);
+            model.change(item.position(), dropped);
         } else if (page != null) {
             page.release();
         }
@@ -614,14 +615,14 @@ public final class Panel {
      * {@code null} when it is switched off, or has not drawn yet to say how
      * big it is.
      */
-    public Rect readoutBox(HudLayout.Readout readout) {
+    public Rect itemBox(HudItem item) {
         HudLayout layout = model.hudLayout();
-        int w = layout.width(readout);
-        int h = layout.height(readout);
-        if (!layout.shown(readout) || w == 0 || h == 0) {
+        int w = layout.width(item);
+        int h = layout.height(item);
+        if (!layout.shown(item) || w == 0 || h == 0) {
             return null;
         }
-        Placement placement = layout.placement(readout);
+        Placement placement = layout.placement(item);
         int x = placement.x(w, guiWidth());
         int y = placement.y(h, guiHeight());
         return new Rect((x - 1) * guiScale, (y - 1) * guiScale, (w + 1) * guiScale, (h + 1) * guiScale);
@@ -1372,16 +1373,16 @@ public final class Panel {
     private void drawHudEditing(Canvas canvas, int mouseX, int mouseY) {
         canvas.fill(0, 0, width, height, Palette.HUD_EDIT_SCRIM);
         boolean any = false;
-        for (HudLayout.Readout readout : HudLayout.Readout.values()) {
-            Rect box = readoutBox(readout);
+        for (HudItem item : HudItem.ALL) {
+            Rect box = itemBox(item);
             if (box == null) {
                 continue;
             }
             any = true;
-            boolean held = readout == dragging || (dragging == null && box.contains(mouseX, mouseY));
+            boolean held = item == dragging || (dragging == null && box.contains(mouseX, mouseY));
             canvas.fill(box.x, box.y, box.width, box.height, held ? Palette.HUD_BOX_HOVER : Palette.HUD_BOX);
             drawDashed(canvas, box, Math.max(1, units(0.1)), Palette.TEXT);
-            drawTag(canvas, readout, box);
+            drawTag(canvas, item, box);
         }
         if (dragging != null) {
             return;
@@ -1423,9 +1424,9 @@ public final class Panel {
      * left where there is no room - so the tags of readouts stacked one above
      * the other, as they start, never cover the next box.
      */
-    private void drawTag(Canvas canvas, HudLayout.Readout readout, Rect box) {
-        String tag = readout.feature().displayName() + " · "
-                + model.hudLayout().placement(readout).anchor().label();
+    private void drawTag(Canvas canvas, HudItem item, Rect box) {
+        String tag = item.feature().displayName() + " · "
+                + model.hudLayout().placement(item).anchor().label();
         float size = textSize(0.72f);
         int padX = units(0.45);
         int padY = units(0.15);

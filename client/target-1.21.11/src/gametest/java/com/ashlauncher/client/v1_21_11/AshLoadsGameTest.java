@@ -4,7 +4,7 @@ import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.game.GameView;
-import com.ashlauncher.client.hud.HudLayout;
+import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
@@ -921,7 +921,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         // A frame or two for the readouts, drawn beneath, to say how big they are.
         context.waitTicks(3);
 
-        double[] from = cursorAt(context, "the FPS readout's box", panel -> panel.readoutBox(HudLayout.Readout.FPS));
+        double[] from = cursorAt(context, "the FPS readout's box", panel -> panel.itemBox(HudItem.FPS));
         double[] window = context.computeOnClient(client ->
                 new double[] {client.getWindow().getScreenWidth(), client.getWindow().getScreenHeight()});
         context.getInput().setCursorPos(from[0], from[1]);
@@ -939,7 +939,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         assertFileHasLineStarting("fps-readout.position=bottom-right ");
         int[] drawnAt = context.computeOnClient(client -> {
             RecordingSurface surface = new RecordingSurface();
-            AshClient.fpsReadout.draw(surface);
+            AshClient.hudItems.draw(HudItem.FPS, surface);
             return new int[] {surface.lastX, surface.lastY};
         });
         if (drawnAt[0] < 427 / 2 || drawnAt[1] < 240 / 2) {
@@ -1024,7 +1024,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
                 return "the server has not listed the player";
             }
             RecordingSurface surface = new RecordingSurface();
-            AshClient.pingReadout.draw(surface);
+            AshClient.hudItems.draw(HudItem.PING, surface);
             String expected = info.getLatency() + " ms";
             return surface.drawn.equals(List.of(expected)) ? null : "drew " + surface.drawn + ", not " + expected;
         });
@@ -1037,7 +1037,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
     private static void assertReadoutDraws(ClientGameTestContext context, boolean expected, String otherwise) {
         List<String> drawn = context.computeOnClient(client -> {
             RecordingSurface surface = new RecordingSurface();
-            AshClient.fpsReadout.draw(surface);
+            AshClient.hudItems.draw(HudItem.FPS, surface);
             return surface.drawn;
         });
         if (drawn.isEmpty() == expected) {

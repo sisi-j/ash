@@ -10,9 +10,23 @@ package com.ashlauncher.client.game;
  */
 public final class FakeGameView implements GameView {
 
+    private int framesPerSecond = 60;
+    private Integer latency;
     private boolean debugScreenShown;
     private boolean chatOpen;
     private String serverAddress;
+
+    /** The same game, counting this many frames a second. */
+    public FakeGameView withFramesPerSecond(int framesPerSecond) {
+        this.framesPerSecond = framesPerSecond;
+        return this;
+    }
+
+    /** The same game, with the server reporting this latency; {@code null} for none, as in singleplayer. */
+    public FakeGameView withLatency(Integer latency) {
+        this.latency = latency;
+        return this;
+    }
 
     /** The same game with F3's debug text on screen. */
     public FakeGameView withDebugScreenShown() {
@@ -35,6 +49,16 @@ public final class FakeGameView implements GameView {
     @Override
     public boolean debugScreenShown() {
         return debugScreenShown;
+    }
+
+    @Override
+    public int framesPerSecond() {
+        return framesPerSecond;
+    }
+
+    @Override
+    public Integer latency() {
+        return latency;
     }
 
     @Override

@@ -4,7 +4,6 @@ import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
-import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
@@ -15,10 +14,10 @@ import com.ashlauncher.client.hit.HitColourHook;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hit.RecentAttacks;
+import com.ashlauncher.client.hud.HudItems;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
-import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
@@ -49,7 +48,6 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
-import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.GameRenderer;
@@ -110,13 +108,10 @@ public final class AshClient implements ClientModInitializer {
     private static final String HIT_HURT_MIXIN = "com.ashlauncher.client.v1_8_9.mixin.ClientPlayNetworkHandlerMixin";
 
     /**
-     * The FPS readout this session draws, so the real-game test can ask it -
-     * not the screenshot - whether it draws. Package-private and set once.
+     * The HUD items this session draws, so the real-game test can ask them -
+     * not the screenshot - whether they draw. Package-private and set once.
      */
-    static FpsReadout fpsReadout;
-
-    /** The ping readout this session draws, for the smoke test to ask. */
-    static PingReadout pingReadout;
+    static HudItems hudItems;
 
     /** The hit indicator this session draws, if both its mixins landed, for the smoke test to ask. */
     static HitIndicator hitIndicator;
@@ -138,21 +133,18 @@ public final class AshClient implements ClientModInitializer {
         }
 
         Marker marker = new Marker();
-        // One layout for the readouts and the settings screen's Edit HUD, so
-        // the box the player drags is where the readout draws.
+        // One layout for the HUD items and the settings screen's Edit HUD, so
+        // the box the player drags is where the item draws.
         HudLayout hudLayout = new HudLayout(settings);
-        FpsReadout fpsReadout = new FpsReadout(MinecraftClient::getCurrentFps, hudLayout);
-        AshClient.fpsReadout = fpsReadout;
-        PingReadout pingReadout = new PingReadout(AshClient::latency, hudLayout);
-        AshClient.pingReadout = pingReadout;
+        HudItems hudItems = new HudItems(hudLayout, LegacyGameView.INSTANCE);
+        AshClient.hudItems = hudItems;
 
         HudRenderCallback.EVENT.register((minecraft, tickDelta) -> {
             // One surface for both: constructing it reads the window size and
             // GUI scale, which is once a frame's work rather than once a feature's.
             LegacyHudSurface surface = new LegacyHudSurface(minecraft);
             marker.draw(surface);
-            fpsReadout.draw(surface);
-            pingReadout.draw(surface);
+            hudItems.draw(surface);
             // Around the middle pixel of the game's crosshair, which it draws
             // at (width / 2 - 7, height / 2 - 7) with its centre on pixel 7.
             HitHook.draw(surface, surface.width() / 2, surface.height() / 2);
@@ -371,21 +363,6 @@ public final class AshClient implements ClientModInitializer {
                     .orElse(Collections.<Path>emptyList());
         }
         return Collections.emptyList();
-    }
-
-    /**
-     * The server's latency for the player's own tab-list entry, the number
-     * behind the tab list's bars; null in singleplayer, which on 1.8.9 stays
-     * true after opening to LAN (research 0004, 3.2), or before the server has
-     * listed the player. Read, never measured.
-     */
-    static Integer latency() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.isInSingleplayer() || client.player == null || client.getNetworkHandler() == null) {
-            return null;
-        }
-        PlayerListEntry entry = client.getNetworkHandler().getPlayerListEntry(client.player.getUuid());
-        return entry == null ? null : entry.getLatency();
     }
 
     private static String clientVersion() {

@@ -1,5 +1,6 @@
 package com.ashlauncher.client.settings;
 
+import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.Target;
@@ -241,8 +242,8 @@ public final class SettingsScreen {
 
     /** Puts every readout back where it started, as Edit HUD's Reset asks. */
     public void resetReadouts() {
-        for (HudLayout.Readout readout : HudLayout.Readout.values()) {
-            resetOne(readout.position());
+        for (HudItem item : HudItem.ALL) {
+            resetOne(item.position());
         }
     }
 
