@@ -3,6 +3,7 @@ package com.ashlauncher.client.v1_21_11;
 import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.freelook.Freelook;
+import com.ashlauncher.client.game.GameView;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
@@ -32,6 +33,7 @@ import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.phys.EntityHitResult;
@@ -170,6 +172,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             context.takeScreenshot("ash-in-world");
 
             joinIsRecorded(context);
+            gameViewSees(context);
             toggleSprintWorks(context, server);
             freelookWorks(context, server);
             snaplookWorks(context);
@@ -592,6 +595,37 @@ public class AshLoadsGameTest implements FabricClientGameTest {
                 FabricLoader.getInstance().getGameDir().resolve(RecentServers.RELATIVE_PATH));
         if (joins.isEmpty() || !joins.get(0).address.equals(address)) {
             throw new AssertionError("joining " + address + " was not recorded first in the recent servers");
+        }
+    }
+
+    /**
+     * The game view (spec 0007) answers from the game itself: the server just
+     * joined, chat open and shut, and F3's debug text on and off.
+     */
+    private static void gameViewSees(ClientGameTestContext context) {
+        GameView game = MinecraftGameView.INSTANCE;
+        String held = context.computeOnClient(c -> c.getCurrentServer().ip);
+        String seen = context.computeOnClient(c -> game.serverAddress());
+        if (!held.equals(seen)) {
+            throw new AssertionError("the game view says the server is " + seen + ", where the game holds " + held);
+        }
+
+        context.runOnClient(c -> c.setScreen(new ChatScreen("", false)));
+        context.waitTicks(2);
+        boolean chatSeen = context.computeOnClient(c -> game.chatOpen());
+        context.runOnClient(c -> c.setScreen(null));
+        context.waitTicks(2);
+        if (!chatSeen || context.computeOnClient(c -> game.chatOpen())) {
+            throw new AssertionError("the game view did not follow chat opening and closing");
+        }
+
+        context.runOnClient(c -> c.debugEntries.setOverlayVisible(true));
+        context.waitTicks(2);
+        boolean debugSeen = context.computeOnClient(c -> game.debugScreenShown());
+        context.runOnClient(c -> c.debugEntries.setOverlayVisible(false));
+        context.waitTicks(2);
+        if (!debugSeen || context.computeOnClient(c -> game.debugScreenShown())) {
+            throw new AssertionError("the game view did not follow F3's debug text appearing and going");
         }
     }
 

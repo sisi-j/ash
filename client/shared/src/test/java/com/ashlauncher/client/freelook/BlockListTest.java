@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ashlauncher.client.game.FakeGameView;
 import org.junit.jupiter.api.Test;
 
 class BlockListTest {
@@ -55,5 +56,13 @@ class BlockListTest {
             assertTrue(server.rules().startsWith("https://"), server.name());
             assertTrue(server.whyOff().contains(server.name()), server.whyOff());
         }
+    }
+
+    @Test
+    void the_server_is_the_one_the_game_says_the_player_is_on() {
+        assertEquals("Hypixel", BlockList.here(new FakeGameView().onServer("mc.hypixel.net")).name());
+        assertNull(BlockList.here(new FakeGameView().onServer("play.example.org")));
+        // Singleplayer, or no world at all: nothing is listed.
+        assertNull(BlockList.here(new FakeGameView()));
     }
 }

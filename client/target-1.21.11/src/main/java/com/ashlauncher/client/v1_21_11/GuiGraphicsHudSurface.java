@@ -59,11 +59,7 @@ public final class GuiGraphicsHudSurface implements HudSurface {
 
     @Override
     public boolean debugScreenShown() {
-        // The F3 text itself, not `getDebugOverlay().showDebugScreen()`: that
-        // is also true whenever any debug entry is always-on, and F3+B
-        // hitboxes is one. Asking it would hide the readout from every PvP
-        // player with hitboxes showing, with no debug text in its place.
-        return Minecraft.getInstance().debugEntries.isOverlayVisible();
+        return MinecraftGameView.INSTANCE.debugScreenShown();
     }
 
     @Override

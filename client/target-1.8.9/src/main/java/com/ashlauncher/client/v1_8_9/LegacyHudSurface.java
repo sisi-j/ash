@@ -66,7 +66,7 @@ public final class LegacyHudSurface implements HudSurface {
 
     @Override
     public boolean debugScreenShown() {
-        return minecraft.options.debugEnabled;
+        return LegacyGameView.INSTANCE.debugScreenShown();
     }
 
     @Override
