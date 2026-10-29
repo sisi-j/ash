@@ -6,7 +6,13 @@ public enum FeatureStatus {
     /** Its mixins did not apply, and the game is running without it. */
     DEGRADED("degraded"),
     /** The player switched it off in their settings. Not a problem. */
-    OFF("off");
+    OFF("off"),
+    /**
+     * This version of the game can't have it, as its tile says: "Not on
+     * 1.21.11" (spec 0007). Not a problem either. Reported only with the
+     * beta switch on; before, such a feature is left out.
+     */
+    UNSUPPORTED("unsupported");
 
     private final String word;
 

@@ -1,6 +1,7 @@
 package com.ashlauncher.client.v1_20_4;
 
 import com.ashlauncher.client.game.GameView;
+import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.SettingsScreen;
 import java.io.IOException;
@@ -236,10 +237,34 @@ public final class AshSmokeTest implements ClientModInitializer {
         await("open ash's settings with its key", () -> client.screen instanceof AshSettingsScreen ? Boolean.TRUE : null);
         pause(1_000L);
         screenshot(client, "ash-settings.png");
+        searchWorks(client);
         onClient(client, () -> {
             client.setScreen(null);
             return null;
         });
+    }
+
+    /**
+     * Search, typed into the open panel as the game hands typing to a screen
+     * (spec 0007): an option's name finds its feature's tile and no other.
+     * This run is a test build, so options are searched.
+     */
+    private static void searchWorks(Minecraft client) {
+        AshSettingsScreen screen = (AshSettingsScreen) client.screen;
+        onClient(client, () -> {
+            for (char typed : "gap".toCharArray()) {
+                screen.charTyped(typed, 0);
+            }
+            return null;
+        });
+        String query = onClient(client, () -> screen.panel().query());
+        boolean crosshairShown = onClient(client, () -> screen.panel().switchOf(Feature.CROSSHAIR) != null);
+        boolean fpsShown = onClient(client, () -> screen.panel().switchOf(Feature.FPS_READOUT) != null);
+        if (!"gap".equals(query) || !crosshairShown || fpsShown) {
+            fail("typing \"gap\" searched for \"" + query + "\" and showed the crosshair " + crosshairShown
+                    + ", the FPS readout " + fpsShown);
+        }
+        screenshot(client, "ash-settings-search.png");
     }
 
     /** The player's ash cape, from the test's CDN, in the skin the game draws them with. */

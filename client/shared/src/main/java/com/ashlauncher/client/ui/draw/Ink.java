@@ -101,7 +101,8 @@ public final class Ink {
         ROTATE("rotate-ccw"),
         CLOUD("cloud"),
         SCAN("scan-eye"),
-        SHIRT("shirt");
+        SHIRT("shirt"),
+        STAR("star");
 
         private final String lucideName;
 
@@ -388,6 +389,23 @@ public final class Ink {
             g.scale(size / 24.0, size / 24.0);
             g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             for (Shape shape : shapesOf(icon)) {
+                g.draw(shape);
+            }
+            g.dispose();
+            return raster(image, 0, 0, null);
+        });
+    }
+
+    /** The same, its shapes filled as well as stroked: a starred tile's star. */
+    public static synchronized Raster filledIcon(Icon icon, int size, int argb) {
+        return cached("filled/" + icon + "/" + size + "/" + Integer.toHexString(argb), () -> {
+            BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = graphics(image);
+            g.setColor(new Color(argb, true));
+            g.scale(size / 24.0, size / 24.0);
+            g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            for (Shape shape : shapesOf(icon)) {
+                g.fill(shape);
                 g.draw(shape);
             }
             g.dispose();

@@ -14,6 +14,7 @@ import com.ashlauncher.client.hud.Placement;
 import com.ashlauncher.client.perf.FpsMark;
 import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
+import com.ashlauncher.client.report.Target;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.ui.draw.FakeCanvas;
@@ -540,5 +541,92 @@ class PanelTest {
 
         assertTrue((unblurredCorner & 0xFF) < (blurredCorner & 0xFF),
                 "no darker: " + Integer.toHexString(blurredCorner) + " then " + Integer.toHexString(unblurredCorner));
+    }
+
+    // ---- beta phase 1 (spec 0007): option search, favourites, the seven tabs, not on this version ----
+
+    private Panel betaPanel() {
+        settings = Settings.load(configDir);
+        model = new SettingsScreen(settings, Target.V1_21_11, true, feature -> true, feature -> "",
+                () -> reported.add("report"), new HudLayout(settings));
+        Panel panel = new Panel(model, () -> closed.add("closed"), now::get);
+        panel.setAnimations(false);
+        panel.resize(WIDTH, HEIGHT);
+        return panel;
+    }
+
+    @Test
+    void an_option_found_by_search_is_named_on_its_tile_and_highlighted_for_a_moment_when_opened() throws Exception {
+        Panel panel = betaPanel();
+        type(panel, "gap");
+        FakeCanvas canvas = render(panel);
+        canvas.save(new File("build/ui/search-an-option.png"));
+
+        assertEquals(1, panel.visibleRows().size(), "drew " + canvas.texts());
+        assertTrue(canvas.drew("Crosshair") && canvas.drew("Gap"), "drew " + canvas.texts());
+
+        click(panel, panel.tileOf(Feature.CROSSHAIR));
+        render(panel).save(new File("build/ui/search-an-option-opened.png"));
+        assertEquals(Settings.CROSSHAIR_GAP, panel.highlightedOption());
+
+        now.addAndGet(OptionsPage.HIGHLIGHT);
+        render(panel);
+        assertNull(panel.highlightedOption(), "the highlight never faded");
+    }
+
+    @Test
+    void a_starred_tile_moves_to_a_favourites_row_and_the_rest_start_beneath_it() throws Exception {
+        Panel panel = betaPanel();
+        render(panel);
+
+        click(panel, panel.starOf(Feature.SNAPLOOK));
+        render(panel).save(new File("build/ui/tiles-favourites.png"));
+
+        Rect snaplook = panel.tileOf(Feature.SNAPLOOK);
+        Rect fps = panel.tileOf(Feature.FPS_READOUT);
+        assertEquals(panel.grid().x, snaplook.x, "the favourite is not first");
+        assertEquals(snaplook.x, fps.x, "the rest did not start a row of their own");
+        assertTrue(fps.y > snaplook.y, "the rest are not beneath the favourites");
+        assertEquals(List.of(Feature.SNAPLOOK), settings.get(Settings.FAVOURITES));
+        assertEquals(List.of("report"), reported, "a star is a change like any other");
+
+        click(panel, panel.starOf(Feature.SNAPLOOK));
+        assertEquals(List.of(), settings.get(Settings.FAVOURITES));
+        assertEquals(panel.grid().y, panel.tileOf(Feature.FPS_READOUT).y, "unstarred, the row did not go");
+    }
+
+    @Test
+    void a_release_build_draws_no_stars() {
+        Panel panel = panel();
+        render(panel);
+
+        assertNull(panel.starOf(Feature.CROSSHAIR));
+    }
+
+    @Test
+    void the_beta_has_the_seven_tabs_less_the_empty_ones_and_hit_colour_is_visual() {
+        Panel panel = betaPanel();
+        FakeCanvas canvas = render(panel);
+        for (String tab : new String[] {"All", "HUD", "PvP", "Visual", "Movement", "Performance", "Cosmetics"}) {
+            assertTrue(canvas.drew(tab), "no " + tab + " tab: " + canvas.texts());
+        }
+        assertFalse(canvas.drew("Chat"), "an empty tab is shown");
+
+        click(panel, panel.tabOf(com.ashlauncher.client.settings.Category.VISUAL));
+
+        assertEquals(1, panel.visibleRows().size());
+        assertNotNull(panel.tileOf(Feature.HIT_COLOUR));
+    }
+
+    @Test
+    void a_feature_this_version_cannot_have_says_so_on_its_tile_and_when_pressed() {
+        Panel panel = betaPanel();
+        FakeCanvas canvas = scrolledTo(panel, Feature.FASTER_CLOUDS);
+        assertTrue(canvas.drew("NOT ON 1.21.11"), "drew " + canvas.texts());
+
+        click(panel, panel.tileOf(Feature.FASTER_CLOUDS));
+
+        assertTrue(render(panel).drew("Faster clouds is only on 1.8.9."), "said nothing");
+        assertEquals(List.of(), reported);
     }
 }

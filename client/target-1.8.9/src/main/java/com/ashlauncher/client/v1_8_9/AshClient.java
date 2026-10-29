@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_8_9;
 
+import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
@@ -303,7 +304,7 @@ public final class AshClient implements ClientModInitializer {
         if (settingsKeyLanded) {
             // Freelook's row says why it is off on a listed server, and cannot
             // be switched there, as on 1.21.11.
-            SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
+            SettingsScreen settingsScreen = new SettingsScreen(settings, Target.V1_8_9, Beta.on(), landed::contains,
                     feature -> {
                         BlockList.Server here = feature == Feature.FREELOOK ? BlockList.here(LegacyGameView.INSTANCE) : null;
                         return here == null ? "" : here.whyOff();
@@ -317,11 +318,6 @@ public final class AshClient implements ClientModInitializer {
         writeReport.run();
     }
 
-    /** Whether this target has a feature at all, as the feature declares it. */
-    private static boolean present(Feature feature) {
-        return feature.existsOn(Target.V1_8_9);
-    }
-
     /**
      * What this session is running, for the launcher - written at startup and
      * again whenever a setting changes, so the report says what the session
@@ -329,7 +325,7 @@ public final class AshClient implements ClientModInitializer {
      */
     private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
-            LoadReport.forSession(clientVersion(), AshClient::present, landed::contains, settings::on)
+            LoadReport.forSession(clientVersion(), Target.V1_8_9, Beta.on(), landed::contains, settings::on)
                     .withOrigins(modOrigins(), BUNDLED)
                     .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {

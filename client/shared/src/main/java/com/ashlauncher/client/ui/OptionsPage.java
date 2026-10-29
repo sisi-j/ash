@@ -134,6 +134,14 @@ final class OptionsPage {
     private int scroll;
     private int maxScroll;
     private float unit = 19.2f;
+    /** The option a search found, highlighted for a moment when the page opens; {@code null} for none. */
+    private Setting<?> highlighted;
+    private long highlightedAt;
+    /** Whether the highlighted option still has to be scrolled into view, which the next draw does. */
+    private boolean revealHighlighted;
+
+    /** How long a found option stays highlighted, fading out. */
+    static final long HIGHLIGHT = 1_600_000_000L;
 
     /**
      * @param clock nanoseconds, only ever going forward: for the hit indicator's preview and for motion
@@ -197,6 +205,18 @@ final class OptionsPage {
 
     Feature feature() {
         return subject;
+    }
+
+    /** Highlights an option a search found, scrolled into view, for a moment (spec 0007). */
+    void highlight(Setting<?> option) {
+        highlighted = option;
+        highlightedAt = clock.getAsLong();
+        revealHighlighted = true;
+    }
+
+    /** The option highlighted just now, or {@code null} once its moment has passed. */
+    Setting<?> highlighted() {
+        return highlighted != null && clock.getAsLong() - highlightedAt < HIGHLIGHT ? highlighted : null;
     }
 
     // ---- input, in real pixels ----
@@ -467,6 +487,14 @@ final class OptionsPage {
                 break;
             }
         }
+        if (revealHighlighted) {
+            revealHighlighted = false;
+            for (int i = 0; i < shown.size(); i++) {
+                if (shown.get(i).setting == highlighted) {
+                    scroll = i;
+                }
+            }
+        }
         scroll = Math.min(scroll, maxScroll);
         int width = list.width - (maxScroll > 0 ? units(1) : 0);
 
@@ -512,6 +540,11 @@ final class OptionsPage {
     /** One option: a rounded row, its name on the left in a column of its own, its control after it. */
     private void drawRow(Canvas canvas, Row row, Rect at, int mouseX, int mouseY) {
         Paint.roundRect(canvas, at.x, at.y, at.width, at.height, units(0.7), Palette.RAISED, 1f);
+        if (row.setting != null && row.setting == highlighted()) {
+            float left = 1f - (clock.getAsLong() - highlightedAt) / (float) HIGHLIGHT;
+            Paint.roundRect(canvas, at.x, at.y, at.width, at.height, units(0.7), Palette.RAISED_STRONG, left);
+            Paint.outline(canvas, at.x, at.y, at.width, at.height, units(0.7), Paint.fade(Palette.FOCUS, left));
+        }
         float size = textSize(0.92f);
         int padX = units(0.9);
         Ink.text(Panel.fit(row.label, Ink.Weight.REGULAR, size, units(9.5)), Ink.Weight.REGULAR, size, Palette.MUTED)

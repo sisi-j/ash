@@ -60,6 +60,9 @@ enum FeatureStatus {
     Degraded,
     /// The player switched it off in the client's settings. Not a problem.
     Off,
+    /// This version of the game can't have it: "Not on 1.21.11" on its
+    /// tile (spec 0007). Not a problem either, and never running.
+    Unsupported,
     /// A status a newer client knows and this launcher does not. Kept as a
     /// value rather than an error, so one unfamiliar word cannot throw away
     /// the rest of the report - including a feature that did degrade.
@@ -307,7 +310,9 @@ impl LoadReport {
     pub(crate) fn on(&self, switch: impl Fn(&str) -> Option<String>) -> Vec<String> {
         self.features
             .iter()
-            .filter(|f| f.status != FeatureStatus::Degraded)
+            .filter(|f| {
+                f.status != FeatureStatus::Degraded && f.status != FeatureStatus::Unsupported
+            })
             .filter(|f| match switch(&f.id.0).as_deref() {
                 None => false,
                 Some("true") => true,
@@ -332,6 +337,7 @@ impl LoadReport {
                 FeatureStatus::Loaded => "loaded",
                 FeatureStatus::Degraded => "degraded",
                 FeatureStatus::Off => "off",
+                FeatureStatus::Unsupported => "unsupported",
                 FeatureStatus::Other => "unknown",
             };
             line.push_str(&format!(" {}={status}", feature.id.0));

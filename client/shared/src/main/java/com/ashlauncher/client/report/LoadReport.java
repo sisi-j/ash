@@ -75,6 +75,26 @@ public final class LoadReport {
         return report;
     }
 
+    /**
+     * The report on this session on one version target. A feature the target
+     * can't have is left out, or, with the beta switch on, reported as not on
+     * it, as its tile says (spec 0007).
+     *
+     * @param beta whether this game was started by a test build (ADR-0029)
+     */
+    public static LoadReport forSession(String clientVersion, Target target, boolean beta,
+            Predicate<Feature> landed, Predicate<Feature> on) {
+        LoadReport report = new LoadReport(clientVersion);
+        for (Feature feature : Feature.values()) {
+            if (feature.existsOn(target)) {
+                report.with(feature, FeatureStatus.of(on.test(feature), landed.test(feature)));
+            } else if (beta) {
+                report.with(feature, FeatureStatus.UNSUPPORTED);
+            }
+        }
+        return report;
+    }
+
     /** Whether any of the player's own mods loaded, and whose copy of each bundled mod won. */
     public LoadReport withOrigins(ModOrigins origins, List<String> bundledIds) {
         thirdPartyMods = origins.thirdPartyModsLoaded();

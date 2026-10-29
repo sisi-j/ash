@@ -8,6 +8,7 @@ import com.ashlauncher.client.settings.Category;
 import com.ashlauncher.client.settings.Choice;
 import com.ashlauncher.client.settings.Colour;
 import com.ashlauncher.client.settings.OnOff;
+import com.ashlauncher.client.settings.Setting;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.settings.Whole;
@@ -220,7 +221,7 @@ public final class Panel {
         return now - openedAt < Motion.OPEN
                 || closingAt >= 0
                 || (viewChangedAt >= 0 && !Motion.pageSettled(now - viewChangedAt))
-                || (tilesShownAt >= 0 && !Motion.tilesSettled(visibleRows().size(), now - tilesShownAt,
+                || (tilesShownAt >= 0 && !Motion.tilesSettled(found().size(), now - tilesShownAt,
                         tilesStaggered));
     }
 
@@ -387,17 +388,22 @@ public final class Panel {
             // Typing on the tiles always searches; the box is where it shows.
             return true;
         }
-        List<SettingsScreen.Row> rows = visibleRows();
-        for (int i = 0; i < rows.size(); i++) {
-            SettingsScreen.Row row = rows.get(i);
-            Rect tile = tileAt(i);
+        List<SettingsScreen.Found> found = found();
+        for (int i = 0; i < found.size(); i++) {
+            SettingsScreen.Row row = found.get(i).row();
+            int slot = slotOf(i, found);
+            Rect tile = tileAt(slot);
             if (tile == null) {
                 continue;
             }
             // And where this tile is shown, if it is still arriving.
-            int ty = y - tileOffset(i - scroll * columns(), now);
+            int ty = y - tileOffset(slot - scroll * columns(), now);
             if (!tile.contains(x, ty)) {
                 continue;
+            }
+            if (model.beta() && starIn(tile).contains(x, ty)) {
+                model.star(row.feature());
+                return true;
             }
             if (!row.available()) {
                 say(row.whyUnavailable());
@@ -408,6 +414,9 @@ public final class Panel {
             } else {
                 // Every feature has a page, if only to say it has no options yet.
                 open(row);
+                if (found.get(i).option() != null) {
+                    page.highlight(found.get(i).option());
+                }
             }
             return true;
         }
@@ -650,17 +659,12 @@ public final class Panel {
         return new Rect(main.x, main.y, Math.min(units(19), main.width / 2), units(2.5));
     }
 
-    /** The tabs above the tiles - All, then each category a feature here is filed under - right to left from the bar's end. */
+    /** The tabs above the tiles - All, then each category with a tile in it - right to left from the bar's end. */
     private List<Tab> tabs() {
         List<Tab> tabs = new ArrayList<>();
         tabs.add(new Tab(null));
-        for (Category category : Category.values()) {
-            for (SettingsScreen.Row row : model.rows()) {
-                if (row.category() == category) {
-                    tabs.add(new Tab(category));
-                    break;
-                }
-            }
+        for (Category category : model.tabs()) {
+            tabs.add(new Tab(category));
         }
         Rect main = main();
         Rect search = searchBox();
@@ -712,19 +716,36 @@ public final class Panel {
     }
 
     /**
-     * The tiles on view: those in the selected tab whose name has what has
-     * been typed in it, in the order the file lists them.
+     * The tiles on view: those in the selected tab that what has been typed
+     * finds, as the model finds them - favourites first on All.
      */
+    List<SettingsScreen.Found> found() {
+        return model.find(query, tab);
+    }
+
     List<SettingsScreen.Row> visibleRows() {
-        String wanted = query.trim().toLowerCase(Locale.ROOT);
         List<SettingsScreen.Row> rows = new ArrayList<>();
-        for (SettingsScreen.Row row : model.rows()) {
-            boolean inTab = tab == null || row.category() == tab;
-            if (inTab && (wanted.isEmpty() || row.name().toLowerCase(Locale.ROOT).contains(wanted))) {
-                rows.add(row);
-            }
+        for (SettingsScreen.Found each : found()) {
+            rows.add(each.row());
         }
         return rows;
+    }
+
+    /**
+     * Where in the grid the tile at this place in the order goes. The
+     * favourites fill a row of their own, or rows, and the rest start on the
+     * next (spec 0007).
+     */
+    private int slotOf(int index, List<SettingsScreen.Found> found) {
+        int favourites = 0;
+        while (favourites < found.size() && found.get(favourites).favourite()) {
+            favourites++;
+        }
+        if (favourites == 0 || index < favourites) {
+            return index;
+        }
+        int favouriteRows = (favourites + columns() - 1) / columns();
+        return favouriteRows * columns() + index - favourites;
     }
 
     /** What has been typed into the search box. */
@@ -759,33 +780,54 @@ public final class Panel {
     }
 
     int maxScroll() {
-        int rows = (visibleRows().size() + columns() - 1) / columns();
+        List<SettingsScreen.Found> found = found();
+        if (found.isEmpty()) {
+            return 0;
+        }
+        int rows = slotOf(found.size() - 1, found) / columns() + 1;
         return Math.max(0, rows - rowsOnView());
     }
 
     /** Where a feature's tile is, or {@code null} when it is filtered out, scrolled out of view or a page is open. */
     Rect tileOf(Feature feature) {
-        List<SettingsScreen.Row> rows = visibleRows();
-        for (int i = 0; i < rows.size(); i++) {
-            if (rows.get(i).feature() == feature) {
-                return tileAt(i);
+        List<SettingsScreen.Found> found = found();
+        for (int i = 0; i < found.size(); i++) {
+            if (found.get(i).row().feature() == feature) {
+                return tileAt(slotOf(i, found));
             }
         }
         return null;
     }
 
-    /** Where the tile at this place in the order is, or {@code null} when it is scrolled out of view or a page is open. */
-    private Rect tileAt(int index) {
+    /** Where the tile in this slot of the grid is, or {@code null} when it is scrolled out of view or a page is open. */
+    private Rect tileAt(int slot) {
         if (page != null || ashSettings) {
             return null;
         }
-        int row = index / columns();
+        int row = slot / columns();
         if (row < scroll || row >= scroll + rowsOnView()) {
             return null;
         }
         Rect grid = grid();
-        return new Rect(grid.x + (index % columns()) * (tileWidth() + gap()),
+        return new Rect(grid.x + (slot % columns()) * (tileWidth() + gap()),
                 grid.y + (row - scroll) * (tileHeight() + gap()), tileWidth(), tileHeight());
+    }
+
+    /** A tile's star (spec 0007): its top-right corner, with the beta switch on. */
+    private Rect starIn(Rect tile) {
+        int side = units(1.35);
+        return new Rect(tile.x + tile.width - units(0.75) - side, tile.y + units(0.75), side, side);
+    }
+
+    /** The option highlighted on the open page just now, or {@code null}: for the tests. */
+    Setting<?> highlightedOption() {
+        return page == null ? null : page.highlighted();
+    }
+
+    /** A feature's star, for the real-game tests; {@code null} when it has none or is not on view. */
+    public Rect starOf(Feature feature) {
+        Rect tile = tileOf(feature);
+        return tile == null || !model.beta() ? null : starIn(tile);
     }
 
     /** The ENABLED / DISABLED button: beside the gear, or the tile's whole width when there is no gear (yet: #67). */
@@ -1093,27 +1135,28 @@ public final class Panel {
         drawTabs(canvas, mouseX, mouseY);
 
         Rect grid = grid();
-        List<SettingsScreen.Row> rows = visibleRows();
-        if (rows.isEmpty()) {
+        List<SettingsScreen.Found> found = found();
+        if (found.isEmpty()) {
             float size = textSize(0.92f);
-            String none = fit("No feature matches “" + query.trim() + "”.", Ink.Weight.REGULAR, size,
-                    grid.width);
+            String none = fit((model.beta() ? "Nothing matches “" : "No feature matches “") + query.trim() + "”.",
+                    Ink.Weight.REGULAR, size, grid.width);
             int width = Ink.width(none, Ink.Weight.REGULAR, size);
             Ink.text(none, Ink.Weight.REGULAR, size, Palette.MUTED)
                     .drawAt(canvas, grid.x + (grid.width - width) / 2, grid.y + units(4), 1f);
             return;
         }
         canvas.clip(grid.x, grid.y, grid.width, grid.height);
-        for (int i = 0; i < rows.size(); i++) {
-            Rect tile = tileAt(i);
+        for (int i = 0; i < found.size(); i++) {
+            int slot = slotOf(i, found);
+            Rect tile = tileAt(slot);
             if (tile != null) {
                 // Arriving, each tile below its place and faint; refused, shaking.
-                int place = i - scroll * columns();
-                SettingsScreen.Row row = rows.get(i);
+                int place = slot - scroll * columns();
+                SettingsScreen.Row row = found.get(i).row();
                 int dx = row.feature() == shaking ? units(Motion.shake(now - shakeAt)) : 0;
                 int dy = tileOffset(place, now);
-                drawTile(MovedCanvas.of(canvas, dx, dy, tileOpacity(place, now)), row, tile, now, mouseX - dx,
-                        mouseY - dy);
+                drawTile(MovedCanvas.of(canvas, dx, dy, tileOpacity(place, now)), row, found.get(i).option(), tile,
+                        now, mouseX - dx, mouseY - dy);
             }
         }
         canvas.unclip();
@@ -1145,7 +1188,8 @@ public final class Panel {
         int lineHeight = Ink.lineHeight(Ink.Weight.REGULAR, size);
         int textY = box.y + (box.height - lineHeight) / 2;
         if (!searching) {
-            Ink.text(fit("Search features", Ink.Weight.REGULAR, size, room), Ink.Weight.REGULAR, size,
+            String placeholder = model.beta() ? "Search features and options" : "Search features";
+            Ink.text(fit(placeholder, Ink.Weight.REGULAR, size, room), Ink.Weight.REGULAR, size,
                     Palette.PLACEHOLDER).drawAt(canvas, textX, textY, 1f);
             return;
         }
@@ -1206,7 +1250,9 @@ public final class Panel {
         }
     }
 
-    private void drawTile(Canvas canvas, SettingsScreen.Row row, Rect tile, long now, int mouseX, int mouseY) {
+    /** @param option the option a search found this tile by, named under its icon; {@code null} for none */
+    private void drawTile(Canvas canvas, SettingsScreen.Row row, Setting<?> option, Rect tile, long now, int mouseX,
+            int mouseY) {
         boolean available = row.available();
         float opacity = available ? 1f : 0.45f;
         int fill = available && tile.contains(mouseX, mouseY) ? Palette.RAISED_HOVER : Palette.RAISED;
@@ -1215,7 +1261,9 @@ public final class Panel {
         Paint.roundRect(canvas, tile.x, tile.y, tile.width, tile.height, units(0.9), fill, opacity);
 
         float nameSize = textSize(0.95f);
-        String name = fit(row.name(), Ink.Weight.SEMIBOLD, nameSize, tile.width - 2 * units(0.9));
+        // Clear of the star in the corner, with the beta switch on.
+        int nameMargin = model.beta() ? units(2.4) : units(0.9);
+        String name = fit(row.name(), Ink.Weight.SEMIBOLD, nameSize, tile.width - 2 * nameMargin);
         int nameWidth = Ink.width(name, Ink.Weight.SEMIBOLD, nameSize);
         int nameTop = tile.y + units(0.95);
         Ink.text(name, Ink.Weight.SEMIBOLD, nameSize, Palette.TEXT)
@@ -1227,8 +1275,19 @@ public final class Panel {
             canvas.draw(Ink.icon(icon, glyph.width, Palette.ICON), glyph.x, glyph.y, opacity);
         }
 
+        if (model.beta()) {
+            drawStar(canvas, row, starIn(tile), mouseX, mouseY);
+        }
+
         FpsMark mark = marks.apply(row.feature());
-        if (mark != null) {
+        if (option != null) {
+            // Found by an option: its name, where the FPS mark goes.
+            float size = textSize(0.82f);
+            String label = fit(option.label(), Ink.Weight.SEMIBOLD, size, tile.width - 2 * units(0.9));
+            int labelWidth = Ink.width(label, Ink.Weight.SEMIBOLD, size);
+            Ink.text(label, Ink.Weight.SEMIBOLD, size, Palette.TEXT)
+                    .drawAt(canvas, tile.x + (tile.width - labelWidth) / 2, markIn(tile).y, opacity);
+        } else if (mark != null) {
             Rect shape = markIn(tile);
             canvas.draw(Ink.fpsMark(mark.direction(), shape.width, shape.height, colourOf(mark)), shape.x, shape.y,
                     opacity);
@@ -1243,7 +1302,17 @@ public final class Panel {
         }
 
         drawToggle(canvas, toggleIn(tile, hasGear(row)), available, row.on(), onness(row.feature(), row.on(), now),
-                units(0.55), textSize(0.74f), opacity);
+                units(0.55), textSize(0.74f), opacity, row.notHere().toUpperCase(Locale.ROOT));
+    }
+
+    /** A tile's star: filled for a favourite; for the rest, an outline that brightens under the mouse. */
+    private void drawStar(Canvas canvas, SettingsScreen.Row row, Rect star, int mouseX, int mouseY) {
+        if (model.starred(row.feature())) {
+            canvas.draw(Ink.filledIcon(Ink.Icon.STAR, star.width, Palette.STAR), star.x, star.y, 1f);
+        } else {
+            int colour = star.contains(mouseX, mouseY) ? Palette.MUTED : Palette.PLACEHOLDER;
+            canvas.draw(Ink.icon(Ink.Icon.STAR, star.width, colour), star.x, star.y, 1f);
+        }
     }
 
     /** The ENABLED, DISABLED or UNAVAILABLE button: on a tile, and in an options page's header. */
@@ -1258,9 +1327,15 @@ public final class Panel {
      */
     static void drawToggle(Canvas canvas, Rect toggle, boolean available, boolean on, float onness, int radius,
             float labelSize, float opacity) {
+        drawToggle(canvas, toggle, available, on, onness, radius, labelSize, opacity, "");
+    }
+
+    /** @param notHere "NOT ON 1.21.11" for a feature this version can't have, in place of UNAVAILABLE; or empty */
+    private static void drawToggle(Canvas canvas, Rect toggle, boolean available, boolean on, float onness,
+            int radius, float labelSize, float opacity, String notHere) {
         int colour = !available ? Palette.UNAVAILABLE : blend(Palette.RED, Palette.GREEN, onness);
         Paint.roundRect(canvas, toggle.x, toggle.y, toggle.width, toggle.height, radius, colour, opacity);
-        String label = !available ? "UNAVAILABLE" : on ? "ENABLED" : "DISABLED";
+        String label = !notHere.isEmpty() ? notHere : !available ? "UNAVAILABLE" : on ? "ENABLED" : "DISABLED";
         // Spaced out a little, as the mockup's capitals are: 0.06 of the size.
         Raster text = Ink.text(label, Ink.Weight.BOLD, labelSize, Palette.TEXT, LABEL_TRACKING);
         int labelWidth = Ink.width(label, Ink.Weight.BOLD, labelSize, LABEL_TRACKING);

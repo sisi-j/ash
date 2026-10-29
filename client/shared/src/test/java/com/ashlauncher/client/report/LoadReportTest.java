@@ -92,4 +92,17 @@ class LoadReportTest {
         assertFalse(json.contains("freelook"), json);
         assertFalse(json.contains("degraded"), json);
     }
+
+    @Test
+    void a_feature_this_version_cannot_have_is_named_as_not_on_it_with_the_beta_switch_on() {
+        String beta = LoadReport.forSession("0.1.0", Target.V1_21_11, true, feature -> false, feature -> true)
+                .toJson();
+        String release = LoadReport.forSession("0.1.0", Target.V1_21_11, false, feature -> false, feature -> true)
+                .toJson();
+
+        assertTrue(beta.contains("\"id\": \"faster-clouds\", \"name\": \"Faster clouds\", \"status\": \"unsupported\""),
+                beta);
+        assertTrue(beta.contains("\"id\": \"crosshair\", \"name\": \"Crosshair\", \"status\": \"degraded\""), beta);
+        assertFalse(release.contains("faster-clouds"), release);
+    }
 }

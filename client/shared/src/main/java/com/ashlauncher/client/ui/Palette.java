@@ -41,6 +41,9 @@ final class Palette {
     static final int RED = 0xFFF0433A;
     /** No change: the design's grey, an FPS mark's bar. */
     static final int MARK_LEVEL = 0xFFA7ADA6;
+
+    /** A starred tile's star: warm, so a favourite stands out among the white. */
+    static final int STAR = 0xFFFACC15;
     /** The "FPS" under a mark: white at 75%. */
     static final int MARK_LABEL = 0xBFFFFFFF;
     /** A feature that did not load: the design's grey, faded. */
