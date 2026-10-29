@@ -6,7 +6,9 @@ module that cannot see the game.
 | | |
 | --- | --- |
 | `shared/` | Pure logic and the version seam. Cannot name a Minecraft type or a Fabric API type, and `checkNoGameTypes` fails the build if it does. Java 8 bytecode, because the 1.8.9 module consumes it. |
+| `target-26.3/` | The 26.3 adapter, the newest target (ADR-0028, research 0016). Loom 1.18's no-remap plugin: 26.x ships with Mojang's own names, so there is nothing to map. Fabric Loader 0.20.1, Fabric API. Java 25. Produces `ash-client-26.3.jar`. |
 | `target-1.21.11/` | The 1.21.11 adapter. Loom 1.18, Mojang mappings, Fabric Loader, Fabric API. Produces `ash-client-1.21.11.jar`. |
+| `target-1.20.4/` | The 1.20.4 adapter (ADR-0027). Loom 1.18, Mojang mappings, Fabric Loader, Fabric API. Produces `ash-client-1.20.4.jar`. |
 | `target-1.8.9/` | The 1.8.9 adapter. Loom 1.16 plus `legacy-looming`, Legacy Yarn, Legacy Fabric API. Produces `ash-client-1.8.9.jar`. |
 | `bench/` | The frame-time measurement's own logic: the scene, the camera's path, the summaries and the result file. A developer tool; only each target's `benchmark` source set uses it, and no player's jar holds any of it. See *Measuring frame time*. |
 
@@ -19,7 +21,10 @@ the Loom it companions, while the modern side is on 1.18.2. That costs nothing,
 because Loom is modularised: `fabric-loom` and `net.fabricmc.fabric-loom-remap`
 are different artifacts, so Gradle has no version to resolve between them and
 both sit on one plugin classpath. Each project prints its own at configure
-time. A third target on a third Loom would be the same story.
+time. A third target on a third Loom would be the same story. 26.3 uses the
+same 1.18.2 artifact under its no-remap id, `net.fabricmc.fabric-loom`, with
+no `mappings` line and `implementation` where the others say
+`modImplementation`.
 
 Why three modules rather than a source preprocessor spanning both:
 `docs/adr/0015-two-client-projects-over-a-shared-module.md`.
@@ -34,9 +39,9 @@ Needs a JDK **25 or newer** on `JAVA_HOME`: Fabric Loom 1.18 is compiled for
 Java 25 and will not resolve on anything older.
 
 That is the JDK that *builds*, which is a different thing from the JDK the
-game runs on — 1.21.11 wants Java 21 and 1.8.9 wants Java 8, and the launcher
-provisions those itself. `--release` in each module decides what bytecode
-comes out, so one modern JDK builds both targets.
+game runs on — 26.3 wants Java 25, 1.21.11 Java 21, 1.20.4 Java 17 and 1.8.9
+Java 8, and the launcher provisions those itself. `--release` in each module
+decides what bytecode comes out, so one modern JDK builds every target.
 
 The first build downloads Minecraft and Mojang's mappings and takes a couple
 of minutes; later ones are seconds.

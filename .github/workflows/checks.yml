@@ -142,6 +142,26 @@ jobs:
         run: ./gradlew :target-1.21.11:runClientGameTestSodium
         working-directory: client
 
+      # 26.3, the newest target (ADR-0028): ash loads, the cape draws, and
+      # ash's settings open with a search typed into them - under 26.3's SDL
+      # input, which hands typing only to a screen that started text input.
+      #
+      # On Vulkan, through Mesa's software Vulkan driver. Under Xvfb, 26.3's
+      # SDL3 finds no GLX visual to make an OpenGL window with, at any screen
+      # depth (runs 40948510183 and 40989066716), and falls back to Vulkan -
+      # which needs a driver the runner lacks. Fabric API's own 26.3 client
+      # tests do the same: their "opengl" job falls back to Vulkan on
+      # llvmpipe. So CI tests ash's 26.3 client on Vulkan, and a player's game
+      # on OpenGL is checked by hand, in the benchmark sitting (#185). The
+      # timeout makes a game that cannot open a window fail in minutes rather
+      # than wait for one until the job's limit.
+      - if: ${{ !cancelled() }}
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
+      - if: ${{ !cancelled() }}
+        run: ./gradlew :target-26.3:runClientGameTest
+        timeout-minutes: 8
+        working-directory: client
+
       # 1.20.4 predates Fabric's client game tests (they begin with 1.21.4),
       # so it has ash's own smoke test, as 1.8.9 does: a real client that
       # loads ash, reads the launcher's server list, walks into a flat world,
@@ -187,6 +207,8 @@ jobs:
             client/target-1.21.11/build/run/clientGameTest/logs/
             client/target-1.21.11/build/run/clientGameTestSodium/screenshots/
             client/target-1.21.11/build/run/clientGameTestSodium/logs/
+            client/target-26.3/build/run/clientGameTest/screenshots/
+            client/target-26.3/build/run/clientGameTest/logs/
             client/target-1.20.4/build/run/smoketest/logs/
             client/target-1.20.4/build/run/smoketest/screenshots/
             client/target-1.8.9/build/run/smoketest/logs/

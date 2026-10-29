@@ -1,5 +1,6 @@
-//! The first run (spec 0005): three instances ready after the first sign-in,
-//! when the player has none.
+//! The first run (spec 0005): an instance for each version target ready after
+//! the first sign-in, when the player has none - four in a test build, with
+//! 26.3, the newest, first (spec 0007, ADR-0028).
 
 use std::sync::Arc;
 
@@ -7,7 +8,7 @@ use ash_core::credentials::InMemoryCredentialStore;
 use ash_core::http::{FakeHttp, HttpPort};
 use ash_core::process::FakeProcessPort;
 use ash_core::servers::FakeServerPort;
-use ash_core::{Ash, Config, Loader};
+use ash_core::{pins, Ash, Config, Loader};
 
 fn ash(root: &std::path::Path) -> Ash {
     Ash::new(
@@ -38,6 +39,33 @@ fn a_player_with_no_instances_gets_one_for_each_version_target() {
         ]
     );
     assert_eq!(ash.instances().unwrap().len(), 3);
+}
+
+#[test]
+fn a_test_build_makes_26_3_too_newest_first() {
+    let tmp = tempfile::tempdir().unwrap();
+    let ash = Ash::new(
+        Config { beta: true, loaders: pins(true), ..Config::rooted_at(tmp.path()) },
+        FakeHttp::new() as Arc<dyn HttpPort>,
+        InMemoryCredentialStore::new(),
+        FakeProcessPort::new(),
+        FakeServerPort::new(),
+        "test-client",
+    );
+
+    let made = ash.make_first_run_instances().unwrap();
+
+    let what: Vec<(&str, Loader)> =
+        made.iter().map(|i| (i.version_id.as_str(), i.loader)).collect();
+    assert_eq!(
+        what,
+        [
+            ("26.3", Loader::Fabric),
+            ("1.21.11", Loader::Fabric),
+            ("1.20.4", Loader::Fabric),
+            ("1.8.9", Loader::LegacyFabric)
+        ]
+    );
 }
 
 #[test]

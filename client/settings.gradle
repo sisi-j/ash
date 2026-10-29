@@ -30,3 +30,5 @@ include 'bench'
 include 'target-1.21.11'
 include 'target-1.20.4'
 include 'target-1.8.9'
+// The newest release's (ADR-0028): moves forward as Minecraft releases.
+include 'target-26.3'

@@ -66,14 +66,10 @@ pub use installation::InstallationCheck;
 pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use links::Links;
 
-/// What the first run makes, newest target first (spec 0005, ADR-0027).
-const FIRST_RUN_INSTANCES: &[(&str, Loader)] =
-    &[("1.21.11", Loader::Fabric), ("1.20.4", Loader::Fabric), ("1.8.9", Loader::LegacyFabric)];
-
 /// Whether the first run has been dealt with on this machine.
 const FIRST_RUN_FILE: &str = "first-run-instances";
 pub use load_report::DegradationNotice;
-pub use loader::{Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
+pub use loader::{pins, Loader, LoaderPin, PinnedFile, PinnedLibrary, PinnedNative};
 pub use mods::{InstallOutcome, InstalledMod, ModEntry, ModHit, ModSearch, ModSort};
 pub use news::{News, NewsKind, NewsPost};
 pub use overrides::{
@@ -872,6 +868,10 @@ impl Ash {
     /// to play, when the player has none - not even one a sync just brought.
     /// Asked once per machine: deleting them all later doesn't bring them
     /// back. Nothing downloads until the player presses LAUNCH GAME.
+    ///
+    /// A version target is a pin with ash's client in it, newest first as the
+    /// pins are listed: 26.3, 1.21.11, 1.20.4 and 1.8.9 in a test build, the
+    /// last three in a release one (spec 0007, ADR-0028).
     pub fn make_first_run_instances(&self) -> Result<Vec<Instance>, AshError> {
         let asked = self.config.data_root.join(FIRST_RUN_FILE);
         if asked.exists() {
@@ -879,8 +879,8 @@ impl Ash {
         }
         let mut made = Vec::new();
         if self.instances()?.is_empty() {
-            for (version, loader) in FIRST_RUN_INSTANCES {
-                made.push(self.create_instance(version, version, *loader)?);
+            for pin in self.config.loaders.iter().filter(|pin| pin.client_jar.is_some()) {
+                made.push(self.create_instance(pin.version_id, pin.version_id, pin.loader)?);
             }
         }
         std::fs::create_dir_all(&self.config.data_root)

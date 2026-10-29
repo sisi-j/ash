@@ -4,7 +4,9 @@ package com.ashlauncher.client.report;
 public enum Target {
     V1_8_9("1.8.9"),
     V1_20_4("1.20.4"),
-    V1_21_11("1.21.11");
+    V1_21_11("1.21.11"),
+    /** The newest release, which moves forward as Minecraft releases (ADR-0028). */
+    V26_3("26.3");
 
     private final String version;
 

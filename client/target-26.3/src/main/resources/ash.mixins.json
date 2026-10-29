@@ -1,0 +1,19 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.ashlauncher.client.v26_3.mixin",
+  "plugin": "com.ashlauncher.client.mixin.AshMixinPlugin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "AbstractClientPlayerCapeMixin",
+    "CameraMixin",
+    "ClientPacketListenerMixin",
+    "HudCrosshairMixin",
+    "KeyboardInputMixin",
+    "MouseHandlerMixin",
+    "OverlayTextureAccess"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

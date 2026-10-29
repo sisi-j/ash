@@ -1,0 +1,371 @@
+package com.ashlauncher.client.v26_3;
+
+import com.ashlauncher.client.Beta;
+import com.ashlauncher.client.crosshair.Cross;
+import com.ashlauncher.client.crosshair.Crosshair;
+import com.ashlauncher.client.crosshair.CrosshairHook;
+import com.ashlauncher.client.freelook.Freelook;
+import com.ashlauncher.client.freelook.FreelookHook;
+import com.ashlauncher.client.cosmetics.CapeSource;
+import com.ashlauncher.client.fairplay.FairPlay;
+import com.ashlauncher.client.fairplay.FairPlayNotes;
+import com.ashlauncher.client.cosmetics.Cosmetics;
+import com.ashlauncher.client.hit.HitColour;
+import com.ashlauncher.client.hit.HitHook;
+import com.ashlauncher.client.hit.HitIndicator;
+import com.ashlauncher.client.hud.HudItems;
+import com.ashlauncher.client.hud.HudLayout;
+import com.ashlauncher.client.hud.Marker;
+import com.ashlauncher.client.mixin.MixinFeature;
+import com.ashlauncher.client.report.Feature;
+import com.ashlauncher.client.report.LoadReport;
+import com.ashlauncher.client.report.ModOrigins;
+import com.ashlauncher.client.report.Target;
+import com.ashlauncher.client.settings.Settings;
+import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.snaplook.Snaplook;
+import com.ashlauncher.client.sprint.ToggleSprint;
+import com.ashlauncher.client.sprint.ToggleSprintHook;
+import com.ashlauncher.client.ui.draw.Ink;
+import com.mojang.blaze3d.platform.InputConstants;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModOrigin;
+import net.minecraft.client.Camera;
+import net.minecraft.client.CameraType;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.MouseHandler;
+import net.minecraft.client.gui.Hud;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.player.KeyboardInput;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+/**
+ * Where ash's client starts on 26.3.
+ *
+ * <p>Named in {@code fabric.mod.json} as the client entrypoint, which is also
+ * what puts ash in the game's own mod list.
+ */
+public final class AshClient implements ClientModInitializer {
+
+    /** Log4j rather than SLF4J so that both targets log the same way. */
+    private static final Logger LOG = LogManager.getLogger("ash");
+
+    /**
+     * Modern Fabric API names every HUD element, and ours are no exception -
+     * a named element can be reordered or removed later without anyone having
+     * to find it first. The 1.8.9 API has no such thing, which is why the
+     * identifiers stop here and never reach the shared module.
+     */
+    private static final Identifier MARKER = Identifier.fromNamespaceAndPath("ash", "marker");
+
+    private static final Identifier HUD_ITEMS = Identifier.fromNamespaceAndPath("ash", "hud_items");
+
+    private static final Identifier HIT_INDICATOR = Identifier.fromNamespaceAndPath("ash", "hit_indicator");
+
+    /** By name: a mixin class cannot be named by a class literal, because loading one directly is an error. */
+    private static final String TOGGLE_SPRINT_MIXIN = "com.ashlauncher.client.v26_3.mixin.KeyboardInputMixin";
+
+    private static final String CROSSHAIR_MIXIN = "com.ashlauncher.client.v26_3.mixin.HudCrosshairMixin";
+
+    private static final String HIT_INDICATOR_MIXIN = "com.ashlauncher.client.v26_3.mixin.ClientPacketListenerMixin";
+
+    private static final String FREELOOK_CAMERA_MIXIN = "com.ashlauncher.client.v26_3.mixin.CameraMixin";
+
+    private static final String FREELOOK_MOUSE_MIXIN = "com.ashlauncher.client.v26_3.mixin.MouseHandlerMixin";
+
+    private static final String HIT_COLOUR_MIXIN = "com.ashlauncher.client.v26_3.mixin.OverlayTextureAccess";
+    private static final String COSMETICS_MIXIN = "com.ashlauncher.client.v26_3.mixin.AbstractClientPlayerCapeMixin";
+
+    /**
+     * The HUD items this session draws, so the real-game test can ask them -
+     * not the screenshot - whether they draw. Package-private and set once.
+     */
+    static HudItems hudItems;
+
+    /** This session's settings, for the real-game test to style a HUD item with. */
+    static Settings settings;
+
+    /** The hit indicator this session draws, if its mixin landed, for the real-game test to ask. */
+    static HitIndicator hitIndicator;
+
+    /** Freelook and its key, if its mixins landed, for the real-game test to drive and ask. */
+    static Freelook<CameraType> freelook;
+
+    static KeyMapping freelookKey;
+
+    /** The settings screen's model, for the real-game test to ask what a tile says. */
+    static SettingsScreen settingsScreen;
+
+    /** Snaplook and its key, for the real-game test to drive and ask. */
+    static Snaplook<CameraType> snaplook;
+
+    static KeyMapping snaplookKey;
+
+    @Override
+    public void onInitializeClient() {
+        // Inter for ash's settings panel, loaded now on a thread of its own so
+        // the first time the panel opens it is ready.
+        Ink.preload(LOG::warn);
+        Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
+        AshClient.settings = settings;
+        settings.problems().forEach(LOG::warn);
+
+        Marker marker = new Marker();
+        // One layout for the HUD items and the settings screen's Edit HUD, so
+        // the box the player drags is where the item draws.
+        HudLayout hudLayout = new HudLayout(settings);
+        HudItems hudItems = new HudItems(hudLayout, MinecraftGameView.INSTANCE, Beta.on(), System::currentTimeMillis);
+        AshClient.hudItems = hudItems;
+
+        // Last, so nothing vanilla draws over them. That is a decision about
+        // this target's element registry rather than about either feature, so
+        // it lives here. It is also why both check `hudHidden()` themselves:
+        // Fabric documents that `addLast` inherits no render condition, so
+        // unlike every vanilla element but the sleep overlay, these would
+        // otherwise draw through F1.
+        HudElementRegistry.addLast(MARKER, (graphics, tickCounter) ->
+                marker.draw(new GuiGraphicsHudSurface(graphics)));
+        HudElementRegistry.addLast(HUD_ITEMS, (graphics, tickCounter) ->
+                hudItems.draw(new GuiGraphicsHudSurface(graphics)));
+
+        // Every feature, less any whose mixin did not land. The settings
+        // screen and the load report both read this one set.
+        Set<Feature> landed = EnumSet.allOf(Feature.class);
+        boolean toggleSprintLanded = MixinFeature.landed(() -> KeyboardInput.class, TOGGLE_SPRINT_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.TOGGLE_SPRINT.displayName(), why)));
+        if (!toggleSprintLanded) {
+            landed.remove(Feature.TOGGLE_SPRINT);
+        }
+
+        // ash's crosshair, drawn from inside the game's own crosshair drawing
+        // so that every rule the game has about when to show one still holds.
+        boolean crosshairLanded = MixinFeature.landed(() -> Hud.class, CROSSHAIR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.CROSSHAIR.displayName(), why)));
+        if (crosshairLanded) {
+            // Built from the settings every frame, so a change on the settings
+            // screen shows on the next one.
+            CrosshairHook.install(new Crosshair(() -> settings.get(Settings.CROSSHAIR), () -> Cross.of(settings)));
+        } else {
+            landed.remove(Feature.CROSSHAIR);
+        }
+
+        // The hit indicator: the server's damage event names who caused it, so
+        // a hit is the player's exactly, with no guessing from their clicks.
+        boolean hitIndicatorLanded = MixinFeature.landed(() -> ClientPacketListener.class, HIT_INDICATOR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_INDICATOR.displayName(), why)));
+        if (hitIndicatorLanded) {
+            hitIndicator = HitIndicator.from(settings, HitHook::clockMillis);
+            HitHook.install(hitIndicator, null);
+            // Around the middle pixel of the game's crosshair, which it draws
+            // at ((width - 15) / 2, (height - 15) / 2) with its centre on pixel 7.
+            HudElementRegistry.addLast(HIT_INDICATOR, (graphics, tickCounter) ->
+                    HitHook.draw(new GuiGraphicsHudSurface(graphics), (graphics.guiWidth() - 15) / 2 + 7,
+                            (graphics.guiHeight() - 15) / 2 + 7));
+        } else {
+            landed.remove(Feature.HIT_INDICATOR);
+        }
+
+        // R, under Movement beside the game's own Sprint. Free by default on
+        // both targets - read from each game's options, not from a list - and
+        // rebindable in Controls. Registered whenever the mixin landed, on or
+        // off: bindings can only be registered now, at startup, and the player
+        // can switch the feature on from the settings screen mid-session.
+        // While it is off, the key does nothing.
+        if (toggleSprintLanded) {
+            KeyMapping toggleSprintKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                    ToggleSprint.BINDING_NAME, InputConstants.Type.KEYBOARD, InputConstants.KEY_R,
+                    KeyMapping.Category.MOVEMENT));
+            ToggleSprintHook.install(new ToggleSprint(new KeyMappingToggleKey(toggleSprintKey),
+                    () -> settings.get(Settings.TOGGLE_SPRINT)));
+        }
+
+        // Freelook: the mouse's turn diverted from the player, and the camera's
+        // angles answered from freelook, while its key is held. Both mixins or
+        // neither: a camera that turns with nothing turning it, or a mouse that
+        // turns nothing, is not freelook.
+        boolean freelookLanded = MixinFeature.landed(() -> Camera.class, FREELOOK_CAMERA_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.FREELOOK.displayName(), why)))
+                && MixinFeature.landed(() -> MouseHandler.class, FREELOOK_MOUSE_MIXIN,
+                        why -> LOG.warn(MixinFeature.didNotLoad(Feature.FREELOOK.displayName(), why)));
+        CurrentServer currentServer = new CurrentServer(LOG::info);
+        if (freelookLanded) {
+            // Left Alt, which the game binds to nothing. Under Misc, beside
+            // ash's settings key; rebindable in Controls.
+            KeyMapping freelookKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                    Freelook.BINDING_NAME, InputConstants.Type.KEYBOARD, InputConstants.KEY_LALT,
+                    KeyMapping.Category.MISC));
+            Freelook<CameraType> freelook = new Freelook<>(new OptionsCameraModes(),
+                    () -> settings.get(Settings.FREELOOK),
+                    () -> FairPlay.inForce().whyOff(Feature.FREELOOK, MinecraftGameView.INSTANCE),
+                    why -> Minecraft.getInstance().gui.hud.setOverlayMessage(Component.literal(why), false));
+            FreelookHook.install(freelook);
+            AshClient.freelook = freelook;
+            AshClient.freelookKey = freelookKey;
+            ClientTickEvents.END_CLIENT_TICK.register(client -> {
+                if (client.player != null) {
+                    freelook.tick(freelookKey.isDown(), client.gui.screen() != null, client.player.getYRot(),
+                            client.player.getXRot());
+                }
+            });
+        } else {
+            landed.remove(Feature.FREELOOK);
+        }
+        ClientTickEvents.END_CLIENT_TICK.register(client -> currentServer.tick());
+        // How long the game took to start, into its log once (BootClock).
+        ClientTickEvents.END_CLIENT_TICK.register(client -> com.ashlauncher.client.perf.BootClock.tick(
+                client.gui.screen() instanceof net.minecraft.client.gui.screens.TitleScreen,
+                () -> ProcessHandle.current().info().startInstant().map(java.time.Instant::toEpochMilli).orElse(-1L),
+                client::stop));
+
+        // Hit colour: the overlay texture's red rows, rewritten when the
+        // colour changes. Off, or before any change, they hold the game's own.
+        boolean hitColourLanded = MixinFeature.landed(() -> OverlayTexture.class, HIT_COLOUR_MIXIN,
+                why -> LOG.warn(MixinFeature.didNotLoad(Feature.HIT_COLOUR.displayName(), why)));
+        if (hitColourLanded) {
+            HitColourTexture hitColour = new HitColourTexture(new HitColour(settings));
+            ClientTickEvents.END_CLIENT_TICK.register(client -> hitColour.tick());
+        } else {
+            landed.remove(Feature.HIT_COLOUR);
+        }
+
+        // Cosmetics: ash players' capes, drawn by the game's own cape layer
+        // from ash's texture (research 0012). Looked up from ash's CDN in the
+        // background, never on the way to a frame.
+        boolean cosmeticsLanded = MixinFeature.landed(() -> net.minecraft.client.player.AbstractClientPlayer.class,
+                COSMETICS_MIXIN, why -> LOG.warn(MixinFeature.didNotLoad(Feature.COSMETICS.displayName(), why)));
+        if (cosmeticsLanded) {
+            com.ashlauncher.client.v26_3.cosmetics.CapeTextures.install(new Cosmetics(CapeSource.forGame(),
+                    () -> settings.get(Settings.COSMETICS), () -> settings.get(Settings.COSMETICS_HIDE_OTHERS),
+                    () -> net.minecraft.client.Minecraft.getInstance().getUser().getProfileId()));
+        } else {
+            landed.remove(Feature.COSMETICS);
+        }
+
+        // Snaplook: the game's own front view while Z is held, Z being a key
+        // the game binds to nothing. No mixin, so nothing to land: the key
+        // and the camera mode are both the game's public API.
+        snaplookKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                Snaplook.BINDING_NAME, InputConstants.Type.KEYBOARD, InputConstants.KEY_Z, KeyMapping.Category.MISC));
+        snaplook = new Snaplook<>(new OptionsCameraModes(), () -> settings.get(Settings.SNAPLOOK));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.player != null) {
+                snaplook.tick(snaplookKey.isDown(), client.gui.screen() != null);
+            }
+        });
+
+        Runnable writeReport = () -> writeLoadReport(settings, landed);
+        // The fair-play list's note, once per join, naming each feature the
+        // player has on that is off on the server they joined, and why
+        // (spec 0007). Beta phase 1's, so a test build's alone (ADR-0029).
+        if (Beta.on()) {
+            FairPlayNotes notes = new FairPlayNotes(FairPlay.inForce(), MinecraftGameView.INSTANCE,
+                    feature -> settings.on(feature) && landed.contains(feature),
+                    line -> Minecraft.getInstance().gui.hud.getChat().addClientSystemMessage(Component.literal("[ash] " + line)));
+            ClientTickEvents.END_CLIENT_TICK.register(client -> notes.tick());
+        }
+
+        // A feature off on this server by the fair-play list says so on its
+        // tile, and can't be switched there, as the spec's settings screen asks.
+        SettingsScreen settingsScreen = new SettingsScreen(settings, Target.V26_3, Beta.on(), landed::contains,
+                feature -> FairPlay.inForce().whyOff(feature, MinecraftGameView.INSTANCE), writeReport, hudLayout);
+        AshClient.settingsScreen = settingsScreen;
+
+        // Right Shift, which neither target binds by default. Polled on Fabric
+        // API's client tick, which is inside the Fabric API ash already ships.
+        // A binding gets no presses while a screen is open, so this only ever
+        // opens the screen; the screen closes itself on the same key.
+        KeyMapping settingsKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                SettingsScreen.BINDING_NAME, InputConstants.Type.KEYBOARD, InputConstants.KEY_RSHIFT,
+                KeyMapping.Category.MISC));
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (settingsKey.consumeClick()) {
+                if (client.gui.screen() == null) {
+                    client.gui.setScreen(new AshSettingsScreen(settingsScreen, settingsKey));
+                }
+            }
+        });
+
+        writeReport.run();
+    }
+
+    /**
+     * What this session is running, for the launcher - written at startup and
+     * again whenever a setting changes, so the report says what the session
+     * ended with.
+     */
+    private static void writeLoadReport(Settings settings, Set<Feature> landed) {
+        try {
+            LoadReport.forSession(clientVersion(), Target.V26_3, Beta.on(), landed::contains, settings::on)
+                    .withOrigins(modOrigins(), BUNDLED)
+                    .writeTo(FabricLoader.getInstance().getGameDir());
+        } catch (IOException unwritable) {
+            LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
+        }
+    }
+
+    /**
+     * ash's bundled mods on this target, by mod id: the copies the loader
+     * could have swapped for a player's own. Ids, not file names - one of
+     * Legacy Fabric's differs from its jar's name.
+     */
+    private static final List<String> BUNDLED = Arrays.asList("fabric-api");
+
+    /**
+     * Where each loaded mod came from, read from the loader, for the report to
+     * say whether the player's own mods were involved.
+     */
+    private static ModOrigins modOrigins() {
+        FabricLoader loader = FabricLoader.getInstance();
+        // ash moves the folder while the player's mods are off; unset, it is the instance's own.
+        String moved = System.getProperty("fabric.modsFolder");
+        Path modsFolder = moved != null ? Paths.get(moved) : loader.getGameDir().resolve("mods");
+        Map<String, List<Path>> files = new HashMap<>();
+        for (ModContainer mod : loader.getAllMods()) {
+            List<Path> from = filesOf(loader, mod, 0);
+            if (!from.isEmpty()) {
+                files.put(mod.getMetadata().getId(), from);
+            }
+        }
+        return ModOrigins.of(modsFolder, files);
+    }
+
+    /** The jar a mod came in: its own, or for one nested in another, the outermost. */
+    private static List<Path> filesOf(FabricLoader loader, ModContainer mod, int depth) {
+        ModOrigin origin = mod.getOrigin();
+        if (origin.getKind() == ModOrigin.Kind.PATH) {
+            return origin.getPaths();
+        }
+        if (origin.getKind() == ModOrigin.Kind.NESTED && depth < 8) {
+            return loader.getModContainer(origin.getParentModId())
+                    .map(parent -> filesOf(loader, parent, depth + 1))
+                    .orElse(Collections.<Path>emptyList());
+        }
+        return Collections.emptyList();
+    }
+
+    private static String clientVersion() {
+        return FabricLoader.getInstance().getModContainer("ash")
+                .map(ash -> ash.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
+    }
+}

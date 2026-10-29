@@ -158,6 +158,18 @@ fn pins() -> &'static [LoaderPin] {
     })
 }
 
+/// The same pin in 26.3's shape (research 0016): the loader jar alone, with no
+/// intermediary, as Fabric's pins are from 26.x, which runs on Mojang's names.
+fn pins_without_an_intermediary() -> &'static [LoaderPin] {
+    static PINS: OnceLock<&'static [LoaderPin]> = OnceLock::new();
+
+    PINS.get_or_init(|| {
+        let pin = &pins()[0];
+        let loader_only: &'static [PinnedLibrary] = Box::leak(Box::new([pin.libraries[1]]));
+        Box::leak(Box::new([LoaderPin { libraries: loader_only, ..*pin }]))
+    })
+}
+
 fn version_json() -> String {
     format!(
         r#"{{"id":"{VERSION}","type":"release",
@@ -256,6 +268,37 @@ impl Fixture {
 }
 
 // ---- preparing --------------------------------------------------------------
+
+#[tokio::test]
+async fn a_pin_with_no_intermediary_prepares_and_launches_on_the_loader_alone() {
+    let f = fixture_from(serving(), |config| Config {
+        loaders: pins_without_an_intermediary(),
+        ..config
+    });
+    let id = f.modded().await;
+
+    f.prepare(&id).await;
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
+
+    let classpath = value_of(&view.args, "-cp").expect("a classpath");
+    assert!(
+        classpath.contains("fabric-loader-9.9.9.jar"),
+        "the loader is not on the classpath: {classpath}"
+    );
+    assert!(
+        !classpath.contains("intermediary"),
+        "an intermediary is on the classpath: {classpath}"
+    );
+    assert!(
+        !f.tmp.path().join("depot").join(depot_relative(INTERMEDIARY)).exists(),
+        "an intermediary was fetched"
+    );
+    assert!(
+        property(&view.args, "fabric.addMods").unwrap().contains(ASH_CLIENT),
+        "ash's client was not handed over"
+    );
+    assert!(view.args.iter().any(|a| a == KNOT), "the loader's main class did not start the game");
+}
 
 #[tokio::test]
 async fn a_fabric_instance_fetches_the_loader_the_intermediary_and_the_api() {

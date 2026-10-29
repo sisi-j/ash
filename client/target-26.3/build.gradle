@@ -1,0 +1,102 @@
+// The 26.3 half of ash's client (ADR-0028, research 0016): everything that
+// has to name a Minecraft type or a Fabric API one. Thin, as the other
+// targets are - the logic belongs in `:shared`, where a test can reach it.
+//
+// 26.x ships with Mojang's own names, so there is nothing to remap: Loom's
+// no-remap plugin, the same artifact the other targets use under its other
+// id, no `mappings` line, `implementation` for mods and `jar` for the jar a
+// player gets (research 0016, section 6).
+
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+version = mod_version
+group = maven_group
+
+base {
+    // A fixed name, as on every target: the launcher looks this jar up by name.
+    archivesName = "ash-client-${minecraft_version_26_3}"
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version_26_3}"
+    implementation "net.fabricmc:fabric-loader:${loader_version_26_3}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version_26_3}"
+
+    // Compiled against, and folded into the jar below.
+    implementation project(':shared')
+
+    // Fabric Loader JUnit: the loader stood up inside the test JVM, for
+    // AshMixinsLandTest against the real game classes.
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation "net.fabricmc:fabric-loader-junit:${loader_version_26_3}"
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // The version the build expanded into `fabric.mod.json`, so the test can
+    // say the expansion happened rather than repeating the literal.
+    systemProperty 'ash.test.version', version
+}
+
+// 26.3 runs on Java 25 (`java-runtime-epsilon`), which the launcher provisions.
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+}
+
+// Fabric's client game tests, as on 1.21.11: a real vanilla client,
+// launched and asked whether ash loaded. `eula = true` is a literal
+// acceptance of the Minecraft EULA on behalf of whoever runs this build:
+// `docs/adr/0016-ci-accepts-the-minecraft-eula.md`.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = 'ash-client-gametest'
+        enableClientGameTests = true
+        eula = true
+    }
+}
+
+loom {
+    runs {
+        clientGameTest {
+            // The cape test's own CDN, started by AshLoadsGameTest (TestCdn).
+            property 'ash.cosmetics.cdn', 'http://127.0.0.1:25613'
+        }
+    }
+}
+
+// The beta switch (ADR-0029). Every run of the game from here is a test
+// build, so beta work is tested on every pull request. A player's jar is the
+// same either way: the launcher that starts the game says which build it was.
+loom {
+    runs.configureEach {
+        property 'ash.beta', 'true'
+    }
+}
+
+processResources {
+    // Written into `fabric.mod.json` rather than repeated there, so what the
+    // client declares it needs cannot drift from what it was built against.
+    inputs.property 'version', version
+    inputs.property 'minecraft_version', minecraft_version_26_3
+    inputs.property 'loader_version', loader_version_26_3
+
+    filesMatching('fabric.mod.json') {
+        expand version: version,
+                minecraft_version: minecraft_version_26_3,
+                loader_version: loader_version_26_3
+    }
+}
+
+tasks.named('jar') {
+    // Fabric Loader loads one jar. The shared module's classes go inside this
+    // one; a library jar sitting beside it would simply not be there.
+    from project(':shared').sourceSets.main.output
+}
+
+// The version lives in `fabric.mod.json`, not in the file name.
+tasks.withType(AbstractArchiveTask).configureEach {
+    archiveVersion = ''
+}
