@@ -4,10 +4,11 @@ import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
-import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
 import com.ashlauncher.client.cosmetics.CapeSource;
+import com.ashlauncher.client.fairplay.FairPlay;
+import com.ashlauncher.client.fairplay.FairPlayNotes;
 import com.ashlauncher.client.cosmetics.Cosmetics;
 import com.ashlauncher.client.hit.HitColour;
 import com.ashlauncher.client.hit.HitColourHook;
@@ -52,6 +53,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.WorldRenderer;
+import net.minecraft.text.LiteralText;
 import net.minecraft.world.World;
 import net.minecraft.client.render.entity.LivingEntityRenderer;
 import net.minecraft.entity.player.ClientPlayerEntity;
@@ -65,7 +67,7 @@ import org.lwjgl.input.Keyboard;
  * <p>Named in {@code fabric.mod.json} as the client entrypoint, which is also
  * what puts ash in the game's own mod list.
  *
- * <p>What it draws is {@link Marker} and {@link FpsReadout}, unchanged and
+ * <p>What it draws is {@link Marker} and the {@link HudItems}, unchanged and
  * shared with the modern target. Everything that differs between the two is in
  * this package, and the whole of the difference is worth seeing: modern Fabric
  * API takes named elements into an ordered registry, and this takes a callback
@@ -220,7 +222,8 @@ public final class AshClient implements ClientModInitializer {
             KeyBinding freelookKey = KeyBindingHelper.registerKeyBinding(
                     new KeyBinding(Freelook.BINDING_NAME, Keyboard.KEY_LMENU, "key.categories.misc"));
             Freelook<Integer> freelook = new Freelook<>(new Perspective(),
-                    () -> settings.get(Settings.FREELOOK), () -> BlockList.here(LegacyGameView.INSTANCE),
+                    () -> settings.get(Settings.FREELOOK),
+                    () -> FairPlay.inForce().whyOff(Feature.FREELOOK, LegacyGameView.INSTANCE),
                     why -> MinecraftClient.getInstance().inGameHud.setOverlayMessage(why, false));
             FreelookHook.install(freelook);
             FreelookKey.install(freelookKey, freelook);
@@ -293,15 +296,22 @@ public final class AshClient implements ClientModInitializer {
         }
 
         Runnable writeReport = () -> writeLoadReport(settings, landed);
+        // The fair-play list's note, once per join, naming each feature the
+        // player has on that is off on the server they joined, and why
+        // (spec 0007). Beta phase 1's, so a test build's alone (ADR-0029).
+        // Ticked with the current server, by its mixin.
+        if (Beta.on()) {
+            CurrentServer.notes(new FairPlayNotes(FairPlay.inForce(), LegacyGameView.INSTANCE,
+                    feature -> settings.on(feature) && landed.contains(feature),
+                    line -> MinecraftClient.getInstance().inGameHud.getChatHud().addMessage(
+                            new LiteralText("[ash] " + line))));
+        }
+
         if (settingsKeyLanded) {
-            // Freelook's row says why it is off on a listed server, and cannot
-            // be switched there, as on 1.21.11.
+            // A feature off on this server by the fair-play list says so on its
+            // tile, and can't be switched there, as on 1.21.11.
             SettingsScreen settingsScreen = new SettingsScreen(settings, Target.V1_8_9, Beta.on(), landed::contains,
-                    feature -> {
-                        BlockList.Server here = feature == Feature.FREELOOK ? BlockList.here(LegacyGameView.INSTANCE) : null;
-                        return here == null ? "" : here.whyOff();
-                    },
-                    writeReport, hudLayout);
+                    feature -> FairPlay.inForce().whyOff(feature, LegacyGameView.INSTANCE), writeReport, hudLayout);
             KeyBinding settingsKey = KeyBindingHelper.registerKeyBinding(
                     new KeyBinding(SettingsScreen.BINDING_NAME, Keyboard.KEY_RSHIFT, "key.categories.misc"));
             SettingsKey.install(settingsKey, settingsScreen);

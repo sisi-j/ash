@@ -18,6 +18,11 @@ public final class MinecraftGameView implements GameView {
     }
 
     @Override
+    public boolean inWorld() {
+        return Minecraft.getInstance().player != null;
+    }
+
+    @Override
     public boolean debugScreenShown() {
         // The F3 text itself, not `getDebugOverlay().showDebugScreen()`: that
         // is also true whenever any debug entry is always-on, and F3+B

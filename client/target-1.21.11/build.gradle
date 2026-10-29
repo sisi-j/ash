@@ -77,6 +77,9 @@ loom {
                     rootProject.file('../launcher/core/tests/fixtures/servers-1.21.11-changed-by-ash.dat').absolutePath
             // The cape test's own CDN, started by AshLoadsGameTest (TestCdn).
             property 'ash.cosmetics.cdn', 'http://127.0.0.1:25613'
+            // The test's own fair-play list, which it writes to put its own
+            // server on it (FairPlay.TEST_LIST_PROPERTY).
+            property 'ash.test.fairPlayList', file('build/run/fair-play-test-list.txt').absolutePath
         }
     }
 }

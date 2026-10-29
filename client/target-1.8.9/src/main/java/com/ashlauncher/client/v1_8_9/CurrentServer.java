@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_8_9;
 
+import com.ashlauncher.client.fairplay.FairPlayNotes;
 import com.ashlauncher.client.servers.RecentServers;
 import java.io.IOException;
 import java.util.Objects;
@@ -22,7 +23,15 @@ public final class CurrentServer {
     /** The address this connection was last recorded under, so each join is recorded once. */
     private static String joined = null;
 
+    /** The fair-play list's note on joining, ticked here; null when there is none to give. */
+    private static FairPlayNotes notes;
+
     private CurrentServer() {
+    }
+
+    /** Gives the fair-play list's note on joining a server, ticked with this. */
+    static void notes(FairPlayNotes notes) {
+        CurrentServer.notes = notes;
     }
 
     /** The server's own name for itself, or null before it has said. */
@@ -37,6 +46,9 @@ public final class CurrentServer {
      * (research 0009, section 2), read from the game's own log.
      */
     public static void tick() {
+        if (notes != null) {
+            notes.tick();
+        }
         String address = LegacyGameView.INSTANCE.serverAddress();
         if (address == null) {
             logged = "";

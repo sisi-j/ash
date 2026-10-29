@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.ashlauncher.client.fairplay.FairPlay;
+import com.ashlauncher.client.report.Feature;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,8 @@ class FreelookTest {
 
     private final Modes modes = new Modes();
     private boolean on = true;
-    private BlockList.Server here = null;
+    /** Why freelook is off where the player is; empty where it isn't. */
+    private String here = "";
     private final List<String> told = new ArrayList<>();
     private final Freelook<Integer> freelook = new Freelook<>(modes, () -> on, () -> here, told::add);
 
@@ -113,7 +116,7 @@ class FreelookTest {
 
     @Test
     void on_a_listed_server_a_press_says_why_once_and_does_nothing_else() {
-        here = BlockList.match("mc.hypixel.net");
+        here = FairPlay.shipped().ruleFor(Feature.FREELOOK, "mc.hypixel.net").whyOff();
 
         freelook.tick(true, false, 0, 0);
         freelook.tick(true, false, 0, 0);
@@ -128,7 +131,7 @@ class FreelookTest {
     void joining_a_listed_server_mid_hold_ends_it() {
         freelook.tick(true, false, 0, 0);
 
-        here = BlockList.match("play.mccisland.net");
+        here = FairPlay.shipped().ruleFor(Feature.FREELOOK, "play.mccisland.net").whyOff();
         freelook.tick(true, false, 0, 0);
 
         assertFalse(freelook.active());

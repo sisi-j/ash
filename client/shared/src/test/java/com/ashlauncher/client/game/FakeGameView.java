@@ -12,6 +12,7 @@ public final class FakeGameView implements GameView {
 
     private int framesPerSecond = 60;
     private Integer latency;
+    private boolean inWorld = true;
     private boolean debugScreenShown;
     private boolean chatOpen;
     private String serverAddress;
@@ -25,6 +26,18 @@ public final class FakeGameView implements GameView {
     /** The same game, with the server reporting this latency; {@code null} for none, as in singleplayer. */
     public FakeGameView withLatency(Integer latency) {
         this.latency = latency;
+        return this;
+    }
+
+    /** The same game, with the player not in a world yet: joining, say. */
+    public FakeGameView outOfWorld() {
+        inWorld = false;
+        return this;
+    }
+
+    /** The same game, with the player in the world again. */
+    public FakeGameView backInWorld() {
+        inWorld = true;
         return this;
     }
 
@@ -44,6 +57,11 @@ public final class FakeGameView implements GameView {
     public FakeGameView onServer(String address) {
         serverAddress = address;
         return this;
+    }
+
+    @Override
+    public boolean inWorld() {
+        return inWorld;
     }
 
     @Override

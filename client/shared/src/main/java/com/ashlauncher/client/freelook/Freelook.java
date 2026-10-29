@@ -19,7 +19,7 @@ import java.util.function.Supplier;
  * mods do. Switching camera mode is the client's alone; the server never hears
  * of it.
  *
- * <p>On a server whose published rules ban it ({@link BlockList}), the key
+ * <p>On a server whose published rules ban it (the fair-play list), the key
  * does nothing but say so.
  *
  * @param <M> the target's own camera mode
@@ -34,7 +34,7 @@ public final class Freelook<M> {
 
     private final CameraModes<M> modes;
     private final BooleanSupplier on;
-    private final Supplier<BlockList.Server> blockedHere;
+    private final Supplier<String> offHere;
     private final Consumer<String> tell;
 
     private boolean active;
@@ -48,14 +48,14 @@ public final class Freelook<M> {
 
     /**
      * @param on whether the player has freelook switched on
-     * @param blockedHere the listed server being played on, or null
+     * @param offHere why freelook is off where the player is, by the
+     *     fair-play list; empty where it isn't
      * @param tell shows the player one line, for a press that does nothing
      */
-    public Freelook(CameraModes<M> modes, BooleanSupplier on, Supplier<BlockList.Server> blockedHere,
-            Consumer<String> tell) {
+    public Freelook(CameraModes<M> modes, BooleanSupplier on, Supplier<String> offHere, Consumer<String> tell) {
         this.modes = modes;
         this.on = on;
-        this.blockedHere = blockedHere;
+        this.offHere = offHere;
         this.tell = tell;
     }
 
@@ -71,7 +71,7 @@ public final class Freelook<M> {
         boolean pressed = held && !wasHeld;
         wasHeld = held;
         if (active) {
-            if (!held || screenOpen || !on.getAsBoolean() || blockedHere.get() != null) {
+            if (!held || screenOpen || !on.getAsBoolean() || !offHere.get().isEmpty()) {
                 stop();
             }
             return;
@@ -79,9 +79,9 @@ public final class Freelook<M> {
         if (!pressed || screenOpen || !on.getAsBoolean()) {
             return;
         }
-        BlockList.Server blocked = blockedHere.get();
-        if (blocked != null) {
-            tell.accept(blocked.whyOff());
+        String why = offHere.get();
+        if (!why.isEmpty()) {
+            tell.accept(why);
             return;
         }
         start(playerYaw, playerPitch);

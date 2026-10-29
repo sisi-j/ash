@@ -4,10 +4,11 @@ import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
-import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
 import com.ashlauncher.client.cosmetics.CapeSource;
+import com.ashlauncher.client.fairplay.FairPlay;
+import com.ashlauncher.client.fairplay.FairPlayNotes;
 import com.ashlauncher.client.cosmetics.Cosmetics;
 import com.ashlauncher.client.hit.HitColour;
 import com.ashlauncher.client.hit.HitHook;
@@ -110,6 +111,9 @@ public final class AshClient implements ClientModInitializer {
 
     static KeyMapping freelookKey;
 
+    /** The settings screen's model, for the real-game test to ask what a tile says. */
+    static SettingsScreen settingsScreen;
+
     /** Snaplook and its key, for the real-game test to drive and ask. */
     static Snaplook<CameraType> snaplook;
 
@@ -208,7 +212,8 @@ public final class AshClient implements ClientModInitializer {
                     Freelook.BINDING_NAME, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_ALT,
                     KeyMapping.Category.MISC));
             Freelook<CameraType> freelook = new Freelook<>(new OptionsCameraModes(),
-                    () -> settings.get(Settings.FREELOOK), () -> BlockList.here(MinecraftGameView.INSTANCE),
+                    () -> settings.get(Settings.FREELOOK),
+                    () -> FairPlay.inForce().whyOff(Feature.FREELOOK, MinecraftGameView.INSTANCE),
                     why -> Minecraft.getInstance().gui.setOverlayMessage(Component.literal(why), false));
             FreelookHook.install(freelook);
             AshClient.freelook = freelook;
@@ -266,14 +271,21 @@ public final class AshClient implements ClientModInitializer {
         });
 
         Runnable writeReport = () -> writeLoadReport(settings, landed);
-        // Freelook's row says why it is off on a listed server, and cannot be
-        // switched there, as the spec's settings screen asks.
+        // The fair-play list's note, once per join, naming each feature the
+        // player has on that is off on the server they joined, and why
+        // (spec 0007). Beta phase 1's, so a test build's alone (ADR-0029).
+        if (Beta.on()) {
+            FairPlayNotes notes = new FairPlayNotes(FairPlay.inForce(), MinecraftGameView.INSTANCE,
+                    feature -> settings.on(feature) && landed.contains(feature),
+                    line -> Minecraft.getInstance().gui.getChat().addMessage(Component.literal("[ash] " + line)));
+            ClientTickEvents.END_CLIENT_TICK.register(client -> notes.tick());
+        }
+
+        // A feature off on this server by the fair-play list says so on its
+        // tile, and can't be switched there, as the spec's settings screen asks.
         SettingsScreen settingsScreen = new SettingsScreen(settings, Target.V1_21_11, Beta.on(), landed::contains,
-                feature -> {
-                    BlockList.Server here = feature == Feature.FREELOOK ? BlockList.here(MinecraftGameView.INSTANCE) : null;
-                    return here == null ? "" : here.whyOff();
-                },
-                writeReport, hudLayout);
+                feature -> FairPlay.inForce().whyOff(feature, MinecraftGameView.INSTANCE), writeReport, hudLayout);
+        AshClient.settingsScreen = settingsScreen;
 
         // Right Shift, which neither target binds by default. Polled on Fabric
         // API's client tick, which is inside the Fabric API ash already ships.
