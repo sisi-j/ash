@@ -32,6 +32,16 @@ public final class Placement {
         return anchor;
     }
 
+    /** How far from its anchor across, in GUI units, as {@link #x} reads it. */
+    int dx() {
+        return dx;
+    }
+
+    /** How far from its anchor down - or up, from the bottom - in GUI units, as {@link #y} reads it. */
+    int dy() {
+        return dy;
+    }
+
     /** Left, for a readout {@code width} wide on a screen {@code screenWidth} wide, kept on it. */
     public int x(int width, int screenWidth) {
         return on(along(anchor.column, dx, width, screenWidth), width, screenWidth);

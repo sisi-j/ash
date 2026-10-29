@@ -25,7 +25,7 @@ import com.ashlauncher.client.crosshair.CrosshairHook;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
 import com.ashlauncher.client.game.GameView;
-import com.ashlauncher.client.hud.HudLayout;
+import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
@@ -884,10 +884,10 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static void pingReadoutIsHiddenInSingleplayer(MinecraftClient client) {
         List<String> drawn = onClient(client, () -> {
             RecordingSurface surface = new RecordingSurface();
-            AshClient.pingReadout.draw(surface);
+            AshClient.hudItems.draw(HudItem.PING, surface);
             return surface.drawn;
         });
-        if (!drawn.isEmpty() || onClient(client, AshClient::latency) != null) {
+        if (!drawn.isEmpty() || onClient(client, LegacyGameView.INSTANCE::latency) != null) {
             fail("the ping readout showed in a singleplayer world: " + drawn);
         }
     }
@@ -1072,7 +1072,7 @@ public final class AshSmokeTest implements ClientModInitializer {
     private static void expectReadoutDraws(MinecraftClient client, boolean expected, String otherwise) {
         List<String> drawn = onClient(client, () -> {
             RecordingSurface surface = new RecordingSurface();
-            AshClient.fpsReadout.draw(surface);
+            AshClient.hudItems.draw(HudItem.FPS, surface);
             return surface.drawn;
         });
         if (drawn == null || drawn.isEmpty() == expected) {
@@ -1096,7 +1096,7 @@ public final class AshSmokeTest implements ClientModInitializer {
 
         // The HUD, drawn beneath, says how big each readout is.
         Rect box = await("see the ping readout to move", () ->
-                onClient(client, () -> screen.panel().readoutBox(HudLayout.Readout.PING)));
+                onClient(client, () -> screen.panel().itemBox(HudItem.PING)));
         onClient(client, () -> {
             screen.clickAt(box.centreX(), box.centreY());
             screen.dragAt(client.width * 3 / 5, client.height * 3 / 5);
@@ -1114,7 +1114,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         expectFileHasLineStarting("ping-readout.position=bottom-right ");
         int[] drawnAt = onClient(client, () -> {
             RecordingSurface surface = new RecordingSurface();
-            AshClient.pingReadout.draw(surface);
+            AshClient.hudItems.draw(HudItem.PING, surface);
             return new int[] {surface.lastX, surface.lastY};
         });
         if (drawnAt[0] < 427 / 2 || drawnAt[1] < 240 / 2) {

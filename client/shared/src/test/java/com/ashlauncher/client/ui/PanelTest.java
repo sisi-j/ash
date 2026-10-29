@@ -6,13 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.hud.Anchor;
 import com.ashlauncher.client.hud.FakeHudSurface;
+import com.ashlauncher.client.game.FakeGameView;
+import com.ashlauncher.client.hud.HudItem;
+import com.ashlauncher.client.hud.HudItems;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Placement;
 import com.ashlauncher.client.perf.FpsMark;
-import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.Target;
 import com.ashlauncher.client.settings.Settings;
@@ -202,14 +203,13 @@ class PanelTest {
     private void drawReadouts() {
         HudLayout layout = model.hudLayout();
         FakeHudSurface hud = new FakeHudSurface(WIDTH / 2, HEIGHT / 2, 9);
-        new FpsReadout(() -> 144, layout).draw(hud);
-        new PingReadout(() -> 42, layout).draw(hud);
+        new HudItems(layout, new FakeGameView().withFramesPerSecond(144).withLatency(42)).draw(hud);
     }
 
     /** Where the FPS readout draws now, on the same HUD. */
     private FakeHudSurface.Text fpsDrawn() {
         FakeHudSurface hud = new FakeHudSurface(WIDTH / 2, HEIGHT / 2, 9);
-        new FpsReadout(() -> 144, model.hudLayout()).draw(hud);
+        new HudItems(model.hudLayout(), new FakeGameView().withFramesPerSecond(144)).draw(HudItem.FPS, hud);
         return hud.onlyText();
     }
 
@@ -236,7 +236,7 @@ class PanelTest {
         assertFalse(canvas.drew("Crosshair"), "the panel's tiles are still up");
         // "144 FPS" at 4,4 in GUI units, six a character, a unit of room round
         // it, in real pixels at GUI scale 2.
-        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+        Rect box = panel.itemBox(HudItem.FPS);
         assertEquals((4 - 1) * 2, box.x);
         assertEquals((4 - 1) * 2, box.y);
         assertEquals((42 + 1) * 2, box.width);
@@ -247,7 +247,7 @@ class PanelTest {
     @Test
     void a_dragged_readout_moves_with_the_mouse_and_is_saved_where_it_is_dropped() throws Exception {
         Panel panel = editingHud();
-        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+        Rect box = panel.itemBox(HudItem.FPS);
 
         assertTrue(panel.mouseClicked(box.centreX(), box.centreY()));
         panel.mouseDragged(WIDTH - 50, HEIGHT - 30);
@@ -270,7 +270,7 @@ class PanelTest {
     @Test
     void a_readout_cannot_be_dragged_off_screen() {
         Panel panel = editingHud();
-        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+        Rect box = panel.itemBox(HudItem.FPS);
 
         panel.mouseClicked(box.centreX(), box.centreY());
         panel.mouseDragged(WIDTH * 3, HEIGHT * 3);
@@ -279,7 +279,7 @@ class PanelTest {
         assertEquals(WIDTH / 2 - 42, fpsDrawn().x());
         assertEquals(HEIGHT / 2 - 9, fpsDrawn().y());
 
-        Rect moved = panel.readoutBox(HudLayout.Readout.FPS);
+        Rect moved = panel.itemBox(HudItem.FPS);
         panel.mouseClicked(moved.centreX(), moved.centreY());
         panel.mouseDragged(-500, -500);
         panel.mouseReleased();
@@ -318,7 +318,7 @@ class PanelTest {
     @Test
     void closing_the_screen_mid_drag_leaves_the_readout_where_it_was() {
         Panel panel = editingHud();
-        Rect box = panel.readoutBox(HudLayout.Readout.FPS);
+        Rect box = panel.itemBox(HudItem.FPS);
         panel.mouseClicked(box.centreX(), box.centreY());
         panel.mouseDragged(WIDTH / 2, HEIGHT / 2);
 
@@ -337,7 +337,7 @@ class PanelTest {
 
         FakeCanvas canvas = render(panel);
 
-        assertNull(panel.readoutBox(HudLayout.Readout.FPS));
+        assertNull(panel.itemBox(HudItem.FPS));
         assertTrue(canvas.drew("Switch the FPS or ping readout on to move it here."), "drew " + canvas.texts());
     }
 

@@ -22,6 +22,18 @@ public interface GameView {
      */
     boolean debugScreenShown();
 
+    /** The frame rate, as the game counts it: once a second, so ask every frame. */
+    int framesPerSecond();
+
+    /**
+     * The player's latency to the server, in milliseconds, as the server
+     * reports it for the player's own tab-list entry; {@code null} while the
+     * player hosts the world - singleplayer, or opened to LAN - and before the
+     * server has listed them. A server may also report a negative number for
+     * one it hasn't measured yet.
+     */
+    Integer latency();
+
     /** Whether chat is open, with the player typing in it. */
     boolean chatOpen();
 

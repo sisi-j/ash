@@ -3,6 +3,7 @@ package com.ashlauncher.client.v1_20_4;
 import com.ashlauncher.client.game.GameView;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.multiplayer.ServerData;
 
 /**
@@ -21,6 +22,28 @@ public final class MinecraftGameView implements GameView {
         // The F3 screen itself. On 1.20.4 this is only F3: debug entries
         // that stay on, like 1.21.11's, came later.
         return Minecraft.getInstance().getDebugOverlay().showDebugScreen();
+    }
+
+    @Override
+    public int framesPerSecond() {
+        return Minecraft.getInstance().getFps();
+    }
+
+    /**
+     * The server's latency for the player's own tab-list entry, the number
+     * behind the tab list's bars; null while this client hosts the world -
+     * asked as "has a singleplayer server", which stays true after opening to
+     * LAN where "is singleplayer" does not (research 0004, 3.1) - or before
+     * the server has listed the player. Read, never measured.
+     */
+    @Override
+    public Integer latency() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.hasSingleplayerServer() || minecraft.player == null || minecraft.getConnection() == null) {
+            return null;
+        }
+        PlayerInfo info = minecraft.getConnection().getPlayerInfo(minecraft.player.getUUID());
+        return info == null ? null : info.getLatency();
     }
 
     @Override

@@ -4,7 +4,6 @@ import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
-import com.ashlauncher.client.fps.FpsReadout;
 import com.ashlauncher.client.freelook.BlockList;
 import com.ashlauncher.client.freelook.Freelook;
 import com.ashlauncher.client.freelook.FreelookHook;
@@ -13,10 +12,10 @@ import com.ashlauncher.client.cosmetics.Cosmetics;
 import com.ashlauncher.client.hit.HitColour;
 import com.ashlauncher.client.hit.HitHook;
 import com.ashlauncher.client.hit.HitIndicator;
+import com.ashlauncher.client.hud.HudItems;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Marker;
 import com.ashlauncher.client.mixin.MixinFeature;
-import com.ashlauncher.client.ping.PingReadout;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.report.ModOrigins;
@@ -52,7 +51,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.multiplayer.ClientPacketListener;
-import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.network.chat.Component;
@@ -87,13 +85,10 @@ public final class AshClient implements ClientModInitializer {
     private static final String COSMETICS_MIXIN = "com.ashlauncher.client.v1_20_4.mixin.AbstractClientPlayerCapeMixin";
 
     /**
-     * The FPS readout this session draws, so the real-game test can ask it -
-     * not the screenshot - whether it draws. Package-private and set once.
+     * The HUD items this session draws, so the real-game test can ask them -
+     * not the screenshot - whether they draw. Package-private and set once.
      */
-    static FpsReadout fpsReadout;
-
-    /** The ping readout this session draws, for the real-game test to ask. */
-    static PingReadout pingReadout;
+    static HudItems hudItems;
 
     /** The hit indicator this session draws, if its mixin landed, for the real-game test to ask. */
     static HitIndicator hitIndicator;
@@ -117,13 +112,11 @@ public final class AshClient implements ClientModInitializer {
         settings.problems().forEach(LOG::warn);
 
         Marker marker = new Marker();
-        // One layout for the readouts and the settings screen's Edit HUD, so
-        // the box the player drags is where the readout draws.
+        // One layout for the HUD items and the settings screen's Edit HUD, so
+        // the box the player drags is where the item draws.
         HudLayout hudLayout = new HudLayout(settings);
-        FpsReadout fpsReadout = new FpsReadout(() -> Minecraft.getInstance().getFps(), hudLayout);
-        AshClient.fpsReadout = fpsReadout;
-        PingReadout pingReadout = new PingReadout(AshClient::latency, hudLayout);
-        AshClient.pingReadout = pingReadout;
+        HudItems hudItems = new HudItems(hudLayout, MinecraftGameView.INSTANCE);
+        AshClient.hudItems = hudItems;
 
         // Last, so nothing vanilla draws over them. That is a decision about
         // this target's element registry rather than about either feature, so
@@ -136,8 +129,7 @@ public final class AshClient implements ClientModInitializer {
         HudRenderCallback.EVENT.register((graphics, tickDelta) -> {
             GuiGraphicsHudSurface surface = new GuiGraphicsHudSurface(graphics);
             marker.draw(surface);
-            fpsReadout.draw(surface);
-            pingReadout.draw(surface);
+            hudItems.draw(surface);
         });
 
         // Every feature, less any whose mixin did not land. The settings
@@ -345,22 +337,6 @@ public final class AshClient implements ClientModInitializer {
                     .orElse(Collections.<Path>emptyList());
         }
         return Collections.emptyList();
-    }
-
-    /**
-     * The server's latency for the player's own tab-list entry, the number
-     * behind the tab list's bars; null while this client hosts the world -
-     * asked as "has a singleplayer server", which stays true after opening to
-     * LAN where "is singleplayer" does not (research 0004, 3.1) - or before
-     * the server has listed the player. Read, never measured.
-     */
-    static Integer latency() {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.hasSingleplayerServer() || minecraft.player == null || minecraft.getConnection() == null) {
-            return null;
-        }
-        PlayerInfo info = minecraft.getConnection().getPlayerInfo(minecraft.player.getUUID());
-        return info == null ? null : info.getLatency();
     }
 
     private static String clientVersion() {
