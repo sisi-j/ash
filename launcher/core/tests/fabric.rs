@@ -1208,6 +1208,26 @@ async fn a_feature_with_no_switch_is_not_listed_as_one_that_is_on() {
     assert_eq!(features_on(&f, &id), AshFeatures::On { features: vec![] });
 }
 
+/// A feature this version can't have, as the beta's client names it (spec
+/// 0007): its switch is in the file, synced from another version, but it never
+/// runs here, so it is not on - and it is nothing to tell the player about.
+#[tokio::test]
+async fn a_feature_not_on_this_version_is_never_on_and_never_a_problem() {
+    let f = fixture();
+    let id = f.modded().await;
+    write_load_report(
+        &f,
+        &id,
+        r#"{ "client": "0.1.0", "features": [
+            { "id": "fps-readout", "name": "FPS readout", "status": "loaded" },
+            { "id": "faster-clouds", "name": "Faster clouds", "status": "unsupported" } ] }"#,
+    );
+    write_client_settings(&f, &id, "fps-readout.enabled=true\nfaster-clouds.enabled=true\n");
+
+    assert_eq!(features_on(&f, &id), AshFeatures::On { features: vec!["FPS readout".into()] });
+    assert_eq!(f.ash.degradation_notice(&id).unwrap(), None);
+}
+
 #[tokio::test]
 async fn a_switch_the_client_cannot_read_is_taken_as_the_report_has_it() {
     let f = fixture();

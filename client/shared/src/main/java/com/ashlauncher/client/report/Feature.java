@@ -1,5 +1,9 @@
 package com.ashlauncher.client.report;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * One of ash's features, as the load report names it.
  *
@@ -45,17 +49,17 @@ public enum Feature {
 
     private final String id;
     private final String displayName;
-    /** The one target that has it, or null for a feature both have. */
-    private final Target only;
+    /** The targets that have it; empty for a feature every target has. */
+    private final List<Target> targets;
 
-    Feature(String id, String displayName) {
-        this(id, displayName, null);
-    }
-
-    Feature(String id, String displayName, Target only) {
+    /**
+     * @param targets the version targets it runs on, declared with the
+     *     feature (spec 0007); none for one every target has
+     */
+    Feature(String id, String displayName, Target... targets) {
         this.id = id;
         this.displayName = displayName;
-        this.only = only;
+        this.targets = Collections.unmodifiableList(Arrays.asList(targets));
     }
 
     public String id() {
@@ -68,7 +72,12 @@ public enum Feature {
      * says it did not load.
      */
     public boolean existsOn(Target target) {
-        return only == null || only == target;
+        return targets.isEmpty() || targets.contains(target);
+    }
+
+    /** The targets that have it, in the order declared; empty for a feature every target has. */
+    public List<Target> targets() {
+        return targets;
     }
 
     public String displayName() {

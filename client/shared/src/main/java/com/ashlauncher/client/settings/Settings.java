@@ -119,7 +119,7 @@ public final class Settings {
             "Show your ping to the server beneath the frame rate: the number the server reports, never measured"
                     + " by ash. Hidden in singleplayer. true or false.");
 
-    public static final OnOff HIT_COLOUR = new OnOff(Feature.HIT_COLOUR, Category.PVP,
+    public static final OnOff HIT_COLOUR = new OnOff(Feature.HIT_COLOUR, Category.VISUAL,
             "The colour an entity flashes when it is hurt. Only you see it.", "hit-colour.enabled", true,
             "Choose the colour and strength of the flash an entity shows when hurt; off, it is the game's own."
                     + " Changes only what you see. true or false.");
@@ -184,6 +184,15 @@ public final class Settings {
             "Whether the game blurs behind ash's settings panel; off, the panel is darker instead. true or false.");
 
     /**
+     * The panel's starred tiles, in the order they were starred (spec 0007).
+     * A client setting like any other, so it follows the player to every
+     * computer they play on.
+     */
+    public static final FeatureList FAVOURITES = new FeatureList(Feature.SETTINGS_SCREEN, "panel.favourites",
+            "Favourites", "The features starred in ash's settings panel, in the order they were starred: their ids,"
+                    + " separated by commas. Easiest set with the star on each tile.");
+
+    /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
      * left out of it is not quietly read and never written, it has no value
@@ -196,7 +205,7 @@ public final class Settings {
             HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
             HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION,
             PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR, FASTER_CLOUDS, FASTER_VIEW_SCAN, COSMETICS,
-            COSMETICS_HIDE_OTHERS));
+            COSMETICS_HIDE_OTHERS, FAVOURITES));
 
     private final Path file;
     private final Map<Setting<?>, Object> values;
@@ -247,14 +256,16 @@ public final class Settings {
 
     /**
      * A feature's options, in the order the file lists them: everything that
-     * belongs to it but its switch and its position, which is set by dragging
-     * in Edit HUD rather than on a page.
+     * belongs to it but its switch, its position, which is set by dragging in
+     * Edit HUD rather than on a page, and the panel's favourites, set by
+     * starring tiles.
      */
     public static List<Setting<?>> optionsOf(Feature feature) {
         List<Setting<?>> options = new ArrayList<>();
         for (Setting<?> setting : DECLARED) {
             boolean isSwitch = setting instanceof OnOff && ((OnOff) setting).isSwitch();
-            if (setting.feature() == feature && !isSwitch && !(setting instanceof Position)) {
+            boolean setElsewhere = setting instanceof Position || setting instanceof FeatureList;
+            if (setting.feature() == feature && !isSwitch && !setElsewhere) {
                 options.add(setting);
             }
         }

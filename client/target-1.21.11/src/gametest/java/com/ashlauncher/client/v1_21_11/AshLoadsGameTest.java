@@ -133,9 +133,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             assertReportSays(feature);
         }
         // Faster clouds is 1.8.9's alone: not a feature that failed here, but
-        // one this game has no line for at all.
-        assertReportOmits("\"faster-clouds\"");
-        assertReportOmits("\"faster-view-scan\"");
+        // one this game can't have, named as its tile names it. This run is a
+        // test build (ADR-0029); a release build leaves it out (LoadReportTest).
+        assertReportSays("{ \"id\": \"faster-clouds\", \"name\": \"Faster clouds\", \"status\": \"unsupported\" }");
+        assertReportSays("{ \"id\": \"faster-view-scan\", \"name\": \"Faster view scan\","
+                + " \"status\": \"unsupported\" }");
         // Read from the real loader's mod origins: nothing of a player's is in
         // this game's mods folder - except Sodium, in the run with it - and
         // Fabric API came from where the build put it, so the copy that ran
@@ -179,6 +181,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             capeWorks(context);
             pingReadoutWorks(context);
             settingsScreenWorks(context);
+            searchWorks(context);
             crosshairOptionsWork(context);
             crosshairWorks(context);
             hitIndicatorWorks(context, server);
@@ -273,6 +276,44 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         context.waitTicks(5);
         if (context.computeOnClient(client -> client.screen != null)) {
             throw new AssertionError("Escape did not close ash's settings");
+        }
+    }
+
+    /**
+     * Search, typed as a player types it (spec 0007): an option's name finds
+     * its feature's tile and no other, and Escape clears the search before it
+     * closes the panel. This run is a test build, so options are searched.
+     */
+    private static void searchWorks(ClientGameTestContext context) {
+        context.getInput().pressKey(binding(context, SettingsScreen.BINDING_NAME));
+        context.waitTicks(5);
+        settle(context);
+
+        context.getInput().typeChars("gap");
+        context.waitTicks(3);
+        settle(context);
+        String query = context.computeOnClient(client -> ((AshSettingsScreen) client.screen).panel().query());
+        boolean crosshairShown = context.computeOnClient(
+                client -> ((AshSettingsScreen) client.screen).panel().switchOf(Feature.CROSSHAIR) != null);
+        boolean fpsShown = context.computeOnClient(
+                client -> ((AshSettingsScreen) client.screen).panel().switchOf(Feature.FPS_READOUT) != null);
+        if (!"gap".equals(query) || !crosshairShown || fpsShown) {
+            throw new AssertionError("typing \"gap\" searched for \"" + query + "\" and showed the crosshair "
+                    + crosshairShown + ", the FPS readout " + fpsShown);
+        }
+        context.takeScreenshot("ash-settings-search");
+
+        context.getInput().pressKey(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE);
+        context.waitTicks(3);
+        String cleared = context.computeOnClient(client -> client.screen instanceof AshSettingsScreen
+                ? ((AshSettingsScreen) client.screen).panel().query() : null);
+        if (!"".equals(cleared)) {
+            throw new AssertionError("Escape did not clear the search first: " + cleared);
+        }
+        context.getInput().pressKey(org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE);
+        context.waitTicks(5);
+        if (context.computeOnClient(client -> client.screen != null)) {
+            throw new AssertionError("Escape did not close ash's settings once the search was clear");
         }
     }
 
@@ -1037,19 +1078,6 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             String written = Files.readString(report);
             if (!written.contains(entry)) {
                 throw new AssertionError("the load report does not say " + entry + ":\n" + written);
-            }
-        } catch (IOException unreadable) {
-            throw new AssertionError("the load report could not be read", unreadable);
-        }
-    }
-
-    private static void assertReportOmits(String entry) {
-        Path report = FabricLoader.getInstance().getGameDir().resolve(LoadReport.RELATIVE_PATH);
-        try {
-            String written = Files.readString(report);
-            if (written.contains(entry)) {
-                throw new AssertionError("the load report names " + entry + ", which this target does not have:\n"
-                        + written);
             }
         } catch (IOException unreadable) {
             throw new AssertionError("the load report could not be read", unreadable);

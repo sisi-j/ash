@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.ashlauncher.client.hud.Anchor;
 import com.ashlauncher.client.hud.Placement;
+import com.ashlauncher.client.report.Feature;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -153,7 +154,7 @@ class SettingsTest {
                 Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH,
                 Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION, Settings.PANEL_SIZE,
                 Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR, Settings.FASTER_CLOUDS, Settings.FASTER_VIEW_SCAN,
-                Settings.COSMETICS, Settings.COSMETICS_HIDE_OTHERS),
+                Settings.COSMETICS, Settings.COSMETICS_HIDE_OTHERS, Settings.FAVOURITES),
                 Settings.declared());
 
         Settings.load(configDir);
@@ -230,7 +231,10 @@ class SettingsTest {
                         + "cosmetics.enabled=true\n"
                         + "# Show only your own cosmetics, so nothing on other players distracts from a fight."
                         + " true or false.\n"
-                        + "cosmetics.hide-others=false\n",
+                        + "cosmetics.hide-others=false\n"
+                        + "# The features starred in ash's settings panel, in the order they were starred: their"
+                        + " ids, separated by commas. Easiest set with the star on each tile.\n"
+                        + "panel.favourites=\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 
@@ -506,6 +510,11 @@ class SettingsTest {
         if (setting instanceof Position) {
             Placement value = new Placement(Anchor.BOTTOM_RIGHT, 7, 11);
             settings.set((Position) setting, value);
+            return value;
+        }
+        if (setting instanceof FeatureList) {
+            List<Feature> value = List.of(Feature.FREELOOK, Feature.CROSSHAIR);
+            settings.set((FeatureList) setting, value);
             return value;
         }
         throw new AssertionError("a kind of setting this test does not know: " + setting);

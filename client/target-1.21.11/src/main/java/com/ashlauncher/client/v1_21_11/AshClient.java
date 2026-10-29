@@ -1,5 +1,6 @@
 package com.ashlauncher.client.v1_21_11;
 
+import com.ashlauncher.client.Beta;
 import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.crosshair.Crosshair;
 import com.ashlauncher.client.crosshair.CrosshairHook;
@@ -278,7 +279,7 @@ public final class AshClient implements ClientModInitializer {
         Runnable writeReport = () -> writeLoadReport(settings, landed);
         // Freelook's row says why it is off on a listed server, and cannot be
         // switched there, as the spec's settings screen asks.
-        SettingsScreen settingsScreen = new SettingsScreen(settings, AshClient::present, landed::contains,
+        SettingsScreen settingsScreen = new SettingsScreen(settings, Target.V1_21_11, Beta.on(), landed::contains,
                 feature -> {
                     BlockList.Server here = feature == Feature.FREELOOK ? BlockList.here(MinecraftGameView.INSTANCE) : null;
                     return here == null ? "" : here.whyOff();
@@ -310,21 +311,12 @@ public final class AshClient implements ClientModInitializer {
      */
     private static void writeLoadReport(Settings settings, Set<Feature> landed) {
         try {
-            LoadReport.forSession(clientVersion(), AshClient::present, landed::contains, settings::on)
+            LoadReport.forSession(clientVersion(), Target.V1_21_11, Beta.on(), landed::contains, settings::on)
                     .withOrigins(modOrigins(), BUNDLED)
                     .writeTo(FabricLoader.getInstance().getGameDir());
         } catch (IOException unwritable) {
             LOG.warn("ash: could not write the load report for the launcher: " + unwritable);
         }
-    }
-
-    /**
-     * Whether this target has a feature at all, as the feature declares it.
-     * Faster clouds and faster view scan are 1.8.9's alone: this game draws
-     * its clouds and culls its chunks other ways.
-     */
-    private static boolean present(Feature feature) {
-        return feature.existsOn(Target.V1_21_11);
     }
 
     /**
