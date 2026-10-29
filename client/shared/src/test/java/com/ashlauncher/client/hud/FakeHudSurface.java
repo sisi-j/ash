@@ -34,7 +34,6 @@ public final class FakeHudSurface implements HudSurface {
     private final int lineHeight;
     private final List<Text> drawn = new ArrayList<>();
     private final List<Fill> fills = new ArrayList<>();
-    private boolean debugScreenShown;
     private boolean hudHidden;
 
     public FakeHudSurface(int width, int height, int lineHeight) {
@@ -49,12 +48,6 @@ public final class FakeHudSurface implements HudSurface {
      */
     public static FakeHudSurface ofTypicalSize() {
         return new FakeHudSurface(427, 240, 9);
-    }
-
-    /** The same surface with the debug screen open over it. */
-    public FakeHudSurface withDebugScreenShown() {
-        debugScreenShown = true;
-        return this;
     }
 
     /** The same surface with the player having hidden the HUD. */
@@ -127,11 +120,6 @@ public final class FakeHudSurface implements HudSurface {
     @Override
     public void fill(int x, int y, int width, int height, int colour) {
         fills.add(new Fill(x, y, width, height, colour));
-    }
-
-    @Override
-    public boolean debugScreenShown() {
-        return debugScreenShown;
     }
 
     @Override

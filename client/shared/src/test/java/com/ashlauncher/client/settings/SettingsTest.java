@@ -256,6 +256,10 @@ class SettingsTest {
                         + "fps-readout.brackets=false\n"
                         + "# Where the label goes: after (120 FPS), before (FPS: 120) or none (120).\n"
                         + "fps-readout.label=after\n"
+                        + "# Hide the frame rate while the F3 debug screen is open. true or false.\n"
+                        + "fps-readout.hide-with-f3=true\n"
+                        + "# Hide the frame rate while chat is open. true or false.\n"
+                        + "fps-readout.hide-with-chat=false\n"
                         + "# How large your ping draws, in per cent: a whole number from 50 to 200, in steps of 10.\n"
                         + "ping-readout.size=100\n"
                         + "# The colour of your ping, as #RRGGBB; kept for when chroma is off.\n"
@@ -271,7 +275,13 @@ class SettingsTest {
                         + "# Brackets round your ping: [42 ms]. true or false.\n"
                         + "ping-readout.brackets=false\n"
                         + "# Where the label goes: after (42 ms), before (Ping: 42 ms) or none (42).\n"
-                        + "ping-readout.label=after\n",
+                        + "ping-readout.label=after\n"
+                        + "# Hide your ping while the F3 debug screen is open. true or false.\n"
+                        + "ping-readout.hide-with-f3=true\n"
+                        + "# Hide your ping while chat is open. true or false.\n"
+                        + "ping-readout.hide-with-chat=false\n"
+                        + "# Show your ping only when there is one to show; otherwise a placeholder. true or false.\n"
+                        + "ping-readout.only-when-relevant=true\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

@@ -70,24 +70,32 @@ public final class HudItems {
     }
 
     /**
-     * Draws one item, unless the player has it off, has hidden the HUD, or has
-     * the debug screen open - which draws its own frame rate in the same
-     * corner. One with nothing to show draws nothing, except in Edit HUD,
-     * where it shows its sample so that it can still be found and moved.
+     * Draws one item, unless the player has it off or has hidden the HUD -
+     * F1, which hides every one of ash's items. Each also hides while F3 or
+     * chat is open if the player says so: a release build hides each under
+     * F3, whose debug text draws its own frame rate in the same corner, and
+     * never for chat. One with nothing to show draws nothing, if it is only
+     * when relevant, and its sample otherwise - and always in Edit HUD, so
+     * that it can still be found and moved.
      */
     public void draw(HudItem item, HudSurface surface) {
-        if (!layout.shown(item) || surface.hudHidden() || surface.debugScreenShown()) {
+        if (!layout.shown(item) || surface.hudHidden()) {
+            return;
+        }
+        Settings settings = layout.settings();
+        HudItemSettings style = item.settings();
+        if (!layout.editing() && hiding(style, settings)) {
             return;
         }
         String value = item.value(game);
         if (value == null) {
-            if (!layout.editing()) {
+            boolean onlyWhenRelevant = !beta || style.onlyWhenRelevant == null
+                    || settings.get(style.onlyWhenRelevant);
+            if (onlyWhenRelevant && !layout.editing()) {
                 return;
             }
             value = item.sample();
         }
-        Settings settings = layout.settings();
-        HudItemSettings style = item.settings();
         String text = item.text(value, beta ? settings.get(style.label) : "after");
         if (beta && settings.get(style.brackets)) {
             text = "[" + text + "]";
@@ -103,6 +111,15 @@ public final class HudItems {
         }
         surface.drawText(text, at[0] + pad, at[1] + pad, beta ? colour(style, settings) : COLOUR, scale,
                 !beta || settings.get(style.shadow));
+    }
+
+    /** Whether the item steps aside for F3 or chat just now. */
+    private boolean hiding(HudItemSettings style, Settings settings) {
+        if (!beta) {
+            return game.debugScreenShown();
+        }
+        return (game.debugScreenShown() && settings.get(style.hideWithDebug))
+                || (game.chatOpen() && settings.get(style.hideWithChat));
     }
 
     /** Its text's colour, opaque: the one the player picked, or, under chroma, the rainbow's just now. */

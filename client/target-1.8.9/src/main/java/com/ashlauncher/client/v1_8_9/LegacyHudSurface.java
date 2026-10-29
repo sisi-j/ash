@@ -75,10 +75,6 @@ public final class LegacyHudSurface implements HudSurface {
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
-    @Override
-    public boolean debugScreenShown() {
-        return LegacyGameView.INSTANCE.debugScreenShown();
-    }
 
     @Override
     public boolean hudHidden() {

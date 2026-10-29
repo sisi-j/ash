@@ -115,11 +115,12 @@ class PingReadoutTest {
     @Test
     void it_steps_aside_for_the_debug_screen_a_hidden_hud_and_its_switch() {
         HudLayout layout = new HudLayout(Settings.load(configDir));
-        for (FakeHudSurface surface : new FakeHudSurface[] {
-            FakeHudSurface.ofTypicalSize().withDebugScreenShown(), FakeHudSurface.ofTypicalSize().withHudHidden()}) {
-            ping(42, layout, surface);
-            assertTrue(surface.drawn().isEmpty());
-        }
+        FakeHudSurface underDebug = FakeHudSurface.ofTypicalSize();
+        new HudItems(layout, new FakeGameView().withLatency(42).withDebugScreenShown()).draw(HudItem.PING, underDebug);
+        assertTrue(underDebug.drawn().isEmpty());
+        FakeHudSurface hidden = FakeHudSurface.ofTypicalSize().withHudHidden();
+        ping(42, layout, hidden);
+        assertTrue(hidden.drawn().isEmpty());
         Settings settings = Settings.load(configDir);
         settings.set(Settings.PING_READOUT, false);
         FakeHudSurface off = FakeHudSurface.ofTypicalSize();

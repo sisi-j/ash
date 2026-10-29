@@ -1298,10 +1298,6 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             fills++;
         }
 
-        @Override
-        public boolean debugScreenShown() {
-            return false;
-        }
 
         @Override
         public boolean hudHidden() {
