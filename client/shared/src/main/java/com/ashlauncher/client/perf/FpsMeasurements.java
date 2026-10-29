@@ -38,11 +38,13 @@ public final class FpsMeasurements {
     /**
      * Version targets shipped before their features were benchmarked, by the
      * product owner's decision - 1.20.4, for the alpha, on 25 October 2026
-     * (#149). Their tiles show no FPS mark rather than a guessed one, and
-     * this is the record that they haven't been measured: taking a target off
-     * this list is what makes {@code FpsMeasurementsTest} demand every mark.
+     * (#149) - and 26.3, until its benchmark sitting (#185). Their tiles show
+     * no FPS mark rather than a guessed one, and this is the record that they
+     * haven't been measured: taking a target off this list is what makes
+     * {@code FpsMeasurementsTest} demand every mark.
      */
-    public static final Set<Target> NOT_YET_BENCHMARKED = Collections.unmodifiableSet(EnumSet.of(Target.V1_20_4));
+    public static final Set<Target> NOT_YET_BENCHMARKED = Collections.unmodifiableSet(
+            EnumSet.of(Target.V1_20_4, Target.V26_3));
 
     private static final List<FpsMeasurement> MEASURED = Collections.unmodifiableList(Arrays.asList(
             new FpsMeasurement(Feature.FPS_READOUT, Target.V1_8_9, 600.8, 596.1, 1.2,

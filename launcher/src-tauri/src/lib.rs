@@ -895,7 +895,13 @@ async fn reveal_game_directory(
 fn ash_state(client_root: std::path::PathBuf) -> Ash {
     let base = dirs_next_data_dir().join("ash");
     Ash::new(
-        Config { client_root, beta: cfg!(ash_beta), ..Config::rooted_at(base) },
+        // A test build pins 26.3 too (ADR-0028, ADR-0029).
+        Config {
+            client_root,
+            beta: cfg!(ash_beta),
+            loaders: ash_core::pins(cfg!(ash_beta)),
+            ..Config::rooted_at(base)
+        },
         Arc::new(ReqwestHttp::new()),
         Arc::new(OsCredentialStore::new()),
         Arc::new(OsProcessPort::new()),

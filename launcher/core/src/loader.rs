@@ -172,8 +172,10 @@ pub struct LoaderPin {
     pub document: PinnedFile,
     /// Libraries ash adds to the document's own, in classpath order.
     ///
-    /// Always the intermediary and the loader jar, which the document does
-    /// not name because they are not its dependencies - they are what it is.
+    /// The intermediary and the loader jar, which the document does not name
+    /// because they are not its dependencies - they are what it is. From
+    /// 26.x, the loader jar alone: the game ships with Mojang's own names,
+    /// so there is no intermediary to map them through (research 0016).
     pub libraries: &'static [PinnedLibrary],
     /// JVM arguments the profile contributes.
     ///
@@ -363,6 +365,41 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
 };
 
 /// Fabric Loader 0.19.5 on 1.20.4 (ADR-0027): the same loader and document as
+/// Fabric Loader 0.20.1 on 26.3, the newest release (ADR-0028, research 0016).
+/// No intermediary: 26.3 runs on Mojang's own names, and Fabric Meta's profile
+/// for it names none. Its document's libraries are 0.19.5's, with Mixin moved
+/// to 0.17.5.
+const FABRIC_26_3: LoaderPin = LoaderPin {
+    loader: Loader::Fabric,
+    version_id: "26.3",
+    loader_version: "0.20.1",
+    document: PinnedFile {
+        url:
+            "https://maven.fabricmc.net/net/fabricmc/fabric-loader/0.20.1/fabric-loader-0.20.1.json",
+        sha1: "d1fefa65134f30bd66ea420ff5c9e39f283cfb57",
+        size: 4257,
+    },
+    libraries: &[PinnedLibrary {
+        name: "net.fabricmc:fabric-loader:0.20.1",
+        repository: FABRIC_MAVEN,
+        mirror: None,
+        sha1: "7c7f9831e9f27b303d5d08decb5f4258a9f03296",
+        size: 1_988_880,
+        natives: &[],
+    }],
+    jvm_arguments: FABRIC_1_21_11.jvm_arguments,
+    client_jar: Some("ash-client-26.3.jar"),
+    // Fabric API, Apache-2.0, shipped unmodified, as on 1.21.11.
+    bundled_mods: &[PinnedLibrary {
+        name: "net.fabricmc.fabric-api:fabric-api:0.165.0+26.3",
+        repository: FABRIC_MAVEN,
+        mirror: None,
+        sha1: "8f8a23d6c9fbf7b075b31b4fb0a1007b0488d1d2",
+        size: 1_778_588,
+        natives: &[],
+    }],
+};
+
 /// 1.21.11, with 1.20.4's intermediary and Fabric API.
 ///
 /// The two that differ were read from their `.sha1` sidecars on 2026-10-24
@@ -590,6 +627,20 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
 /// and a test that could not point them somewhere else would have to serve
 /// several megabytes of real third-party jars to exercise a modded prepare.
 pub const PINS: &[LoaderPin] = &[FABRIC_1_21_11, FABRIC_1_20_4, LEGACY_FABRIC_1_8_9];
+
+/// The same with 26.3, the newest target, first: a test build's (ADR-0028,
+/// ADR-0029). A release build pins 26.3 only from the beta release, so until
+/// then its players can't make a 26.3 instance that would run beta work.
+const BETA_PINS: &[LoaderPin] = &[FABRIC_26_3, FABRIC_1_21_11, FABRIC_1_20_4, LEGACY_FABRIC_1_8_9];
+
+/// The pins a build ships: [`PINS`], or with the beta switch on, 26.3's too.
+pub fn pins(beta: bool) -> &'static [LoaderPin] {
+    if beta {
+        BETA_PINS
+    } else {
+        PINS
+    }
+}
 
 /// The loader ash installs for a version target, if it has one pinned.
 ///
@@ -911,6 +962,27 @@ fn pinned_library(library: &PinnedLibrary) -> Result<ProfileLibrary, AshError> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_test_build_pins_26_3_the_loader_alone_with_its_api() {
+        let pin = pin_for(pins(true), Loader::Fabric, "26.3").expect("a test build pins 26.3");
+        let names: Vec<&str> = pin.libraries.iter().map(|library| library.name).collect();
+        assert_eq!(
+            names,
+            ["net.fabricmc:fabric-loader:0.20.1"],
+            "26.3 runs on Mojang's names: no intermediary"
+        );
+        assert_eq!(pin.bundled_mods[0].name, "net.fabricmc.fabric-api:fabric-api:0.165.0+26.3");
+        assert_eq!(pin.client_jar, Some("ash-client-26.3.jar"));
+        assert_eq!(pins(true)[0].version_id, "26.3", "the newest target is not first");
+    }
+
+    #[test]
+    fn a_release_build_pins_no_26_3_before_the_beta() {
+        assert!(pin_for(pins(false), Loader::Fabric, "26.3").is_none());
+        assert_eq!(pins(false).len(), PINS.len());
+    }
+
     use super::*;
     use crate::version::VersionMetadata;
 
