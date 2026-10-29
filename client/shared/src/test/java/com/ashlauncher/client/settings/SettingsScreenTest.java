@@ -274,9 +274,10 @@ class SettingsScreenTest {
         SettingsScreen screen = beta(Settings.load(configDir), Target.V1_21_11);
 
         assertEquals(List.of("Crosshair: Gap"), found(screen, "gap", null));
-        // Two options called Colour, and a feature named for it.
-        assertEquals(List.of("Crosshair: Colour", "Hit indicator: Colour", "Hit colour"),
-                found(screen, "COLOUR", null));
+        // Every colour: the readouts' text colours, two options called
+        // Colour, and a feature named for it.
+        assertEquals(List.of("FPS readout: Text colour", "Crosshair: Colour", "Hit indicator: Colour",
+                "Ping readout: Text colour", "Hit colour"), found(screen, "COLOUR", null));
         // An option by its feature's name and its own together.
         assertEquals(List.of("Crosshair: Colour"), found(screen, "crosshair col", null));
         // Within a tab, only that tab's.

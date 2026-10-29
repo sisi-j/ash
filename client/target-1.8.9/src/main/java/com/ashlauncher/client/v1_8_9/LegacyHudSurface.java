@@ -55,6 +55,17 @@ public final class LegacyHudSurface implements HudSurface {
     }
 
     @Override
+    public void drawText(String text, int x, int y, int colour, float scale, boolean shadow) {
+        // Moved to the text's corner and scaled about it, so the corner stays
+        // where it was asked.
+        GlStateManager.pushMatrix();
+        GlStateManager.translate((float) x, (float) y, 0f);
+        GlStateManager.scale(scale, scale, 1f);
+        minecraft.textRenderer.draw(text, 0f, 0f, colour, shadow);
+        GlStateManager.popMatrix();
+    }
+
+    @Override
     public void fill(int x, int y, int width, int height, int colour) {
         // Corners, not a size. DrawableHelper.fill sets ordinary blending for
         // itself - so it draws the colour even where the game has set the

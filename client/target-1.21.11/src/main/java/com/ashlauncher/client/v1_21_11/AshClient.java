@@ -103,6 +103,9 @@ public final class AshClient implements ClientModInitializer {
      */
     static HudItems hudItems;
 
+    /** This session's settings, for the real-game test to style a HUD item with. */
+    static Settings settings;
+
     /** The hit indicator this session draws, if its mixin landed, for the real-game test to ask. */
     static HitIndicator hitIndicator;
 
@@ -125,13 +128,14 @@ public final class AshClient implements ClientModInitializer {
         // the first time the panel opens it is ready.
         Ink.preload(LOG::warn);
         Settings settings = Settings.load(FabricLoader.getInstance().getConfigDir());
+        AshClient.settings = settings;
         settings.problems().forEach(LOG::warn);
 
         Marker marker = new Marker();
         // One layout for the HUD items and the settings screen's Edit HUD, so
         // the box the player drags is where the item draws.
         HudLayout hudLayout = new HudLayout(settings);
-        HudItems hudItems = new HudItems(hudLayout, MinecraftGameView.INSTANCE);
+        HudItems hudItems = new HudItems(hudLayout, MinecraftGameView.INSTANCE, Beta.on(), System::currentTimeMillis);
         AshClient.hudItems = hudItems;
 
         // Last, so nothing vanilla draws over them. That is a decision about

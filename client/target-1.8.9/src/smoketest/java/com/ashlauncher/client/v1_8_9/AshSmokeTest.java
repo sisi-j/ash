@@ -1547,6 +1547,11 @@ public final class AshSmokeTest implements ClientModInitializer {
         }
 
         @Override
+        public void drawText(String text, int x, int y, int colour, float scale, boolean shadow) {
+            drawText(text, x, y, colour);
+        }
+
+        @Override
         public void fill(int x, int y, int width, int height, int colour) {
             fills++;
         }

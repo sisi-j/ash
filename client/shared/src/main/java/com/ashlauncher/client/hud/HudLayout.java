@@ -44,6 +44,11 @@ public final class HudLayout {
         this.settings = settings;
     }
 
+    /** The settings the layout reads, for the items' style too. */
+    Settings settings() {
+        return settings;
+    }
+
     /** Whether the player has an item switched on. */
     public boolean shown(HudItem item) {
         return settings.on(item.feature());

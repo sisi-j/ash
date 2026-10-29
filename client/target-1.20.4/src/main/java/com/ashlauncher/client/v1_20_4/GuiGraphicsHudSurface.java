@@ -51,6 +51,17 @@ public final class GuiGraphicsHudSurface implements HudSurface {
     }
 
     @Override
+    public void drawText(String text, int x, int y, int colour, float scale, boolean shadow) {
+        // Moved to the text's corner and scaled about it, so the corner stays
+        // where it was asked.
+        graphics.pose().pushPose();
+        graphics.pose().translate(x, y, 0);
+        graphics.pose().scale(scale, scale, 1);
+        graphics.drawString(Minecraft.getInstance().font, text, 0, 0, colour, shadow);
+        graphics.pose().popPose();
+    }
+
+    @Override
     public void fill(int x, int y, int width, int height, int colour) {
         // GuiGraphics.fill takes corners, not a size, and draws with the GUI
         // pipeline's ordinary blending - never the crosshair's invert.

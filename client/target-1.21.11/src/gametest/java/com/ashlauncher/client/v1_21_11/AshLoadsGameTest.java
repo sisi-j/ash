@@ -10,6 +10,8 @@ import com.ashlauncher.client.hud.HudSurface;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.servers.RecentServers;
+import com.ashlauncher.client.settings.HudItemSettings;
+import com.ashlauncher.client.settings.Setting;
 import com.ashlauncher.client.settings.SettingsScreen;
 import com.ashlauncher.client.snaplook.Snaplook;
 import com.ashlauncher.client.sprint.ToggleSprint;
@@ -188,6 +190,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             snaplookWorks(context);
             capeWorks(context);
             pingReadoutWorks(context);
+            hudStyleShows(context);
             settingsScreenWorks(context);
             searchWorks(context);
             crosshairOptionsWork(context);
@@ -1078,6 +1081,38 @@ public class AshLoadsGameTest implements FabricClientGameTest {
      * The ping readout, against the test's dedicated server: it says exactly
      * the latency the server gave the player's own tab-list entry.
      */
+    /**
+     * A HUD item drawn in a style the player chose (spec 0007): the frame
+     * rate half as big again, in a box, cycling through the rainbow,
+     * bracketed, with its label first. Judged by eye in the screenshot; the
+     * style's arithmetic is HudItemStyleTest's. Put back as it was after.
+     */
+    private static void hudStyleShows(ClientGameTestContext context) {
+        HudItemSettings style = Settings.FPS_READOUT_ITEM;
+        context.runOnClient(client -> {
+            AshClient.settings.set(style.size, 150);
+            AshClient.settings.set(style.background, true);
+            AshClient.settings.set(style.chroma, true);
+            AshClient.settings.set(style.brackets, true);
+            AshClient.settings.set(style.label, "before");
+        });
+        context.waitTicks(5);
+        List<String> drawn = context.computeOnClient(client -> {
+            RecordingSurface surface = new RecordingSurface();
+            AshClient.hudItems.draw(HudItem.FPS, surface);
+            return surface.drawn;
+        });
+        if (drawn.isEmpty() || !drawn.get(0).startsWith("[FPS: ")) {
+            throw new AssertionError("the frame rate did not take the style it was given: " + drawn);
+        }
+        context.takeScreenshot("ash-hud-styled");
+        context.runOnClient(client -> style.all().forEach(option -> reset(AshClient.settings, option)));
+    }
+
+    private static <T> void reset(Settings settings, Setting<T> option) {
+        settings.set(option, option.fallback());
+    }
+
     private static void pingReadoutWorks(ClientGameTestContext context) {
         String result = context.computeOnClient(client -> {
             PlayerInfo info = client.getConnection().getPlayerInfo(client.player.getUUID());
@@ -1251,6 +1286,11 @@ public class AshLoadsGameTest implements FabricClientGameTest {
             drawn.add(text);
             lastX = x;
             lastY = y;
+        }
+
+        @Override
+        public void drawText(String text, int x, int y, int colour, float scale, boolean shadow) {
+            drawText(text, x, y, colour);
         }
 
         @Override
