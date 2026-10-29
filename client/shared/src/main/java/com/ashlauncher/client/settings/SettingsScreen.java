@@ -207,9 +207,18 @@ public final class SettingsScreen {
         return hudLayout;
     }
 
-    /** A feature's options, in the order its page shows them. */
+    /**
+     * A feature's options, in the order its page shows them. A HUD item's
+     * style is among them only with the beta switch on (ADR-0029).
+     */
     public List<Setting<?>> optionsOf(Feature feature) {
-        return Settings.optionsOf(feature);
+        List<Setting<?>> options = new ArrayList<>();
+        for (Setting<?> option : Settings.optionsOf(feature)) {
+            if (beta || !Settings.isHudItemSetting(option)) {
+                options.add(option);
+            }
+        }
+        return options;
     }
 
     public <T> T value(Setting<T> setting) {

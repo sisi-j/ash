@@ -1036,6 +1036,10 @@ final class OptionsPage {
         }
 
         @Override
+        public void drawText(String text, int x, int y, int colour, float scale, boolean shadow) {
+        }
+
+        @Override
         public void fill(int x, int y, int width, int height, int colour) {
             canvas.fill(originX + x * scale, originY + y * scale, width * scale, height * scale, colour);
         }

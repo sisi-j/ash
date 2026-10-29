@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -147,15 +148,19 @@ class SettingsTest {
 
     @Test
     void every_setting_is_declared_once_in_the_order_a_first_run_writes_them() throws IOException {
-        assertEquals(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT, Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
+        List<Setting<?>> declared = new ArrayList<>(List.of(Settings.FPS_READOUT, Settings.TOGGLE_SPRINT,
+                Settings.CROSSHAIR, Settings.CROSSHAIR_SHAPE,
                 Settings.CROSSHAIR_SIZE, Settings.CROSSHAIR_GAP, Settings.CROSSHAIR_THICKNESS, Settings.CROSSHAIR_COLOUR,
                 Settings.CROSSHAIR_OUTLINE, Settings.HIT_INDICATOR, Settings.HIT_INDICATOR_COLOUR,
                 Settings.HIT_INDICATOR_DURATION, Settings.FREELOOK, Settings.SNAPLOOK, Settings.PING_READOUT,
                 Settings.HIT_COLOUR, Settings.HIT_COLOUR_COLOUR, Settings.HIT_COLOUR_STRENGTH,
                 Settings.FPS_READOUT_POSITION, Settings.PING_READOUT_POSITION, Settings.PANEL_SIZE,
                 Settings.PANEL_ANIMATIONS, Settings.PANEL_BLUR, Settings.FASTER_CLOUDS, Settings.FASTER_VIEW_SCAN,
-                Settings.COSMETICS, Settings.COSMETICS_HIDE_OTHERS, Settings.FAVOURITES),
-                Settings.declared());
+                Settings.COSMETICS, Settings.COSMETICS_HIDE_OTHERS, Settings.FAVOURITES));
+        // Each HUD item's group, whole, in its own order.
+        declared.addAll(Settings.FPS_READOUT_ITEM.all());
+        declared.addAll(Settings.PING_READOUT_ITEM.all());
+        assertEquals(declared, Settings.declared());
 
         Settings.load(configDir);
 
@@ -234,7 +239,39 @@ class SettingsTest {
                         + "cosmetics.hide-others=false\n"
                         + "# The features starred in ash's settings panel, in the order they were starred: their"
                         + " ids, separated by commas. Easiest set with the star on each tile.\n"
-                        + "panel.favourites=\n",
+                        + "panel.favourites=\n"
+                        + "# How large the frame rate draws, in per cent: a whole number from 50 to 200, in steps of 10.\n"
+                        + "fps-readout.size=100\n"
+                        + "# The colour of the frame rate, as #RRGGBB; kept for when chroma is off.\n"
+                        + "fps-readout.text-colour=#FFFFFF\n"
+                        + "# Cycle the frame rate through the colours of the rainbow, in place of its text colour. true or false.\n"
+                        + "fps-readout.chroma=false\n"
+                        + "# A box behind the frame rate, in its background colour. true or false.\n"
+                        + "fps-readout.background=false\n"
+                        + "# The colour and opacity of the box behind the frame rate, as #RRGGBBAA. #00000080 is half-clear black.\n"
+                        + "fps-readout.background-colour=#00000080\n"
+                        + "# Draw the frame rate with the game's text shadow. true or false.\n"
+                        + "fps-readout.shadow=true\n"
+                        + "# Brackets round the frame rate: [120 FPS]. true or false.\n"
+                        + "fps-readout.brackets=false\n"
+                        + "# Where the label goes: after (120 FPS), before (FPS: 120) or none (120).\n"
+                        + "fps-readout.label=after\n"
+                        + "# How large your ping draws, in per cent: a whole number from 50 to 200, in steps of 10.\n"
+                        + "ping-readout.size=100\n"
+                        + "# The colour of your ping, as #RRGGBB; kept for when chroma is off.\n"
+                        + "ping-readout.text-colour=#FFFFFF\n"
+                        + "# Cycle your ping through the colours of the rainbow, in place of its text colour. true or false.\n"
+                        + "ping-readout.chroma=false\n"
+                        + "# A box behind your ping, in its background colour. true or false.\n"
+                        + "ping-readout.background=false\n"
+                        + "# The colour and opacity of the box behind your ping, as #RRGGBBAA. #00000080 is half-clear black.\n"
+                        + "ping-readout.background-colour=#00000080\n"
+                        + "# Draw your ping with the game's text shadow. true or false.\n"
+                        + "ping-readout.shadow=true\n"
+                        + "# Brackets round your ping: [42 ms]. true or false.\n"
+                        + "ping-readout.brackets=false\n"
+                        + "# Where the label goes: after (42 ms), before (Ping: 42 ms) or none (42).\n"
+                        + "ping-readout.label=after\n",
                 Files.readString(configDir.resolve("ash.properties")));
     }
 

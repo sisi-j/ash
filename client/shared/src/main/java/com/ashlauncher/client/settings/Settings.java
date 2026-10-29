@@ -192,6 +192,15 @@ public final class Settings {
             "Favourites", "The features starred in ash's settings panel, in the order they were starred: their ids,"
                     + " separated by commas. Easiest set with the star on each tile.");
 
+    // Each HUD item's style, one group each (spec 0007, HUD items). Beta
+    // phase 1's: a release build reads none of them (ADR-0029).
+
+    public static final HudItemSettings FPS_READOUT_ITEM = new HudItemSettings(Feature.FPS_READOUT, "the frame rate",
+            "120 FPS", "FPS: 120", "120");
+
+    public static final HudItemSettings PING_READOUT_ITEM = new HudItemSettings(Feature.PING_READOUT, "your ping",
+            "42 ms", "Ping: 42 ms", "42");
+
     /**
      * Every setting, in the order a first run writes them. One list, and
      * every setting is read, written and shown by walking it - so a setting
@@ -199,13 +208,40 @@ public final class Settings {
      * at all, and the first test to ask for it fails. New settings go at the
      * end, which is where an older file gains them.
      */
-    private static final List<Setting<?>> DECLARED = Collections.unmodifiableList(Arrays.<Setting<?>>asList(
+    private static final List<Setting<?>> DECLARED = Collections.unmodifiableList(declare(
             FPS_READOUT, TOGGLE_SPRINT, CROSSHAIR,
             CROSSHAIR_SHAPE, CROSSHAIR_SIZE, CROSSHAIR_GAP, CROSSHAIR_THICKNESS, CROSSHAIR_COLOUR, CROSSHAIR_OUTLINE,
             HIT_INDICATOR, HIT_INDICATOR_COLOUR, HIT_INDICATOR_DURATION, FREELOOK, SNAPLOOK, PING_READOUT,
             HIT_COLOUR, HIT_COLOUR_COLOUR, HIT_COLOUR_STRENGTH, FPS_READOUT_POSITION, PING_READOUT_POSITION,
             PANEL_SIZE, PANEL_ANIMATIONS, PANEL_BLUR, FASTER_CLOUDS, FASTER_VIEW_SCAN, COSMETICS,
-            COSMETICS_HIDE_OTHERS, FAVOURITES));
+            COSMETICS_HIDE_OTHERS, FAVOURITES, FPS_READOUT_ITEM, PING_READOUT_ITEM));
+
+    /** Settings and groups of them, in order, as one list. */
+    private static List<Setting<?>> declare(Object... each) {
+        List<Setting<?>> settings = new ArrayList<>();
+        for (Object one : each) {
+            if (one instanceof HudItemSettings) {
+                settings.addAll(((HudItemSettings) one).all());
+            } else {
+                settings.add((Setting<?>) one);
+            }
+        }
+        return settings;
+    }
+
+    /** Every HUD item's group, for what treats them alike. */
+    private static final List<HudItemSettings> HUD_ITEMS = Collections.unmodifiableList(
+            Arrays.asList(FPS_READOUT_ITEM, PING_READOUT_ITEM));
+
+    /** Whether a setting is one of a HUD item's group: beta phase 1's, which a release build leaves alone. */
+    public static boolean isHudItemSetting(Setting<?> setting) {
+        for (HudItemSettings item : HUD_ITEMS) {
+            if (item.all().contains(setting)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private final Path file;
     private final Map<Setting<?>, Object> values;
@@ -251,7 +287,15 @@ public final class Settings {
      */
     public boolean applies(Setting<?> option) {
         boolean dot = "dot".equals(get(CROSSHAIR_SHAPE));
-        return !(dot && (option == CROSSHAIR_GAP || option == CROSSHAIR_THICKNESS));
+        if (dot && (option == CROSSHAIR_GAP || option == CROSSHAIR_THICKNESS)) {
+            return false;
+        }
+        for (HudItemSettings item : HUD_ITEMS) {
+            if (!item.applies(option, this)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

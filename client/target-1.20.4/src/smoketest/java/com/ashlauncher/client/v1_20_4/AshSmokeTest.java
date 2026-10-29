@@ -3,6 +3,9 @@ package com.ashlauncher.client.v1_20_4;
 import com.ashlauncher.client.game.GameView;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
+import com.ashlauncher.client.settings.HudItemSettings;
+import com.ashlauncher.client.settings.Setting;
+import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -114,6 +117,7 @@ public final class AshSmokeTest implements ClientModInitializer {
         screenshot(client, "ash-in-world.png");
 
         gameViewSees(client);
+        hudStyleShows(client);
         settingsScreenOpensWithItsKey(client);
         capeWorks(client);
         cdn.close();
@@ -215,6 +219,34 @@ public final class AshSmokeTest implements ClientModInitializer {
         if (!debugSeen || onClient(client, game::debugScreenShown)) {
             fail("the game view did not follow F3 opening and closing");
         }
+    }
+
+    /**
+     * A HUD item drawn in a style the player chose (spec 0007): the frame
+     * rate half as big again, in a box, cycling through the rainbow,
+     * bracketed, with its label first. Judged by eye in the screenshot; the
+     * style's arithmetic is HudItemStyleTest's. Put back as it was after.
+     */
+    private static void hudStyleShows(Minecraft client) {
+        HudItemSettings style = Settings.FPS_READOUT_ITEM;
+        onClient(client, () -> {
+            AshClient.settings.set(style.size, 150);
+            AshClient.settings.set(style.background, true);
+            AshClient.settings.set(style.chroma, true);
+            AshClient.settings.set(style.brackets, true);
+            AshClient.settings.set(style.label, "before");
+            return null;
+        });
+        pause(1_000L);
+        screenshot(client, "ash-hud-styled.png");
+        onClient(client, () -> {
+            style.all().forEach(option -> reset(AshClient.settings, option));
+            return null;
+        });
+    }
+
+    private static <T> void reset(Settings settings, Setting<T> option) {
+        settings.set(option, option.fallback());
     }
 
     /** ash's settings, opened with its own key as a player would, drawn, and closed again. */

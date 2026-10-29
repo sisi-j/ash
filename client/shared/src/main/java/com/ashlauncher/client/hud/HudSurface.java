@@ -54,6 +54,15 @@ public interface HudSurface {
     void drawText(String text, int x, int y, int colour);
 
     /**
+     * The same, {@code scale} times the font's size and with or without the
+     * game's shadow: a HUD item's style (spec 0007). {@link #drawText(String,
+     * int, int, int)} is this at 1, with its shadow. At a size other than 1,
+     * the text's top-left is still ({@code x}, {@code y}), and it is
+     * {@code scale} times {@link #textWidth} wide.
+     */
+    void drawText(String text, int x, int y, int colour, float scale, boolean shadow);
+
+    /**
      * Fill a rectangle with one colour, drawn over what is there - never
      * blended any other way. The game's own crosshair inverts what is behind
      * it on both targets; ash's draws the colour the player chose.

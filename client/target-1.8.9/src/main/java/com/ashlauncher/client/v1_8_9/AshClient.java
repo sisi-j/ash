@@ -138,7 +138,7 @@ public final class AshClient implements ClientModInitializer {
         // One layout for the HUD items and the settings screen's Edit HUD, so
         // the box the player drags is where the item draws.
         HudLayout hudLayout = new HudLayout(settings);
-        HudItems hudItems = new HudItems(hudLayout, LegacyGameView.INSTANCE);
+        HudItems hudItems = new HudItems(hudLayout, LegacyGameView.INSTANCE, Beta.on(), System::currentTimeMillis);
         AshClient.hudItems = hudItems;
 
         HudRenderCallback.EVENT.register((minecraft, tickDelta) -> {

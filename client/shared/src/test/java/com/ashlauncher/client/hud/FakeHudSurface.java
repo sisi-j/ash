@@ -15,7 +15,7 @@ import java.util.List;
 public final class FakeHudSurface implements HudSurface {
 
     /** One call to {@link HudSurface#drawText}, as it arrived. */
-    public record Text(String text, int x, int y, int colour) {
+    public record Text(String text, int x, int y, int colour, float scale, boolean shadow) {
     }
 
     /** One call to {@link HudSurface#fill}, as it arrived. */
@@ -116,7 +116,12 @@ public final class FakeHudSurface implements HudSurface {
 
     @Override
     public void drawText(String text, int x, int y, int colour) {
-        drawn.add(new Text(text, x, y, colour));
+        drawText(text, x, y, colour, 1f, true);
+    }
+
+    @Override
+    public void drawText(String text, int x, int y, int colour, float scale, boolean shadow) {
+        drawn.add(new Text(text, x, y, colour, scale, shadow));
     }
 
     @Override

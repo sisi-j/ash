@@ -2,6 +2,7 @@ package com.ashlauncher.client.hud;
 
 import com.ashlauncher.client.game.GameView;
 import com.ashlauncher.client.report.Feature;
+import com.ashlauncher.client.settings.HudItemSettings;
 import com.ashlauncher.client.settings.Position;
 import com.ashlauncher.client.settings.Settings;
 import java.util.Arrays;
@@ -25,8 +26,9 @@ import java.util.function.Function;
 public final class HudItem {
 
     /** The frame rate, as the game counts it, top-left: where it has always been. */
-    public static final HudItem FPS = new HudItem(Feature.FPS_READOUT, Settings.FPS_READOUT_POSITION, "FPS",
-            game -> String.valueOf(game.framesPerSecond()), "120", false, EnumSet.allOf(HudStyle.class));
+    public static final HudItem FPS = new HudItem(Feature.FPS_READOUT, Settings.FPS_READOUT_POSITION,
+            Settings.FPS_READOUT_ITEM, "FPS", "FPS", game -> String.valueOf(game.framesPerSecond()), "120", false,
+            EnumSet.allOf(HudStyle.class));
 
     /**
      * The player's latency to the server, beneath the frame rate. The number
@@ -36,8 +38,8 @@ public final class HudItem {
      * there is nothing to show while the player hosts the world, or before
      * the server has listed them.
      */
-    public static final HudItem PING = new HudItem(Feature.PING_READOUT, Settings.PING_READOUT_POSITION, "ms",
-            game -> {
+    public static final HudItem PING = new HudItem(Feature.PING_READOUT, Settings.PING_READOUT_POSITION,
+            Settings.PING_READOUT_ITEM, "ms", "Ping", game -> {
                 Integer ms = game.latency();
                 return ms == null || ms < 0 ? null : String.valueOf(ms);
             }, "--", true, EnumSet.allOf(HudStyle.class));
@@ -50,7 +52,9 @@ public final class HudItem {
 
     private final Feature feature;
     private final Position position;
+    private final HudItemSettings settings;
     private final String label;
+    private final String name;
     private final Function<GameView, String> value;
     private final String sample;
     private final boolean onlyWhenRelevant;
@@ -59,6 +63,10 @@ public final class HudItem {
     /**
      * @param position its setting; the setting's default is the item's home,
      *     its default anchor and offset
+     * @param settings its style, declared for every item alike
+     * @param label what follows its value: "FPS", "ms"
+     * @param name what goes before its value when the player puts the label
+     *     there: "FPS: 120", "Ping: 42 ms"
      * @param value what it shows, from the game; {@code null} when there is
      *     nothing to show just now
      * @param sample a value to show in Edit HUD when there is nothing to show,
@@ -66,11 +74,13 @@ public final class HudItem {
      * @param onlyWhenRelevant whether it has times with nothing to show
      * @param styles the style options it takes
      */
-    private HudItem(Feature feature, Position position, String label, Function<GameView, String> value,
-            String sample, boolean onlyWhenRelevant, Set<HudStyle> styles) {
+    private HudItem(Feature feature, Position position, HudItemSettings settings, String label, String name,
+            Function<GameView, String> value, String sample, boolean onlyWhenRelevant, Set<HudStyle> styles) {
         this.feature = feature;
         this.position = position;
+        this.settings = settings;
         this.label = label;
+        this.name = name;
         this.value = value;
         this.sample = sample;
         this.onlyWhenRelevant = onlyWhenRelevant;
@@ -107,8 +117,27 @@ public final class HudItem {
         return sample;
     }
 
-    /** A value with its label, as it is drawn: "144 FPS". */
+    /** Its style's settings, the same group every item has. */
+    public HudItemSettings settings() {
+        return settings;
+    }
+
+    /** A value with its label, as it is drawn by default: "144 FPS". */
     public String text(String value) {
+        return text(value, "after");
+    }
+
+    /**
+     * A value with its label where the player put it: after, "144 FPS";
+     * before, "FPS: 144" or "Ping: 42 ms"; or none, "144".
+     */
+    public String text(String value, String labelAt) {
+        if ("none".equals(labelAt)) {
+            return value;
+        }
+        if ("before".equals(labelAt)) {
+            return name.equals(label) ? name + ": " + value : name + ": " + value + " " + label;
+        }
         return value + " " + label;
     }
 
