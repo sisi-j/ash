@@ -77,7 +77,7 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
 37. As a player, I want mods that aren't on Modrinth included as files, so that the pack still works.
 38. As a player, I want to choose whether configs, resource packs and shader packs go in, so that I share only what I mean to.
 39. As a player, I want my worlds, screenshots and logs left out, so that I never share them by accident.
-40. As a player whose instance is on 1.8.9, I want to be told why it can't be exported as a `.mrpack`, so that the button isn't a mystery.
+40. As a player whose instance is on 1.8.9, I want to export it like any other, and be told that some launchers can't run 1.8.9 packs, so that a friend on ash can use it.
 
 ### Updates
 
@@ -103,8 +103,10 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
   - Its third-party mods are always on, so the opt-in doesn't apply and isn't shown.
 - **The loader:**
   - at creation, ash records the newest stable Fabric Loader for that version, or a pack's or import's own loader version;
-  - the loader profile comes from Fabric's meta, merged onto Mojang's version document as for the targets;
-  - its libraries come from Fabric's Maven and are checked against the Maven's published hashes. Research 0017 settles which hashes Fabric's Maven publishes and how ash verifies them (ADR-0024 applies).
+  - **a pack's or import's loader is kept even when it's older than 0.15.0.** Those loaders' documents are in an older form, with no hashes, so ash reads that form too. Five of fifteen popular packs sampled pin one (research 0017);
+  - the loader's own document comes from Fabric's Maven, merged onto Mojang's version document as for the targets (ADR-0014). Fabric's meta is used only to choose the version and the newest stable loader;
+  - **verified once, then pinned in the instance.** When the instance is made, the loader jar, its libraries and the intermediary (on versions that have one) are checked against the Maven's `.sha1` files, and their hashes and sizes recorded in the instance. Every later launch checks that record, so it works offline, and ADR-0024 applies. A new ADR records this, amending ADR-0014 (research 0017).
+  - **No intermediary on 26.x.** Whether a version has one follows Fabric Meta's rule, not another launcher's component list.
 - **Fabric API:** "Included with ash" applies only to version targets. In a Fabric-only instance, Fabric API is an ordinary Modrinth mod that dependency resolution installs.
 - **New instance:** the version list shows every stable release, with "Fabric only" beside non-target versions.
 - **The instance's tile and glance:** a Fabric-only instance says "Fabric only". Its glance says ash's features need 1.8.9, 1.20.4, 1.21.11 or 26.3.
@@ -115,14 +117,20 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
   - its dependencies name the Minecraft version and the loader;
   - `overrides/` and `client-overrides/` are copied into the game directory.
 - **What imports:**
-  - **Fabric:** a pack whose loader dependency is `fabric-loader` imports, on any version.
-  - **Not Fabric:** `forge`, `neoforge` and `quilt-loader` packs are refused, with a message naming the loader and saying ash runs Fabric.
+  - **The index decides,** not Modrinth's labels for the pack, which can be wrong (research 0017).
+  - **Fabric:** a pack whose loader dependency is `fabric-loader` imports, on any version. With `minecraft: "1.8.9"` it means Legacy Fabric, on ash's 1.8.9 target: every 1.8.9 pack on Modrinth is written this way.
+  - **No loader:** a pack with only a `minecraft` dependency, such as resource packs or data packs alone, imports as an ordinary instance: on a version target with ash's client, otherwise Fabric-only with the newest stable loader.
+  - **Not Fabric:** `forge`, `neoforge` and `quilt-loader` packs are refused, with a message naming the loader and saying ash runs Fabric. So is any dependency key ash doesn't know, named.
   - **On a version target:** a pack on a target gets ash's client. Its mods are third-party mods, switched on at import.
-  - **The pack's own Fabric API** is left out on a target, since ash bundles one. Research 0017 checks what Fabric Loader does with two copies, and settles this.
+  - **The pack's own Fabric API on a target:**
+    - **not newer than ash's:** it's left out, and the instance runs on the copy ash was tested with;
+    - **newer:** it's installed like the pack's other files, because leaving it out would fail the launch for any mod that needs it. Fabric Loader picks the newest copy, and ADR-0018's notice says ash is running on a Fabric API it wasn't tested with;
+    - **on 1.8.9:** the pack's Legacy Fabric API is always kept, since it carries about 90 modules ash doesn't ship (research 0017).
 - **Safety:**
-  - downloads only from Modrinth's own allowed domains for packs: `cdn.modrinth.com`, `github.com`, `raw.githubusercontent.com` and `gitlab.com`;
+  - downloads only from Modrinth's own allowed domains for packs: `cdn.modrinth.com`, `github.com`, `raw.githubusercontent.com` and `gitlab.com`. The URL in the index is checked, not where it redirects, since GitHub's downloads redirect to another host;
   - every file is checked against its SHA-512 before it's kept;
-  - any path or override entry that would land outside the game directory refuses the whole pack;
+  - any path or override entry that would land outside the game directory refuses the whole pack. So does any path Modrinth's own code refuses (a backslash, `..`, a Windows device name such as `CON` or `NUL`), a `:`, a name ending in a dot or space, or two entries that reach one file, compared without case (research 0017);
+  - overrides are copied after the index's files, as the Modrinth app does;
   - files whose client environment is `unsupported` are skipped;
   - `optional` ones are offered as choices at import.
 - **Browsing:**
@@ -141,8 +149,12 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
 - **Prism and MultiMC:**
   - **Where:** found in Prism's default instances folder; any other folder can be chosen.
   - **What's read:** `instance.cfg` gives the name. `mmc-pack.json`'s components give the Minecraft version and the Fabric Loader version.
-  - **Refused:** any other loader component (Forge, NeoForge, Quilt, LiteLoader).
-- **Modrinth app:** its profiles are found in the app's data folder. Research 0017 establishes where the app keeps each profile's version and loader, which in current releases is its own database. ash only reads it.
+  - **1.8.9:** an instance on 1.8.9 with a Fabric Loader component is Legacy Fabric, on ash's 1.8.9 target. Its Legacy Fabric patches are expected.
+  - **Refused:** any other loader component (Forge, NeoForge, Quilt, LiteLoader), and any other `patches/` file, named, since a patch can change what the game or loader is in ways ash can't follow.
+- **Modrinth app:** its profiles are found in the app's data folder, and their versions and loaders in its database, `app.db`. Its layout has changed twice; research 0017 records all three.
+  - **ash only reads it,** from a copy: opening the database where it sits can change files beside it.
+  - **If the Modrinth app is running,** ash asks the player to close it first, with a Try again button, so the copy is never caught mid-write.
+  - **Its mods can be links into the app's store,** so ash copies them and never opens them for writing.
 - **What comes across:**
   - the game folder's `mods`, `config`, `resourcepacks`, `shaderpacks`, `saves`, `screenshots` and `servers.dat`;
   - `options.txt`, so key bindings and video settings carry over.
@@ -159,16 +171,18 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
 - **Never included:**
   - saves, screenshots, logs, crash reports;
   - ash's own folder, `options.txt` and `servers.dat`.
-- **Not exportable:** a 1.8.9 instance, since a `.mrpack` can't name Legacy Fabric; the button says why. ash's client and bundled mods are never in an export; a friend importing it into ash gets them from ash.
+- **1.8.9:** exported as `fabric-loader` with `minecraft: "1.8.9"`, the form every 1.8.9 pack on Modrinth uses. The export says some launchers can't run 1.8.9 packs.
+- ash's client and bundled mods are never in an export; a friend importing it into ash gets them from ash.
 
 ### Updates
 - **Mods:**
-  - **Finding updates:** opening the Mods page asks Modrinth, in one request by file hash, for the newest version of every mod in the instance that fits the instance's version and loader. That covers ash-installed mods and hand-added jars Modrinth knows by hash.
+  - **Finding updates:** opening the Mods page asks Modrinth by file hash for the newest version of every mod in the instance that fits the instance's version and loader. That covers ash-installed mods and hand-added jars Modrinth knows by hash.
+  - **Releases and betas:** it's two requests to Modrinth's documented update route, which takes one version-type filter for all hashes. One asks for releases only, for mods installed as releases and hand-added jars. The other has no filter, for mods the player installed as a beta or alpha. A mod is out of date when the answer's version isn't the one installed.
   - **What shows:** each mod with an update shows it, and Update all appears when any do.
   - **Applying one:** an update replaces the jar the same way an install writes one. It's verified, recorded in `ash-mods.json`, and brings new required dependencies.
   - **What stays:** the old jar is removed only after the new one is in place, and configs aren't touched. A mod switched off stays off.
 - **Packs:**
-  - **Finding updates:** a pack instance asks Modrinth for the pack's newest version for the instance's Minecraft version and loader.
+  - **Finding updates:** a pack instance asks Modrinth for the pack's newest version for the instance's Minecraft version, by the pack file's hash with `mrpack` as the loader (research 0017). Before it's offered, the new version's own index is read for its loader and Minecraft version.
   - **Mods:** a pack update installs files the new index adds and replaces ones it changes. It removes files the new index drops, but only if they're unchanged since import. Files the player added are never touched.
   - **Config files:** an override file is replaced only if the player hasn't changed it since import, by the hash in `ash-modpack.json`. Ones the player changed are kept, and listed after the update.
   - **New Minecraft versions:** a pack version for a newer Minecraft version isn't an update. It's offered as "Make a new instance from it".
@@ -184,12 +198,14 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
 - **Modpacks:**
   - ash-core tests import recorded `.mrpack` fixtures: a plain Fabric pack, one on a version target, a Forge pack (refused), and a pack with a download from a foreign domain (refused);
   - also a pack with a `../` path (refused), and one with optional files;
+  - and from research 0017: a pack pinning a loader before 0.15.0, a 1.8.9 pack, a pack with no loader, and a pack on a target with an older and a newer Fabric API;
   - the instance's files, `ash-modpack.json` and the third-party switch are asserted.
   - Prior art: `tests/mods.rs`.
 - **Imports:**
   - fixture folders laid out like a Prism instance, a MultiMC instance, a Modrinth app profile and a `.minecraft`;
-  - the tests assert what's copied, what's refused, the newer-world mark, the server merge without duplicates, and that the source folder's bytes are unchanged afterwards.
-- **Export:** an exported pack's index is asserted against a fixture instance with a fake Modrinth hash lookup. It's imported back to check the round trip.
+  - the tests assert what's copied, what's refused, the newer-world mark, the server merge without duplicates, and that the source folder's bytes are unchanged afterwards;
+  - also a Prism instance with an unknown patch (refused), one in each `instance.cfg` form, and a Modrinth app database in each of its layouts.
+- **Export:** an exported pack's index is asserted against a fixture instance with a fake Modrinth hash lookup. It's imported back to check the round trip, a 1.8.9 instance included.
 - **Updates:**
   - fake Modrinth answers for the hash-based update lookup and for pack versions;
   - the tests cover replacing, keeping configs, keeping player-added mods, leaving changed overrides, the newer-Minecraft refusal, and the refusal while the game runs.
@@ -199,14 +215,14 @@ A player's modded game usually lives somewhere else already, as a Modrinth pack,
 
 - CurseForge packs and the CurseForge app.
 - Forge, NeoForge and Quilt, as instances or packs.
-- Legacy Fabric on versions other than 1.8.9, and exporting 1.8.9 instances.
+- Legacy Fabric on versions other than 1.8.9.
 - Automatic updates.
 - Syncing a pack instance's mods between computers. Instance definitions sync as now; their mods don't.
 - Publishing packs to Modrinth from ash.
 
 ## Further Notes
 
-1. **Research before modpacks: research 0017.** It covers:
+1. **Research before modpacks: research 0017, done 2026-10-30.** Its seven product questions were put to the owner that day and answered, and the sections above now say: old loaders kept, a newer Fabric API in a pack installed, 1.8.9 exported, two update requests, loader-less packs imported, other Prism patches refused, and the Modrinth app closed before reading. It covers:
    - the `.mrpack` format as Modrinth documents it;
    - which hashes Fabric's Maven publishes, and how ash verifies Fabric-only libraries;
    - what Fabric Loader does with two copies of Fabric API;
