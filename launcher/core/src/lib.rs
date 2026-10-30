@@ -61,7 +61,7 @@ pub use config::Config;
 pub use depot::{Artifact, Cancel, NullSink, Plan, PrepareEvent, ProgressSink};
 pub use diagnostics::Diagnostics;
 pub use error::AshError;
-pub use glance::{AshFeatures, InstanceGlance, LastSession};
+pub use glance::{AshFeatures, InstanceGlance, LastSession, NewestTarget};
 pub use installation::InstallationCheck;
 pub use instance::{DeletionPreview, Instance, InstanceId, Session};
 pub use links::Links;
@@ -1489,6 +1489,13 @@ impl Ash {
                 pin,
                 overrides::load(&self.config.data_root, id).third_party_mods,
             ),
+            newest: pin
+                .filter(|pin| pin.retired)
+                .and_then(|_| loader::newest(self.config.loaders))
+                .map(|newest| NewestTarget {
+                    version_id: newest.version_id.to_owned(),
+                    loader: newest.loader,
+                }),
         })
     }
 

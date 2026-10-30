@@ -9,6 +9,7 @@ import {
   type AshFeatures,
   type Instance,
   type InstanceGlance,
+  type Loader,
   type InstanceId,
   type ServerEntry,
   type ServerStatus,
@@ -36,6 +37,8 @@ export function PlayPage(props: {
   onSelect: (id: InstanceId) => void;
   onOpen: (id: InstanceId) => void;
   onNew: () => void;
+  /** Makes an instance and selects it: one on the newest target, from a retired one's card. */
+  onCreate: (name: string, versionId: string, loader: Loader) => void;
 }) {
   const { selected, launch } = props;
 
@@ -81,7 +84,12 @@ export function PlayPage(props: {
 
       <div className="cards">
         <ServersCard instance={selected} launch={launch} sounds={props.sounds} />
-        <ThisInstanceCard instance={selected} phase={launch.phase.at} onOpen={props.onOpen} />
+        <ThisInstanceCard
+          instance={selected}
+          phase={launch.phase.at}
+          onOpen={props.onOpen}
+          onCreate={props.onCreate}
+        />
         <InstancesCard
           instances={props.instances}
           selected={selected.id}
@@ -431,6 +439,7 @@ function ThisInstanceCard(props: {
   /** Asked again whenever this changes, so a session that starts or ends shows. */
   phase: Launch["phase"]["at"];
   onOpen: (id: InstanceId) => void;
+  onCreate: (name: string, versionId: string, loader: Loader) => void;
 }) {
   const { instance, phase } = props;
   const [glance, setGlance] = useState<InstanceGlance | null>(null);
@@ -475,6 +484,7 @@ function ThisInstanceCard(props: {
       {glance.features.state !== "no_client" && (
         <p className="hint">Right Shift changes these in game.</p>
       )}
+      {glance.newest && <NewestTarget newest={glance.newest} onCreate={props.onCreate} />}
     </div>
   );
 
@@ -487,6 +497,26 @@ function ThisInstanceCard(props: {
       <button className="mini glance-open" onClick={() => props.onOpen(instance.id)}>
         <Icon name="settings" />
         Instance settings
+      </button>
+    </div>
+  );
+}
+
+/**
+ * On an instance whose version target is retired (ADR-0028): it keeps working
+ * with the features it has, and new ones arrive on the newest target, one
+ * click away.
+ */
+function NewestTarget(props: {
+  newest: { version_id: string; loader: Loader };
+  onCreate: (name: string, versionId: string, loader: Loader) => void;
+}) {
+  const { version_id, loader } = props.newest;
+  return (
+    <div className="glance-newest">
+      <p>ash's newest features need {version_id}.</p>
+      <button className="mini" onClick={() => props.onCreate(version_id, version_id, loader)}>
+        New {version_id} instance
       </button>
     </div>
   );

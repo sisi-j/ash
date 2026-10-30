@@ -248,6 +248,7 @@ fn pins() -> &'static [LoaderPin] {
             jvm_arguments: &[],
             client_jar: Some(ASH_CLIENT),
             bundled_mods: bundled,
+            retired: false,
         }]));
         pins
     })

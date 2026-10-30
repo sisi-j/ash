@@ -12,7 +12,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::load_report;
-use crate::loader::LoaderPin;
+use crate::loader::{Loader, LoaderPin};
 
 /// The most of a mod's `fabric.mod.json` read for its name. Real ones are a
 /// few kilobytes; this stops a jar that claims otherwise being inflated whole.
@@ -28,6 +28,16 @@ pub struct InstanceGlance {
     /// The mods in the instance's mods folder that ash did not put there, by
     /// the name each gives itself, or its file name if it gives none.
     pub mods: Vec<String>,
+    /// For an instance on a retired version target, the newest one, where
+    /// ash's newest features are (ADR-0028); `None` otherwise.
+    pub newest: Option<NewestTarget>,
+}
+
+/// The newest version target, for a new instance on it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct NewestTarget {
+    pub version_id: String,
+    pub loader: Loader,
 }
 
 /// Which of ash's features are on.

@@ -254,6 +254,8 @@ function glance(id: string): InstanceGlance {
     played_ms: instance.played_ms + (running ? 12 * MINUTE : 0),
     last_session: running ? { started_ms: now - 12 * MINUTE, ended_ms: null } : instance.last_session,
     mods: id === "a" ? ["Sodium"] : [],
+    // A retired target's instance (ADR-0028), in its own state.
+    newest: state.startsWith("instance-retired") ? { version_id: "26.4", loader: "fabric" } : null,
   };
 }
 
@@ -660,7 +662,10 @@ export const api: typeof real.api = {
 
   instances: () => resolve(instances),
   loadersFor: (versionId) => resolve(versionId === "1.8.9" ? ["vanilla", "legacy_fabric"] : ["vanilla", "fabric"]),
-  createInstance: () => Promise.reject({ kind: "unknown", message: "Not in the check.", retryable: false }),
+  createInstance: (name, versionId, loader) => {
+    (window as unknown as { created?: string }).created = `${name} ${versionId} ${loader}`;
+    return Promise.reject({ kind: "unknown", message: "Not in the check.", retryable: false });
+  },
   renameInstance: (id, name) => resolve({ ...INSTANCES.find((i) => i.id === id)!, name }),
   previewDeletion: (id) =>
     resolve({

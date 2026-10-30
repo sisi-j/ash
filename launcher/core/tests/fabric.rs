@@ -20,7 +20,7 @@ use ash_core::process::{FakeProcessPort, ProcessPort};
 use ash_core::servers::FakeServerPort;
 use ash_core::{
     Ash, AshError, AshFeatures, Cancel, Config, InstanceId, Loader, LoaderPin, MachineOverrides,
-    NullSink, PinnedFile, PinnedLibrary, VERSION_MANIFEST_URL,
+    NewestTarget, NullSink, PinnedFile, PinnedLibrary, VERSION_MANIFEST_URL,
 };
 
 mod common;
@@ -153,6 +153,7 @@ fn pins() -> &'static [LoaderPin] {
             jvm_arguments: &["-DFabricMcEmu= net.minecraft.client.main.Main "],
             client_jar: Some(ASH_CLIENT),
             bundled_mods: bundled,
+            retired: false,
         }]));
         pins
     })
@@ -167,6 +168,20 @@ fn pins_without_an_intermediary() -> &'static [LoaderPin] {
         let pin = &pins()[0];
         let loader_only: &'static [PinnedLibrary] = Box::leak(Box::new([pin.libraries[1]]));
         Box::leak(Box::new([LoaderPin { libraries: loader_only, ..*pin }]))
+    })
+}
+
+/// The test's target retired behind a newer one (ADR-0028), newest first as
+/// pins are listed.
+fn pins_with_the_target_retired() -> &'static [LoaderPin] {
+    static PINS: OnceLock<&'static [LoaderPin]> = OnceLock::new();
+
+    PINS.get_or_init(|| {
+        let pin = pins()[0];
+        Box::leak(Box::new([
+            LoaderPin { version_id: "26.9", client_jar: Some("ash-client-26.9.jar"), ..pin },
+            LoaderPin { retired: true, ..pin },
+        ]))
     })
 }
 
@@ -298,6 +313,35 @@ async fn a_pin_with_no_intermediary_prepares_and_launches_on_the_loader_alone() 
         "ash's client was not handed over"
     );
     assert!(view.args.iter().any(|a| a == KNOT), "the loader's main class did not start the game");
+}
+
+#[tokio::test]
+async fn a_retired_targets_instance_still_launches_its_last_client_and_names_the_newest() {
+    let f = fixture_from(serving(), |config| Config {
+        loaders: pins_with_the_target_retired(),
+        ..config
+    });
+    let id = f.modded().await;
+
+    f.prepare(&id).await;
+    let view = f.ash.preview_launch(&id, &NullSink, &Cancel::new()).await.expect("previewed");
+
+    assert!(
+        property(&view.args, "fabric.addMods").unwrap().contains(ASH_CLIENT),
+        "its last client build was not handed over"
+    );
+    assert_eq!(
+        f.ash.instance_glance(&id).unwrap().newest,
+        Some(NewestTarget { version_id: "26.9".into(), loader: Loader::Fabric })
+    );
+}
+
+#[tokio::test]
+async fn an_instance_on_a_target_still_current_names_no_newer_one() {
+    let f = fixture();
+    let id = f.modded().await;
+
+    assert_eq!(f.ash.instance_glance(&id).unwrap().newest, None);
 }
 
 #[tokio::test]
