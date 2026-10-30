@@ -160,6 +160,7 @@ exist, whether Lithium earns its place, and what each feature costs.
 ```
 ./gradlew :target-1.8.9:runBenchmark -Pbench.label=baseline
 ./gradlew :target-1.21.11:runBenchmark -Pbench.label=baseline
+./gradlew :target-26.3:runBenchmark -Pbench.label=baseline
 ```
 
 **Run it by hand, on a real machine.** CI has no GPU, and its software

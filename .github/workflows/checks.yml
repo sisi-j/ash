@@ -84,7 +84,7 @@ jobs:
       # on one version target. Also compiles each target's frame-time
       # measurement, which only a human runs, so it cannot quietly stop
       # building; `build` itself checks none of it is in a player's jar.
-      - run: ./gradlew build :target-1.21.11:compileBenchmarkJava :target-1.20.4:compileBenchmarkJava :target-1.8.9:compileBenchmarkJava
+      - run: ./gradlew build :target-26.3:compileBenchmarkJava :target-1.21.11:compileBenchmarkJava :target-1.20.4:compileBenchmarkJava :target-1.8.9:compileBenchmarkJava
         working-directory: client
 
       # The jar the installer ships. Kept so that a build from any commit can
