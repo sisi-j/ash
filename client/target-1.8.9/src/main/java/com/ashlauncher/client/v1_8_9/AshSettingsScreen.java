@@ -71,6 +71,8 @@ public final class AshSettingsScreen extends Screen {
     AshSettingsScreen(SettingsScreen settingsScreen, KeyBinding key) {
         this.key = key;
         this.panel = new Panel(settingsScreen, () -> client.setScreen(null));
+        // Shift while dragging in Edit HUD places an item freely, unsnapped.
+        panel.setShiftHeld(Screen::hasShiftDown);
         // ash's own page shows the key as the game names it, and sends the
         // player to the game's own Controls to change it.
         panel.setOpenKey(() -> GameOptions.getFormattedNameForKeyCode(key.getCode()),

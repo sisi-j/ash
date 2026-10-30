@@ -1,5 +1,6 @@
 package com.ashlauncher.client.ui;
 
+import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.crosshair.Cross;
 import com.ashlauncher.client.hit.HitIndicator;
 import com.ashlauncher.client.hud.HudSurface;
@@ -412,6 +413,16 @@ final class OptionsPage {
         }
     }
 
+    /** Whether a feature draws a HUD item, whose page resets its place and style together. */
+    private static boolean isHudItem(Feature feature) {
+        for (HudItem item : HudItem.ALL) {
+            if (item.feature() == feature) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean hasPreview() {
         return subject == Feature.CROSSHAIR || subject == Feature.HIT_INDICATOR;
     }
@@ -523,7 +534,7 @@ final class OptionsPage {
         if (feature == null) {
             return;
         }
-        String text = "Reset to defaults";
+        String text = model.beta() && isHudItem(subject) ? "Reset this item" : "Reset to defaults";
         float size = textSize(0.92f);
         int padX = units(0.9);
         Rect link = new Rect(list.x, y + units(0.6) - gap,

@@ -1122,7 +1122,9 @@ public final class AshSmokeTest implements ClientModInitializer {
                     + " of 427 by 240");
         }
 
-        clickOn(client, screen, "Edit HUD's Reset", Panel::resetReadoutsButton);
+        // Reset all asks first, in a test build (spec 0007).
+        clickOn(client, screen, "Edit HUD's Reset all", Panel::resetReadoutsButton);
+        clickOn(client, screen, "Edit HUD's Reset all, again", Panel::resetReadoutsButton);
         expectFileSays("ping-readout.position=top-left 4 15");
         clickOn(client, screen, "Edit HUD's Done", Panel::doneButton);
         if (onClient(client, () -> screen.panel().editingHud())) {

@@ -13,6 +13,7 @@ import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.hud.HudItems;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Placement;
+import com.ashlauncher.client.hud.Snap;
 import com.ashlauncher.client.perf.FpsMark;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.Target;
@@ -628,5 +629,122 @@ class PanelTest {
 
         assertTrue(render(panel).drew("Faster clouds is only on 1.8.9."), "said nothing");
         assertEquals(List.of(), reported);
+    }
+
+    // ---- the HUD editor (spec 0007, The HUD editor; behind the beta switch) ----
+
+    private Panel betaEditingHud() {
+        Panel panel = betaPanel();
+        panel.setGuiScale(2);
+        drawReadouts();
+        render(panel);
+        click(panel, panel.editHudButton());
+        assertTrue(panel.editingHud());
+        return panel;
+    }
+
+    /**
+     * Takes hold of the frame rate and drags it until its right edge is three
+     * GUI units short of the screen's: within reach of snapping.
+     */
+    private static void dragFpsNearTheRightEdge(Panel panel) {
+        Rect box = panel.itemBox(HudItem.FPS);
+        panel.mouseClicked(box.centreX(), box.centreY());
+        // Held 20.5 GUI units from its left; the screen is 960 wide at scale
+        // 2 and the readout 42, so a left of 915 is 3 short of the edge.
+        panel.mouseDragged(2 * (915 + 20) + 1, box.centreY());
+    }
+
+    @Test
+    void a_dragged_item_snaps_flush_to_the_edge_with_a_guide_showing() throws Exception {
+        Panel panel = betaEditingHud();
+
+        dragFpsNearTheRightEdge(panel);
+        assertTrue(panel.guides().contains(Snap.Guide.vertical(WIDTH / 2)), "no guide at the edge: " + panel.guides());
+        render(panel).save(new File("build/ui/edit-hud-snapped.png"));
+        panel.mouseReleased();
+
+        assertEquals(WIDTH / 2 - 42, fpsDrawn().x(), "it did not snap flush against the right edge");
+        assertTrue(panel.guides().isEmpty(), "the guide stayed after the drop");
+    }
+
+    @Test
+    void with_shift_held_it_goes_exactly_where_it_is_dragged() {
+        Panel panel = betaEditingHud();
+        panel.setShiftHeld(() -> true);
+
+        dragFpsNearTheRightEdge(panel);
+        panel.mouseReleased();
+
+        assertEquals(915, fpsDrawn().x());
+    }
+
+    @Test
+    void a_release_build_does_not_snap() {
+        Panel panel = editingHud();
+
+        dragFpsNearTheRightEdge(panel);
+        panel.mouseReleased();
+
+        assertEquals(915, fpsDrawn().x());
+    }
+
+    @Test
+    void clicking_an_item_opens_its_style_with_reset_this_item() {
+        Panel panel = betaEditingHud();
+        Rect box = panel.itemBox(HudItem.FPS);
+
+        panel.mouseClicked(box.centreX(), box.centreY());
+        panel.mouseReleased();
+        FakeCanvas canvas = render(panel);
+
+        assertFalse(panel.editingHud(), "Edit HUD stayed open");
+        assertTrue(canvas.drew("FPS readout") && canvas.drew("Size") && canvas.drew("Reset this item"),
+                "drew " + canvas.texts());
+        assertEquals(Settings.FPS_READOUT_POSITION.fallback(), settings.get(Settings.FPS_READOUT_POSITION),
+                "a click moved it");
+    }
+
+    @Test
+    void reset_this_item_puts_back_its_place_and_its_style() {
+        Panel panel = betaPanel();
+        settings.set(Settings.FPS_READOUT_POSITION, new Placement(Anchor.BOTTOM_RIGHT, 4, 4));
+        settings.set(Settings.FPS_READOUT_ITEM.size, 150);
+        settings.set(Settings.PING_READOUT_ITEM.size, 150);
+
+        model.resetToDefaults(Feature.FPS_READOUT);
+
+        assertEquals(Settings.FPS_READOUT_POSITION.fallback(), settings.get(Settings.FPS_READOUT_POSITION));
+        assertEquals(100, settings.get(Settings.FPS_READOUT_ITEM.size));
+        assertEquals(150, settings.get(Settings.PING_READOUT_ITEM.size), "another item was reset");
+    }
+
+    @Test
+    void reset_all_asks_first_and_then_puts_every_item_back() {
+        Panel panel = betaEditingHud();
+        settings.set(Settings.FPS_READOUT_POSITION, new Placement(Anchor.BOTTOM_RIGHT, 4, 4));
+        settings.set(Settings.PING_READOUT_ITEM.chroma, true);
+
+        click(panel, panel.resetReadoutsButton());
+        assertTrue(render(panel).drew("Reset all?"), "it did not ask");
+        assertEquals(new Placement(Anchor.BOTTOM_RIGHT, 4, 4), settings.get(Settings.FPS_READOUT_POSITION),
+                "it reset before it was sure");
+
+        click(panel, panel.resetReadoutsButton());
+
+        assertEquals(Settings.FPS_READOUT_POSITION.fallback(), settings.get(Settings.FPS_READOUT_POSITION));
+        assertFalse(settings.get(Settings.PING_READOUT_ITEM.chroma));
+    }
+
+    @Test
+    void reset_all_asks_again_if_the_second_press_is_long_in_coming() {
+        Panel panel = betaEditingHud();
+        settings.set(Settings.FPS_READOUT_POSITION, new Placement(Anchor.BOTTOM_RIGHT, 4, 4));
+
+        click(panel, panel.resetReadoutsButton());
+        now.addAndGet(Panel.RESET_ALL_ASKS_FOR);
+        click(panel, panel.resetReadoutsButton());
+
+        assertEquals(new Placement(Anchor.BOTTOM_RIGHT, 4, 4), settings.get(Settings.FPS_READOUT_POSITION));
     }
 }

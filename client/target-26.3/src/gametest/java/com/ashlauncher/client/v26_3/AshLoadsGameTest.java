@@ -1,8 +1,12 @@
 package com.ashlauncher.client.v26_3;
 
 import com.ashlauncher.client.Beta;
+import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.report.LoadReport;
+import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.ui.Panel;
+import com.ashlauncher.client.ui.Rect;
 import com.ashlauncher.client.report.Feature;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.platform.TextInputManager;
@@ -70,6 +74,7 @@ public class AshLoadsGameTest implements FabricClientGameTest {
 
             capeWorks(context);
             settingsScreenWorks(context);
+            snappingWorks(context);
         }
     }
 
@@ -143,6 +148,66 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         if (after == screen) {
             throw new AssertionError("ash's settings closed and left SDL text input started for themselves");
         }
+    }
+
+    /** Whether a saved placement is flush against the right edge: a right-hand anchor, no gap. */
+    private static boolean flushRight(String saved) {
+        return saved.matches("(top-|bottom-)?right 0 -?\d+");
+    }
+
+    /**
+     * Edit HUD's snapping (spec 0007): the frame rate, dragged until its right
+     * edge is two GUI units short of the screen's, lies flush against it and
+     * is saved so: right-anchored, with no gap. Driven through the panel as the
+     * screen hands it the mouse, in real pixels. Reset all, asked twice, puts
+     * it back.
+     */
+    private static void snappingWorks(ClientGameTestContext context) {
+        context.getInput().pressKey(binding(context, SettingsScreen.BINDING_NAME));
+        context.waitTicks(5);
+        settle(context);
+        context.runOnClient(client -> {
+            Panel panel = ((AshSettingsScreen) client.gui.screen()).panel();
+            Rect edit = panel.editHudButton();
+            panel.mouseClicked(edit.centreX(), edit.centreY());
+        });
+        // A frame or two for the readouts, drawn beneath, to say how big they are.
+        context.waitTicks(3);
+        String unsnapped = context.computeOnClient(client -> {
+            Panel panel = ((AshSettingsScreen) client.gui.screen()).panel();
+            int scale = (int) client.getWindow().getGuiScale();
+            Rect box = panel.itemBox(HudItem.FPS);
+            if (box == null) {
+                return "the FPS readout has no box in Edit HUD";
+            }
+            int left = box.x / scale + 1;
+            int width = box.width / scale - 1;
+            int move = (client.getWindow().getGuiScaledWidth() - width - 2 - left) * scale;
+            panel.mouseClicked(box.centreX(), box.centreY());
+            panel.mouseDragged(box.centreX() + move, box.centreY());
+            panel.mouseReleased();
+            String saved = AshClient.settings.get(Settings.FPS_READOUT_POSITION).format();
+            return flushRight(saved) ? null
+                    : "dragged two short of the right edge, it was saved at " + saved;
+        });
+        if (unsnapped != null) {
+            throw new AssertionError(unsnapped);
+        }
+        context.takeScreenshot("ash-edit-hud-snapped");
+        context.runOnClient(client -> {
+            Panel panel = ((AshSettingsScreen) client.gui.screen()).panel();
+            Rect reset = panel.resetReadoutsButton();
+            panel.mouseClicked(reset.centreX(), reset.centreY());
+            panel.mouseClicked(reset.centreX(), reset.centreY());
+            Rect done = panel.doneButton();
+            panel.mouseClicked(done.centreX(), done.centreY());
+        });
+        String reset = context.computeOnClient(client -> AshClient.settings.get(Settings.FPS_READOUT_POSITION).format());
+        if (!reset.equals("top-left 4 4")) {
+            throw new AssertionError("Reset all, asked twice, left the frame rate at " + reset);
+        }
+        context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+        context.waitTicks(10);
     }
 
     /** Whom the game's text input is started for: null when it is stopped. Private in 26.3, so read by name. */

@@ -3,6 +3,7 @@ package com.ashlauncher.client.ui;
 import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.hud.HudLayout;
 import com.ashlauncher.client.hud.Placement;
+import com.ashlauncher.client.hud.Snap;
 import com.ashlauncher.client.perf.FpsMark;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.settings.Category;
@@ -73,6 +74,21 @@ public final class Panel {
     private boolean editingHud;
     /** The readout being dragged in Edit HUD, or {@code null}. */
     private HudItem dragging;
+    /** Where the mouse took hold of an item, in real pixels: a release near it is a click on the item, not a drag. */
+    private int pressX;
+    private int pressY;
+    /** Whether the held item has been moved since it was taken hold of. */
+    private boolean moved;
+    /** The lines the held item snapped to, drawn while it is held (spec 0007). */
+    private List<Snap.Guide> guides = new ArrayList<>();
+    /** Whether Shift is held, which places a dragged item freely: the game's to say. */
+    private java.util.function.BooleanSupplier shiftHeld = () -> false;
+    /** When Reset all was first pressed, so that a second press does it; -1 when it isn't asking. */
+    private long resetAllAskedAt = -1;
+    /** How long Reset all waits for its second press. */
+    static final long RESET_ALL_ASKS_FOR = 4_000_000_000L;
+    /** How far the mouse moves before a press on an item is a drag, in real pixels. */
+    private static final int DRAG_THRESHOLD = 3;
     /** Where in the dragged readout the mouse took hold of it, in GUI units, so it does not jump to the cursor. */
     private float grabX;
     private float grabY;
@@ -119,6 +135,11 @@ public final class Panel {
     /** Tells the panel whether the game behind it is blurred: 1.8.9 cannot blur on every machine. */
     public void setBlurred(boolean blurred) {
         this.blurred = blurred;
+    }
+
+    /** Tells the panel how to ask whether Shift is held: dragging with it places an item freely, unsnapped. */
+    public void setShiftHeld(java.util.function.BooleanSupplier shiftHeld) {
+        this.shiftHeld = shiftHeld;
     }
 
     /** The game's GUI scale, which the readouts are laid out in: whenever the screen draws. */
@@ -441,7 +462,15 @@ public final class Panel {
             return true;
         }
         if (resetReadoutsButton().contains(x, y)) {
-            model.resetReadouts();
+            if (!model.beta()) {
+                model.resetReadouts();
+            } else if (resetAllAsking()) {
+                // The second press: everything back as it started.
+                resetAllAskedAt = -1;
+                model.resetHud();
+            } else {
+                resetAllAskedAt = clock.getAsLong();
+            }
             return true;
         }
         HudLayout layout = model.hudLayout();
@@ -452,6 +481,9 @@ public final class Panel {
                 grabX = x / (float) guiScale - placement.x(layout.width(item), guiWidth());
                 grabY = y / (float) guiScale - placement.y(layout.height(item), guiHeight());
                 dragging = item;
+                pressX = x;
+                pressY = y;
+                moved = false;
                 layout.drag(item, placement);
                 return true;
             }
@@ -463,29 +495,92 @@ public final class Panel {
     public void mouseDragged(int x, int y) {
         if (editingHud) {
             if (dragging != null) {
+                if (model.beta() && !moved && Math.abs(x - pressX) < DRAG_THRESHOLD
+                        && Math.abs(y - pressY) < DRAG_THRESHOLD) {
+                    // Not a drag yet: a release now is a click on the item.
+                    return;
+                }
+                moved = true;
                 HudLayout layout = model.hudLayout();
                 int left = Math.round(x / (float) guiScale - grabX);
                 int top = Math.round(y / (float) guiScale - grabY);
-                layout.drag(dragging, Placement.nearest(left, top, layout.width(dragging), layout.height(dragging),
-                        guiWidth(), guiHeight()));
+                int width = layout.width(dragging);
+                int height = layout.height(dragging);
+                guides = new ArrayList<>();
+                if (model.beta() && !shiftHeld.getAsBoolean()) {
+                    // Moved first where it is dragged, unsnapped: where the others
+                    // sit can depend on where it is, as the ping's does on the
+                    // frame rate's, and it snaps to where they are now.
+                    layout.drag(dragging, Placement.nearest(left, top, width, height, guiWidth(), guiHeight()));
+                    Snap snap = Snap.of(left, top, width, height, guiWidth(), guiHeight(), boxesBut(dragging));
+                    left = snap.x();
+                    top = snap.y();
+                    guides = snap.guides();
+                }
+                layout.drag(dragging, Placement.nearest(left, top, width, height, guiWidth(), guiHeight()));
             }
         } else if (page != null) {
             page.drag(x, y);
         }
     }
 
-    /** A dragged readout stays where it was let go, and is saved there at once. */
+    /**
+     * A dragged readout stays where it was let go, and is saved there at once.
+     * With the beta switch on, one let go without being moved was clicked:
+     * its style options open (spec 0007).
+     */
     public void mouseReleased() {
         if (dragging != null) {
             HudLayout layout = model.hudLayout();
             Placement dropped = layout.placement(dragging);
             HudItem item = dragging;
             dragging = null;
+            guides = new ArrayList<>();
             layout.endDrag();
+            if (model.beta() && !moved) {
+                openOptionsOf(item);
+                return;
+            }
             model.change(item.position(), dropped);
         } else if (page != null) {
             page.release();
         }
+    }
+
+    /** Edit HUD put away, and an item's options page open in its place: its style, and Reset this item. */
+    private void openOptionsOf(HudItem item) {
+        for (SettingsScreen.Row row : model.rows()) {
+            if (row.feature() == item.feature()) {
+                stopEditingHud();
+                open(row);
+                return;
+            }
+        }
+    }
+
+    /** Every other item shown, where it is on screen in GUI units: what a dragged one can line up with. */
+    private List<Snap.Box> boxesBut(HudItem held) {
+        HudLayout layout = model.hudLayout();
+        List<Snap.Box> boxes = new ArrayList<>();
+        for (HudItem item : HudItem.ALL) {
+            int w = layout.width(item);
+            int h = layout.height(item);
+            if (item != held && layout.shown(item) && w > 0 && h > 0) {
+                Placement placement = layout.placement(item);
+                boxes.add(new Snap.Box(placement.x(w, guiWidth()), placement.y(h, guiHeight()), w, h));
+            }
+        }
+        return boxes;
+    }
+
+    /** The lines the held item snapped to just now; empty when it snapped to none, or none is held. */
+    List<Snap.Guide> guides() {
+        return guides;
+    }
+
+    /** Whether Reset all is waiting for its second press. */
+    private boolean resetAllAsking() {
+        return resetAllAskedAt >= 0 && clock.getAsLong() - resetAllAskedAt < RESET_ALL_ASKS_FOR;
     }
 
     /** The mouse wheel: positive is away from the player, which scrolls up. */
@@ -638,7 +733,7 @@ public final class Panel {
     /** Edit HUD's Reset, beside Done: both readouts back where they started. */
     public Rect resetReadoutsButton() {
         Rect done = doneButton();
-        int w = units(5.5);
+        int w = units(model.beta() ? 7.5 : 5.5);
         return new Rect(done.x - units(0.6) - w, done.y, w, done.height);
     }
 
@@ -1385,11 +1480,22 @@ public final class Panel {
             drawTag(canvas, item, box);
         }
         if (dragging != null) {
+            for (Snap.Guide guide : guides) {
+                int thickness = Math.max(1, units(0.08));
+                // On the screen's own edge, drawn just inside it.
+                if (guide.isVertical()) {
+                    canvas.fill(Math.min(guide.at() * guiScale, width - thickness), 0, thickness, height, Palette.GUIDE);
+                } else {
+                    canvas.fill(0, Math.min(guide.at() * guiScale, height - thickness), width, thickness, Palette.GUIDE);
+                }
+            }
             return;
         }
 
-        String hint = any ? "Drag the readouts anywhere. They keep their place when the window changes size."
-                : "Switch the FPS or ping readout on to move it here.";
+        String hint = !any ? "Switch the FPS or ping readout on to move it here."
+                : model.beta() ? "Drag an item anywhere: it snaps to the edges and to the others. Shift places it"
+                        + " freely. Click one to style it."
+                : "Drag the readouts anywhere. They keep their place when the window changes size.";
         float size = textSize(0.85f);
         Rect done = doneButton();
         int w = Ink.width(hint, Ink.Weight.REGULAR, size) + 2 * units(0.8);
@@ -1399,7 +1505,8 @@ public final class Panel {
         Ink.text(hint, Ink.Weight.REGULAR, size, Palette.TEXT).drawAt(canvas, x + units(0.8),
                 done.y + (done.height - Ink.lineHeight(Ink.Weight.REGULAR, size)) / 2, 1f);
 
-        drawTextButton(canvas, resetReadoutsButton(), "Reset", false, mouseX, mouseY);
+        String reset = !model.beta() ? "Reset" : resetAllAsking() ? "Reset all?" : "Reset all";
+        drawTextButton(canvas, resetReadoutsButton(), reset, false, mouseX, mouseY);
         drawTextButton(canvas, done, "Done", true, mouseX, mouseY);
     }
 
