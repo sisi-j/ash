@@ -282,7 +282,7 @@ public final class AshSmokeTest implements ClientModInitializer {
 
     /** Whether a saved placement is flush against the right edge: a right-hand anchor, no gap. */
     private static boolean flushRight(String saved) {
-        return saved.matches("(top-|bottom-)?right 0 -?\d+");
+        return saved.matches("(top-|bottom-)?right 0 -?\\d+");
     }
 
     /**
