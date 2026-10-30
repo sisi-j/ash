@@ -416,6 +416,17 @@ const STATES: State[] = [
     },
   },
   { name: "settings", shows: "When the game starts", reach: openPage("Settings") },
+  // A retired target's instance (ADR-0028): it says where the newest features
+  // are, and its button asks for an instance there.
+  {
+    name: "instance-retired",
+    shows: "ash's newest features need 26.4.",
+    verify: async (page) => {
+      await page.getByRole("button", { name: "New 26.4 instance" }).click();
+      const created = await page.evaluate(() => (window as unknown as { created?: string }).created);
+      return created === "26.4 26.4 fabric" ? null : `the button asked for ${created}`;
+    },
+  },
   {
     name: "wardrobe",
     shows: "Only ash players see it.",

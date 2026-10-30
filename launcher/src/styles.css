@@ -837,6 +837,23 @@ button {
   margin-top: 6px;
 }
 
+/* A retired target's note: where ash's newest features are, and the way there. */
+.glance-newest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--fill-2);
+}
+
+.glance-newest p {
+  margin: 0;
+  font-size: 12.5px;
+}
+
 /* The shortcut sits at the foot of the card, under whatever the card holds. */
 .glance-open {
   align-self: flex-start;

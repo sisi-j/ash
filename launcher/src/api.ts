@@ -133,6 +133,8 @@ export type InstanceGlance = {
   last_session: Session | null;
   /** The player's mods, never ash's own. */
   mods: string[];
+  /** For an instance on a retired version target, the newest one, where ash's newest features are (ADR-0028). */
+  newest: { version_id: string; loader: Loader } | null;
 };
 
 /**

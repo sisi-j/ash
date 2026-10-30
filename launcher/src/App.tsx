@@ -443,6 +443,7 @@ export default function App() {
               setPlayView("instance");
             }}
             onNew={() => setPlayView("new")}
+            onCreate={(name, versionId, loader) => void create(name, versionId, loader)}
           />
         )}
       </main>

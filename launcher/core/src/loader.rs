@@ -208,6 +208,11 @@ pub struct LoaderPin {
     /// the newest version whose dependencies are met, wherever it came from,
     /// and drops the other without a word (`docs/research/0005`, A.4).
     pub bundled_mods: &'static [PinnedLibrary],
+    /// Whether this was the newest target and a newer release has since
+    /// taken its place (ADR-0028). A retired target's last client build keeps
+    /// shipping unchanged, so its instances prepare and launch as they did,
+    /// but it gets no new features, and its instances say where they are.
+    pub retired: bool,
 }
 
 /// One file a pin names, with the library-or-natives distinction already
@@ -362,6 +367,7 @@ const FABRIC_1_21_11: LoaderPin = LoaderPin {
         size: 2_426_039,
         natives: &[],
     }],
+    retired: false,
 };
 
 /// Fabric Loader 0.19.5 on 1.20.4 (ADR-0027): the same loader and document as
@@ -398,6 +404,7 @@ const FABRIC_26_3: LoaderPin = LoaderPin {
         size: 1_778_588,
         natives: &[],
     }],
+    retired: false,
 };
 
 /// 1.21.11, with 1.20.4's intermediary and Fabric API.
@@ -438,6 +445,7 @@ const FABRIC_1_20_4: LoaderPin = LoaderPin {
         size: 2_187_523,
         natives: &[],
     }],
+    retired: false,
 };
 
 const LEGACY_MAVEN: &str = "https://maven.legacyfabric.net/";
@@ -618,6 +626,7 @@ const LEGACY_FABRIC_1_8_9: LoaderPin = LoaderPin {
             natives: &[],
         },
     ],
+    retired: false,
 };
 
 /// Every loader ash ships a pin for.
@@ -640,6 +649,12 @@ pub fn pins(beta: bool) -> &'static [LoaderPin] {
     } else {
         PINS
     }
+}
+
+/// The newest version target among these pins: the first with ash's client
+/// in it that isn't retired, as pins are listed newest first (ADR-0028).
+pub(crate) fn newest(pins: &'static [LoaderPin]) -> Option<&'static LoaderPin> {
+    pins.iter().find(|pin| pin.client_jar.is_some() && !pin.retired)
 }
 
 /// The loader ash installs for a version target, if it has one pinned.
