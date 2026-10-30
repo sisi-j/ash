@@ -42,6 +42,9 @@ final class Palette {
     /** No change: the design's grey, an FPS mark's bar. */
     static final int MARK_LEVEL = 0xFFA7ADA6;
 
+    /** A line a dragged HUD item snapped to: cool, apart from every box and tag. */
+    static final int GUIDE = 0xE64DC3FF;
+
     /** A starred tile's star: warm, so a favourite stands out among the white. */
     static final int STAR = 0xFFFACC15;
     /** The "FPS" under a mark: white at 75%. */

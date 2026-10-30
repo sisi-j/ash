@@ -1011,7 +1011,15 @@ public class AshLoadsGameTest implements FabricClientGameTest {
                     + drawnAt[1] + " of 427 by 240");
         }
 
-        clickOn(context, "Edit HUD's Reset", Panel::resetReadoutsButton);
+        String unsnapped = context.computeOnClient(client -> snapped(((AshSettingsScreen) client.screen).panel(),
+                (int) client.getWindow().getGuiScale(), client.getWindow().getGuiScaledWidth()));
+        if (unsnapped != null) {
+            throw new AssertionError(unsnapped);
+        }
+
+        // Reset all asks first, in a test build (spec 0007).
+        clickOn(context, "Edit HUD's Reset all", Panel::resetReadoutsButton);
+        clickOn(context, "Edit HUD's Reset all, again", Panel::resetReadoutsButton);
         assertFileSays("fps-readout.position=top-left 4 4");
         clickOn(context, "Edit HUD's Done", Panel::doneButton);
         boolean stillEditing = context.computeOnClient(client ->
@@ -1021,6 +1029,32 @@ public class AshLoadsGameTest implements FabricClientGameTest {
         }
         context.getInput().pressKey(settingsKey);
         context.waitTicks(5);
+    }
+
+    /** Whether a saved placement is flush against the right edge: a right-hand anchor, no gap. */
+    private static boolean flushRight(String saved) {
+        return saved.matches("(top-|bottom-)?right 0 -?\d+");
+    }
+
+    /**
+     * Edit HUD's snapping, in the running game (spec 0007): the frame rate,
+     * dragged until its right edge is two GUI units short of the screen's,
+     * lies flush against it and is saved so: right-anchored, with no gap. Driven
+     * through the panel as the screen hands it the mouse, in real pixels.
+     */
+    private static String snapped(Panel panel, int scale, int guiWidth) {
+        Rect box = panel.itemBox(HudItem.FPS);
+        if (box == null) {
+            return "the FPS readout has no box in Edit HUD";
+        }
+        int left = box.x / scale + 1;
+        int width = box.width / scale - 1;
+        int move = (guiWidth - width - 2 - left) * scale;
+        panel.mouseClicked(box.centreX(), box.centreY());
+        panel.mouseDragged(box.centreX() + move, box.centreY());
+        panel.mouseReleased();
+        String saved = AshClient.settings.get(Settings.FPS_READOUT_POSITION).format();
+        return flushRight(saved) ? null : "dragged two short of the right edge, it was saved at " + saved;
     }
 
     private static void clickSwitch(ClientGameTestContext context, Feature feature) {

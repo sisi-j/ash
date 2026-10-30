@@ -7,6 +7,7 @@ import com.ashlauncher.client.ui.Key;
 import com.ashlauncher.client.ui.Panel;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
@@ -32,6 +33,8 @@ final class AshSettingsScreen extends Screen {
         super(Component.literal(SettingsScreen.TITLE));
         this.key = key;
         this.panel = new Panel(settingsScreen, this::onClose);
+        // Shift while dragging in Edit HUD places an item freely, unsnapped.
+        panel.setShiftHeld(() -> Minecraft.getInstance().hasShiftDown());
         // ash's own page shows the key as the game names it, and sends the
         // player to the game's own key bindings to change it.
         panel.setOpenKey(() -> key.getTranslatedKeyMessage().getString(),

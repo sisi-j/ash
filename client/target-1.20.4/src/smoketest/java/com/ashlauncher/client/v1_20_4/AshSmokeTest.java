@@ -1,12 +1,15 @@
 package com.ashlauncher.client.v1_20_4;
 
 import com.ashlauncher.client.game.GameView;
+import com.ashlauncher.client.hud.HudItem;
 import com.ashlauncher.client.report.Feature;
 import com.ashlauncher.client.report.LoadReport;
 import com.ashlauncher.client.settings.HudItemSettings;
 import com.ashlauncher.client.settings.Setting;
 import com.ashlauncher.client.settings.Settings;
 import com.ashlauncher.client.settings.SettingsScreen;
+import com.ashlauncher.client.ui.Panel;
+import com.ashlauncher.client.ui.Rect;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -270,10 +273,62 @@ public final class AshSmokeTest implements ClientModInitializer {
         pause(1_000L);
         screenshot(client, "ash-settings.png");
         searchWorks(client);
+        snappingWorks(client);
         onClient(client, () -> {
             client.setScreen(null);
             return null;
         });
+    }
+
+    /** Whether a saved placement is flush against the right edge: a right-hand anchor, no gap. */
+    private static boolean flushRight(String saved) {
+        return saved.matches("(top-|bottom-)?right 0 -?\d+");
+    }
+
+    /**
+     * Edit HUD's snapping, in the running game (spec 0007): the frame rate,
+     * dragged until its right edge is two GUI units short of the screen's,
+     * lies flush against it and is saved so: right-anchored, with no gap. Driven
+     * through the panel as the screen hands it the mouse, in real pixels.
+     */
+    private static void snappingWorks(Minecraft client) {
+        AshSettingsScreen screen = (AshSettingsScreen) client.screen;
+        onClient(client, () -> {
+            Rect edit = screen.panel().editHudButton();
+            screen.panel().mouseClicked(edit.centreX(), edit.centreY());
+            return null;
+        });
+        // A frame or two for the readouts, drawn beneath, to say how big they are.
+        pause(500L);
+        String unsnapped = onClient(client, () -> snapped(screen.panel(), (int) client.getWindow().getGuiScale(),
+                client.getWindow().getGuiScaledWidth()));
+        if (unsnapped != null) {
+            fail(unsnapped);
+        }
+        screenshot(client, "ash-edit-hud-snapped.png");
+        onClient(client, () -> {
+            Rect reset = screen.panel().resetReadoutsButton();
+            screen.panel().mouseClicked(reset.centreX(), reset.centreY());
+            screen.panel().mouseClicked(reset.centreX(), reset.centreY());
+            Rect done = screen.panel().doneButton();
+            screen.panel().mouseClicked(done.centreX(), done.centreY());
+            return null;
+        });
+    }
+
+    private static String snapped(Panel panel, int scale, int guiWidth) {
+        Rect box = panel.itemBox(HudItem.FPS);
+        if (box == null) {
+            return "the FPS readout has no box in Edit HUD";
+        }
+        int left = box.x / scale + 1;
+        int width = box.width / scale - 1;
+        int move = (guiWidth - width - 2 - left) * scale;
+        panel.mouseClicked(box.centreX(), box.centreY());
+        panel.mouseDragged(box.centreX() + move, box.centreY());
+        panel.mouseReleased();
+        String saved = AshClient.settings.get(Settings.FPS_READOUT_POSITION).format();
+        return flushRight(saved) ? null : "dragged two short of the right edge, it was saved at " + saved;
     }
 
     /**

@@ -236,9 +236,18 @@ public final class SettingsScreen {
 
     /**
      * Puts a feature back to its defaults - every option, and its switch -
-     * as a player who has lost track of what they changed would expect.
+     * as a player who has lost track of what they changed would expect. A
+     * HUD item's feature, with the beta switch on, gets its place back too:
+     * its page's "Reset this item" (spec 0007).
      */
     public void resetToDefaults(Feature feature) {
+        if (beta) {
+            for (HudItem item : HudItem.ALL) {
+                if (item.feature() == feature) {
+                    resetOne(item.position());
+                }
+            }
+        }
         for (OnOff setting : Settings.switches()) {
             if (setting.feature() == feature) {
                 resetOne(setting);
@@ -246,6 +255,16 @@ public final class SettingsScreen {
         }
         for (Setting<?> option : optionsOf(feature)) {
             resetOne(option);
+        }
+    }
+
+    /** Every HUD item back where it started and as it looked: Edit HUD's Reset all (spec 0007). */
+    public void resetHud() {
+        for (HudItem item : HudItem.ALL) {
+            resetOne(item.position());
+            for (Setting<?> option : item.settings().all()) {
+                resetOne(option);
+            }
         }
     }
 
