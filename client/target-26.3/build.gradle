@@ -100,3 +100,142 @@ tasks.named('jar') {
 tasks.withType(AbstractArchiveTask).configureEach {
     archiveVersion = ''
 }
+
+// The frame-time measurement (#42): a developer tool, run by hand on a real
+// machine, in a source set of its own so nothing of it reaches a player's
+// jar. Not the client game test tier above: that steps the game a frame at a
+// time, which makes frame times mean nothing.
+sourceSets {
+    benchmark {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+dependencies {
+    benchmarkImplementation project(':bench')
+}
+
+// The benchmark's player, by name: the local benchmark server makes it an operator.
+ext.BENCH_PLAYER = 'AshBench'
+
+loom {
+    runs {
+        // `./gradlew :target-26.3:runBenchmark`, with `-Pbench.label=...`
+        // to name the run. Results go to `client/benchmark-results`, outside
+        // `build` so a clean keeps them. See `client/README.md`.
+        benchmark {
+            client()
+            configName = 'ash frame-time measurement (26.3)'
+            source 'benchmark'
+            runDir 'build/run/benchmark'
+            // A fixed name, so the local benchmark server can make it an operator.
+            programArgs '--width', '1280', '--height', '720', '--username', BENCH_PLAYER
+            property 'ash.bench.label', (project.findProperty('bench.label') ?: '').toString()
+            property 'ash.bench.out', rootProject.file('benchmark-results').absolutePath
+            // `-Pbench.server=127.0.0.1:25599` joins the local benchmark server.
+            // See `client/README.md`.
+            property 'ash.bench.server', (project.findProperty('bench.server') ?: '').toString()
+            // Lithium was measured on 1.21.11 alone (#44).
+            property 'ash.bench.lithium', 'false'
+        }
+
+        // `./gradlew :target-26.3:runBootBench`: starts the game, notes how
+        // long it took to reach the title screen (BootClock), and quits. A
+        // development run, so its times are for comparing builds with each
+        // other; see benchmark-results/README.md, "Boot time".
+        bootBench {
+            client()
+            configName = 'ash boot measurement (26.3)'
+            runDir 'build/run/boot'
+            property 'ash.boot.exitAtTitle', 'true'
+        }
+    }
+}
+
+// ---- the local benchmark server (#44) ---------------------------------------
+
+// Mojang's own dedicated server, as real servers run it, on this machine only:
+// `./gradlew :target-26.3:prepareBenchmarkServer`, then start it from
+// `build/run/benchmark-server` with `java -jar server.jar nogui`. It answers on
+// 127.0.0.1 alone, in offline mode, with the benchmark's player an operator so
+// it can set the scene by command. See `client/README.md`.
+def benchmarkServerDir = file('build/run/benchmark-server')
+
+tasks.register('prepareBenchmarkServer') {
+    description = 'The vanilla dedicated server for the benchmark: verified against Mojang\'s manifest, and configured.'
+    doLast {
+        def slurper = new groovy.json.JsonSlurper()
+        def manifest = slurper.parse(new URI('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json').toURL())
+        def entry = manifest.versions.find { it.id == minecraft_version_26_3 }
+        if (entry == null) {
+            throw new GradleException("Mojang's manifest has no ${minecraft_version_26_3}")
+        }
+        def download = slurper.parse(new URI(entry.url).toURL()).downloads.server
+        benchmarkServerDir.mkdirs()
+        def jar = new File(benchmarkServerDir, 'server.jar')
+        def sha1 = { File f -> java.security.MessageDigest.getInstance('SHA-1').digest(f.bytes).encodeHex().toString() }
+        if (!jar.isFile() || sha1(jar) != download.sha1) {
+            new URI(download.url).toURL().withInputStream { input -> jar.withOutputStream { it << input } }
+            if (sha1(jar) != download.sha1) {
+                jar.delete()
+                throw new GradleException("the ${minecraft_version_26_3} server from ${download.url} is not the one Mojang lists")
+            }
+        }
+        // Accepted for this local run as for the game tests, by the same
+        // decision: docs/adr/0016-ci-accepts-the-minecraft-eula.md.
+        new File(benchmarkServerDir, 'eula.txt').text = '# Accepted by ash\'s build, as for its game tests:' +
+                ' docs/adr/0016-ci-accepts-the-minecraft-eula.md\neula=true\n'
+        new File(benchmarkServerDir, 'server.properties').text = [
+            '# The benchmark scene, as a server: see client/README.md.',
+            'server-ip=127.0.0.1',
+            'server-port=25599',
+            'online-mode=false',
+            'enforce-secure-profile=false',
+            'level-name=ash-benchmark',
+            'level-seed=4242',
+            'gamemode=spectator',
+            'force-gamemode=true',
+            'difficulty=peaceful',
+            'spawn-protection=0',
+            'view-distance=8',
+            'motd=ash benchmark',
+        ].join('\n') + '\n'
+        def uuid = UUID.nameUUIDFromBytes("OfflinePlayer:${BENCH_PLAYER}".getBytes('UTF-8'))
+        new File(benchmarkServerDir, 'ops.json').text =
+                "[{\"uuid\": \"${uuid}\", \"name\": \"${BENCH_PLAYER}\", \"level\": 4, \"bypassesPlayerLimit\": false}]\n"
+    }
+}
+
+// Nothing of the frame-time measurement may reach a player: the jar the
+// launcher ships is opened and checked on every build, rather than trusted
+// to leave out a source set it was never told about.
+tasks.register('checkJarHasNoBenchmark') {
+    group = 'verification'
+    description = 'Fails if the jar a player gets holds any of the frame-time measurement.'
+    def shipped = tasks.named('jar').flatMap { it.archiveFile }
+    inputs.file(shipped)
+
+    doLast {
+        def offences = []
+        def entries = 0
+        zipTree(shipped.get().asFile).visit { entry ->
+            entries++
+            def path = entry.relativePath.pathString
+            if (path.startsWith('com/ashlauncher/client/bench/') || path.contains('AshBenchmark')) {
+                offences << path
+            }
+        }
+        if (entries == 0) {
+            throw new GradleException('the shipped jar is empty - this check proved nothing')
+        }
+        if (!offences.isEmpty()) {
+            throw new GradleException('the frame-time measurement reached the jar a player gets:\n  '
+                    + offences.join('\n  '))
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'checkJarHasNoBenchmark'
+}
